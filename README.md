@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.png" alt="StacyVM" width="200"/>
+  <img src="assets/logo.png" alt="StacyVM" />
 </p>
 
 <h3 align="center"><b>Your AI agent just got its own computer.</b></h3>
@@ -41,16 +41,22 @@ Self-hosted. Single binary. Python &amp; TypeScript SDKs. MIT licensed. No cloud
 
 ## Table of contents
 
+- [Table of contents](#table-of-contents)
 - [Quick start (30 seconds)](#quick-start-30-seconds)
 - [Why StacyVM?](#why-stacyvm)
+  - [The math](#the-math)
 - [Pick your isolation level](#pick-your-isolation-level)
 - [Live Preview](#live-preview)
-- [Pool mode](#pool-mode)
+- [Pool mode — the feature nobody else has](#pool-mode--the-feature-nobody-else-has)
 - [SDKs](#sdks)
 - [REST API](#rest-api)
+  - [Sandboxes](#sandboxes)
+  - [Files (per sandbox)](#files-per-sandbox)
+  - [Templates](#templates)
+  - [Providers, pool, system](#providers-pool-system)
 - [CLI](#cli)
 - [Configuration](#configuration)
-- [Templates](#templates)
+- [Templates](#templates-1)
 - [Security defaults](#security-defaults)
 - [Architecture](#architecture)
 - [Web Dashboard](#web-dashboard)
