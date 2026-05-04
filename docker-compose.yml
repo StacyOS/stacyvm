@@ -1,0 +1,41 @@
+services:
+  stacyvm:
+    build: .
+    ports:
+      - "7423:7423"
+    volumes:
+      - stacyvm-data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - STACYVM_DATABASE_PATH=/data/stacyvm.db
+      - STACYVM_LOGGING_LEVEL=info
+      - STACYVM_LOGGING_FORMAT=pretty
+      # Tell StacyVM to put sandboxes on this shared network
+      - STACYVM_PROVIDERS_DOCKER_NETWORK_MODE=stacyvm-network
+    networks:
+      - stacyvm-network
+
+  traefik:
+    image: traefik:v3.6
+    container_name: traefik
+    command:
+      - "--api.insecure=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+    ports:
+      - "80:80"
+      - "8080:8080"
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+    networks:
+      - stacyvm-network
+
+volumes:
+  stacyvm-data:
+
+networks:
+  stacyvm-network:
+    # Explicitly name the network so StacyVM can easily spawn sandboxes into it
+    name: stacyvm-network
+    driver: bridge

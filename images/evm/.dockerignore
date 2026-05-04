@@ -1,0 +1,9 @@
+
+**/out
+**/cache
+**/broadcast
+frontend/.next
+.git
+.github
+*.log
+.claude/ 

@@ -1,0 +1,10 @@
+d# Source & dev files — not needed by consumers
+src/
+tsconfig.json
+CLAUDE.md
+bun.lock
+node_modules/
+
+# Test artifacts
+*.test.ts
+*.spec.ts
