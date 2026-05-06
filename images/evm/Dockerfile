@@ -32,7 +32,7 @@ WORKDIR /workspace
 
 # ── Install Node.js Dependencies ──
 # Copy frontend package files first to leverage Docker's layer caching
-COPY frontend/package.json ./frontend/
+COPY frontend/package.json frontend/bun.lock ./frontend/
 RUN cd frontend && bun install
 
 # ── Copy Environment Files ──
