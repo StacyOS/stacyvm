@@ -1,20 +1,12 @@
-'use client';
+"use client";
 
-import type React from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { WagmiProvider } from 'wagmi';
-import { RainbowKitProvider } from '@rainbow-me/rainbowkit';
+// App-level providers entry point. Today this is just `Web3Provider`, but
+// keeping a dedicated file makes it easy to add Theme/Toast/etc. later
+// without churning `layout.tsx`.
 
-import { config } from '../wagmi';
+import type { ReactNode } from "react";
+import { Web3Provider } from "@/providers/Web3Provider";
 
-const queryClient = new QueryClient();
-
-export function Providers({ children }: { children: React.ReactNode }) {
-  return (
-    <WagmiProvider config={config}>
-      <QueryClientProvider client={queryClient}>
-        <RainbowKitProvider>{children}</RainbowKitProvider>
-      </QueryClientProvider>
-    </WagmiProvider>
-  );
+export function Providers({ children }: { children: ReactNode }) {
+  return <Web3Provider>{children}</Web3Provider>;
 }

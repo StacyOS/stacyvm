@@ -1,80 +1,56 @@
-# CLAUDE.md
-
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 @AGENTS.md
 
-## Commands
+# EVM dApp Starter
 
-```bash
-pnpm dev         # start dev server (Turbopack, port 3000)
-pnpm build       # production build (Turbopack)
-pnpm start       # serve production build
-pnpm lint        # run ESLint
-```
+This project is a Next.js + Wagmi + Viem + TanStack Query starter for EVM
+dApps. **Sepolia is the default chain.** Connection uses **injected wallets
+only** (no WalletConnect, no external wallet kits, no project IDs).
 
-No test suite is configured.
-
-## File Structure
-
-```
-app/
-  layout.tsx       # root layout — imports globals.css + RainbowKit styles, wraps in <Providers>
-  page.tsx         # home page — renders <ConnectButton /> (Server Component)
-  providers.tsx    # 'use client' — WagmiProvider > QueryClientProvider > RainbowKitProvider
-  globals.css      # Tailwind v4 base styles
-wagmi.ts           # wagmi + RainbowKit config (chains, projectId, SSR flag)
-next.config.ts     # Next.js config (reactStrictMode only)
-postcss.config.mjs # Tailwind v4 PostCSS plugin
-```
-
-New routes go under `app/`. New `'use client'` components that need wallet state can use wagmi hooks directly — the providers are already in scope from `layout.tsx`.
+This repository is intended to be wired up by an agent that already has the
+deployed contract's ABI and address. There are intentionally **no
+predefined contract templates, ABIs, address registries, or example
+contracts** in this repo — pass ABI + address straight into the hooks.
 
 ## Architecture
 
-This is a Next.js 16 App Router frontend for EVM wallet connectivity. The entire app is a thin shell around RainbowKit.
+- **`lib/wagmi/`** — Single source of truth for chains, transports, and the
+  Wagmi config. To add a chain: edit `chains.ts` + `transports.ts`.
+- **`lib/format.ts`** — Pure display helpers (`shortenAddress`,
+  `formatBalance`).
+- **`hooks/`** — One hook per file, all `"use client"`, barrel-exported via
+  `hooks/index.ts`. Prefer composing Wagmi hooks; only wrap when it
+  materially reduces caller boilerplate.
+- **`components/wallet/`** — `ConnectButton`, `WalletModal`, `WalletStatus`.
+  Built on injected connectors with an install-fallback UI.
+- **`providers/Web3Provider.tsx`** — `WagmiProvider` + `QueryClientProvider`.
+  Mounted via `app/providers.tsx` from `app/layout.tsx`.
 
-**Provider tree** (`app/layout.tsx` → `app/providers.tsx` → children):
-- `WagmiProvider` (config from `wagmi.ts`)
-- `QueryClientProvider` (TanStack Query v5)
-- `RainbowKitProvider`
+## Conventions
 
-`providers.tsx` is a `'use client'` component — it must stay that way because wagmi/RainbowKit rely on browser APIs.
+- ABIs supplied by callers must be declared with `as const` so Wagmi/Viem
+  preserve literal types for `functionName`, `args`, and return values.
+- New chains: update both `supportedChains` (in `lib/wagmi/chains.ts`) and
+  `transports` (in `lib/wagmi/transports.ts`). The `SupportedChainId`
+  union is derived from the former.
+- Server Components by default. Anything that touches Wagmi/QueryClient
+  hooks must be `"use client"`.
+- Optional env override:
+  - `NEXT_PUBLIC_RPC_<CHAIN>_URL` — custom RPC per chain.
 
-**Chain configuration** (`wagmi.ts`): mainnet, polygon, optimism, arbitrum, base. Sepolia is conditionally added when `NEXT_PUBLIC_ENABLE_TESTNETS=true`.
+## Integrating a contract
 
-The `projectId` in `wagmi.ts` is a placeholder (`'YOUR_PROJECT_ID'`). A real WalletConnect Cloud project ID is required for production.
-
-## Next.js 16 Breaking Changes
-
-This project runs Next.js **16.2.4** — significantly newer than training data. Key differences:
-
-**Turbopack is the default** for both `next dev` and `next build`. No `--turbopack` flag needed. Use `--webpack` to opt out.
-
-**Async Request APIs** — these are no longer synchronous and must be awaited:
-- `cookies()`, `headers()`, `draftMode()`
-- `params` and `searchParams` in page/layout/route files
+Do not add registries, name → address maps, or pre-baked ABI files. Pass
+the ABI and address directly to the contract hooks at the call site:
 
 ```tsx
-// ✓ correct
-export default async function Page({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = await params
-}
+import { useContractRead, useTransaction } from "@/hooks";
+
+const myAbi = [/* ... */] as const;
+const address = "0x..." as const;
+
+const { data } = useContractRead({ address, abi: myAbi, functionName: "..." });
+const tx = useTransaction();
+await tx.writeContractAsync({ address, abi: myAbi, functionName: "..." });
 ```
 
-**`middleware` → `proxy`**: The middleware file must be renamed `proxy.ts`/`proxy.js` and the exported function renamed `proxy`. The `edge` runtime is not supported in proxy files (use `nodejs`). Config flags renamed too: `skipMiddlewareUrlNormalize` → `skipProxyUrlNormalize`.
-
-**Caching APIs**:
-- `unstable_cacheLife` / `unstable_cacheTag` → `cacheLife` / `cacheTag` (stable, no prefix)
-- `revalidateTag` now requires a second argument: `revalidateTag('tag', 'max')`
-- `updateTag` is a new Server Actions-only API for immediate cache expiry + refresh
-
-**PPR**: `experimental.ppr` is removed. Use `cacheComponents: true` in `next.config.ts` instead.
-
-**Slow navigations**: `<Suspense>` alone is not enough for instant client-side nav. Export `unstable_instant` from routes that should navigate instantly. Read `node_modules/next/dist/docs/01-app/02-guides/instant-navigation.md` before touching navigation.
-
-**`turbopack` config**: moved from `experimental.turbopack` to top-level `turbopack` in `next.config.ts`.
-
-## Tailwind CSS v4
-
-This project uses Tailwind v4 (PostCSS plugin via `@tailwindcss/postcss`). The config format differs from v3 — there is no `tailwind.config.js`. Configuration is done in CSS using `@theme` directives. Read `node_modules/next/dist/docs/01-app/02-guides/tailwind-v3-css.md` if migrating from v3 patterns.
+See `docs/web3-template.md` for the full developer guide.

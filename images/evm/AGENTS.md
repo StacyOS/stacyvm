@@ -5,7 +5,7 @@ This workspace contains two sub-projects:
 ```
 /workspace/
   contracts/   # Foundry/Solidity smart contracts
-  frontend/    # Next.js 16 frontend (pnpm)
+  frontend/    # Next.js 16 frontend (bun)
 ```
 
 ## Starting the dev server
@@ -13,7 +13,7 @@ This workspace contains two sub-projects:
 The Next.js dev server runs from the `frontend` directory on port 3000:
 
 ```bash
-cd /workspace/frontend && pnpm dev
+cd /workspace/frontend && bun dev
 ```
 
 Always start the dev server from `/workspace/frontend`, not from `/workspace`.

@@ -1,5 +1,5 @@
 # Use Node.js 22 as the base for a modern Next.js environment
-FROM node:22-slim
+FROM oven/bun:latest
 
 # Prevent interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
@@ -26,8 +26,6 @@ RUN curl -L https://foundry.paradigm.xyz | bash
 ENV PATH="/root/.foundry/bin:${PATH}"
 RUN foundryup
 
-# ── Install pnpm ──
-RUN npm install -g pnpm
 
 # ── Set up the Workspace ──
 WORKDIR /workspace
@@ -35,7 +33,7 @@ WORKDIR /workspace
 # ── Install Node.js Dependencies ──
 # Copy frontend package files first to leverage Docker's layer caching
 COPY frontend/package.json frontend/pnpm-lock.yaml* ./frontend/
-RUN cd frontend && pnpm install
+RUN cd frontend && bun install
 
 # ── Copy Environment Files ──
 # Explicitly copy .env files to ensure they are included early or if others are skipped
