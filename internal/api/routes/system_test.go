@@ -81,6 +81,13 @@ func TestSystemRoutes_Ready(t *testing.T) {
 	if body["ready_providers"].(float64) != 1 {
 		t.Fatalf("ready providers = %v, want 1", body["ready_providers"])
 	}
+	providersBody := body["providers"].([]interface{})
+	firstProvider := providersBody[0].(map[string]interface{})
+	for _, field := range []string{"latency_ms", "last_checked", "capabilities"} {
+		if _, ok := firstProvider[field]; !ok {
+			t.Fatalf("provider health missing %s: %#v", field, firstProvider)
+		}
+	}
 }
 
 func TestSystemRoutes_ReadyNoProviders(t *testing.T) {
@@ -159,6 +166,7 @@ func TestSystemRoutes_PrometheusMetrics(t *testing.T) {
 	for _, want := range []string{
 		"stacyvm_uptime_seconds",
 		"stacyvm_provider_healthy",
+		"stacyvm_provider_health_latency_milliseconds",
 		"stacyvm_operation_success_total",
 		`operation="spawn"`,
 		`operation="exec"`,

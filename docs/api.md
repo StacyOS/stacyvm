@@ -392,9 +392,24 @@ GET /api/v1/providers
 **Response** `200 OK`:
 ```json
 [
-  { "name": "docker",      "healthy": true, "default": true },
-  { "name": "firecracker", "healthy": true, "default": false },
-  { "name": "mock",        "healthy": true, "default": false }
+  {
+    "name": "docker",
+    "healthy": true,
+    "default": true,
+    "latency_ms": 3,
+    "last_checked": "2026-05-08T10:30:00Z",
+    "capabilities": ["spawn", "exec", "exec_stream", "files", "console", "health", "runtime_inventory", "container"],
+    "runtime_count": 4
+  },
+  {
+    "name": "firecracker",
+    "healthy": false,
+    "default": false,
+    "latency_ms": 1,
+    "last_checked": "2026-05-08T10:30:00Z",
+    "error": "health check returned false",
+    "capabilities": ["spawn", "exec", "exec_stream", "files", "console", "health", "snapshots", "microvm", "vsock_agent"]
+  }
 ]
 ```
 
@@ -411,6 +426,15 @@ GET /api/v1/providers/{name}
   "healthy": true,
   "default": true,
   "sandbox_count": 12,
+  "health": {
+    "name": "docker",
+    "healthy": true,
+    "default": true,
+    "latency_ms": 3,
+    "last_checked": "2026-05-08T10:30:00Z",
+    "capabilities": ["spawn", "exec", "files", "runtime_inventory", "container"],
+    "runtime_count": 4
+  },
   "config": { "runtime": "runc", "network_mode": "stacyvm-network" }
 }
 ```
@@ -507,8 +531,24 @@ GET /api/v1/ready
   "ready_providers": 1,
   "total_providers": 2,
   "providers": [
-    { "name": "docker", "healthy": true, "default": true },
-    { "name": "firecracker", "healthy": false, "default": false }
+    {
+      "name": "docker",
+      "healthy": true,
+      "default": true,
+      "latency_ms": 3,
+      "last_checked": "2026-05-08T10:30:00Z",
+      "capabilities": ["spawn", "exec", "files", "runtime_inventory", "container"],
+      "runtime_count": 4
+    },
+    {
+      "name": "firecracker",
+      "healthy": false,
+      "default": false,
+      "latency_ms": 1,
+      "last_checked": "2026-05-08T10:30:00Z",
+      "error": "health check returned false",
+      "capabilities": ["spawn", "exec", "files", "snapshots", "microvm", "vsock_agent"]
+    }
   ]
 }
 ```

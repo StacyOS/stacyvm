@@ -35,12 +35,18 @@ func writePrometheusMetrics(w io.Writer, metrics systemMetricsSnapshot) {
 	}
 
 	writePrometheusHelp(w, "stacyvm_provider_healthy", "Provider health status where 1 is healthy and 0 is unhealthy.")
+	writePrometheusHelp(w, "stacyvm_provider_health_latency_milliseconds", "Provider health check latency in milliseconds.")
+	writePrometheusHelp(w, "stacyvm_provider_runtime_sandboxes", "Runtime sandboxes discovered directly from providers.")
 	for _, provider := range metrics.providerHealth {
 		healthy := 0
 		if provider.Healthy {
 			healthy = 1
 		}
 		fmt.Fprintf(w, "stacyvm_provider_healthy{provider=%q,default=%q} %d\n", provider.Name, boolLabel(provider.Default), healthy)
+		fmt.Fprintf(w, "stacyvm_provider_health_latency_milliseconds{provider=%q} %d\n", provider.Name, provider.LatencyMS)
+		if provider.RuntimeCount != nil {
+			fmt.Fprintf(w, "stacyvm_provider_runtime_sandboxes{provider=%q} %d\n", provider.Name, *provider.RuntimeCount)
+		}
 	}
 
 	writePrometheusHelp(w, "stacyvm_events_total", "Total events published by the in-process event bus.")

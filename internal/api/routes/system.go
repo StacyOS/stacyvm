@@ -245,22 +245,7 @@ func (m systemMetricsSnapshot) toResponse() map[string]interface{} {
 }
 
 func (s *SystemRoutes) providerHealth(ctx context.Context) []ProviderHealth {
-	names := s.registry.List()
-	out := make([]ProviderHealth, 0, len(names))
-	defaultProvider := s.registry.Default()
-	for _, name := range names {
-		prov, err := s.registry.Get(name)
-		if err != nil {
-			out = append(out, ProviderHealth{Name: name, Healthy: false, Default: name == defaultProvider})
-			continue
-		}
-		out = append(out, ProviderHealth{
-			Name:    name,
-			Healthy: prov.Healthy(ctx),
-			Default: name == defaultProvider,
-		})
-	}
-	return out
+	return collectProviderHealth(ctx, s.registry)
 }
 
 // Events serves Server-Sent Events for real-time updates.

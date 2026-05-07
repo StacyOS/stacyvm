@@ -19,9 +19,14 @@ type HealthResponse struct {
 
 // ProviderHealth is a provider readiness item.
 type ProviderHealth struct {
-	Name    string `json:"name" example:"docker"`
-	Healthy bool   `json:"healthy" example:"true"`
-	Default bool   `json:"default" example:"true"`
+	Name         string   `json:"name" example:"docker"`
+	Healthy      bool     `json:"healthy" example:"true"`
+	Default      bool     `json:"default" example:"true"`
+	LatencyMS    int64    `json:"latency_ms" example:"3"`
+	LastChecked  string   `json:"last_checked" example:"2026-05-08T10:30:00Z"`
+	Error        string   `json:"error,omitempty" example:"health check returned false"`
+	Capabilities []string `json:"capabilities" example:"spawn,exec,files"`
+	RuntimeCount *int     `json:"runtime_count,omitempty" example:"2"`
 }
 
 // ReadinessResponse is the response from the readiness endpoint.
