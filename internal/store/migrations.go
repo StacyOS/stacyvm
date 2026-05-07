@@ -145,4 +145,17 @@ CREATE INDEX IF NOT EXISTS idx_sandboxes_owner ON sandboxes(owner_id);
 CREATE INDEX IF NOT EXISTS idx_sandboxes_vm ON sandboxes(vm_id);
 `,
 	},
+	{
+		version: 5,
+		sql: `
+CREATE TABLE IF NOT EXISTS owner_quotas (
+    owner_id                 TEXT PRIMARY KEY,
+    max_sandboxes            INTEGER NOT NULL DEFAULT 0,
+    max_ttl_seconds          INTEGER NOT NULL DEFAULT 0,
+    max_exec_timeout_seconds INTEGER NOT NULL DEFAULT 0,
+    created_at               DATETIME NOT NULL DEFAULT (datetime('now')),
+    updated_at               DATETIME NOT NULL DEFAULT (datetime('now'))
+);
+`,
+	},
 }

@@ -81,6 +81,7 @@ func NewServer(cfg ServerConfig, registry *providers.Registry, manager *orchestr
 		snapshotRoutes := routes.NewSnapshotRoutes(registry)
 		systemRoutes := routes.NewSystemRoutes(registry, manager, events, st, cfg.Version)
 		environmentRoutes := routes.NewEnvironmentRoutes(st, envBuild)
+		quotaRoutes := routes.NewQuotaRoutes(manager)
 
 		r.Route("/api/v1", func(r chi.Router) {
 			r.Mount("/sandboxes", sandboxRoutes.Routes())
@@ -88,6 +89,7 @@ func NewServer(cfg ServerConfig, registry *providers.Registry, manager *orchestr
 			r.Mount("/templates", templateRoutes.Routes())
 			r.Mount("/snapshots", snapshotRoutes.Routes())
 			r.Mount("/environments", environmentRoutes.Routes())
+			r.Mount("/quotas", quotaRoutes.Routes())
 			r.Get("/pool/status", sandboxRoutes.VMPoolStatus)
 			r.Mount("/", systemRoutes.Routes())
 		})

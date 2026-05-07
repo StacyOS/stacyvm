@@ -205,6 +205,71 @@ func (s *SQLiteStore) CountSandboxesByVM(ctx context.Context, vmID string) (int,
 	return count, err
 }
 
+func (s *SQLiteStore) SaveOwnerQuota(ctx context.Context, quota *OwnerQuotaRecord) error {
+	now := time.Now().UTC()
+	if quota.CreatedAt.IsZero() {
+		quota.CreatedAt = now
+	}
+	quota.UpdatedAt = now
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO owner_quotas (owner_id, max_sandboxes, max_ttl_seconds, max_exec_timeout_seconds, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?)
+		ON CONFLICT(owner_id) DO UPDATE SET
+			max_sandboxes = excluded.max_sandboxes,
+			max_ttl_seconds = excluded.max_ttl_seconds,
+			max_exec_timeout_seconds = excluded.max_exec_timeout_seconds,
+			updated_at = excluded.updated_at`,
+		quota.OwnerID, quota.MaxSandboxes, quota.MaxTTLSeconds, quota.MaxExecTimeoutSeconds,
+		quota.CreatedAt.UTC(), quota.UpdatedAt.UTC(),
+	)
+	return err
+}
+
+func (s *SQLiteStore) GetOwnerQuota(ctx context.Context, ownerID string) (*OwnerQuotaRecord, error) {
+	quota := &OwnerQuotaRecord{}
+	err := s.db.QueryRowContext(ctx, `
+		SELECT owner_id, max_sandboxes, max_ttl_seconds, max_exec_timeout_seconds, created_at, updated_at
+		FROM owner_quotas WHERE owner_id = ?`, ownerID,
+	).Scan(&quota.OwnerID, &quota.MaxSandboxes, &quota.MaxTTLSeconds, &quota.MaxExecTimeoutSeconds, &quota.CreatedAt, &quota.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, NotFoundError("owner_quota", ownerID)
+	}
+	return quota, err
+}
+
+func (s *SQLiteStore) ListOwnerQuotas(ctx context.Context) ([]*OwnerQuotaRecord, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT owner_id, max_sandboxes, max_ttl_seconds, max_exec_timeout_seconds, created_at, updated_at
+		FROM owner_quotas ORDER BY owner_id ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var quotas []*OwnerQuotaRecord
+	for rows.Next() {
+		quota := &OwnerQuotaRecord{}
+		if err := rows.Scan(&quota.OwnerID, &quota.MaxSandboxes, &quota.MaxTTLSeconds,
+			&quota.MaxExecTimeoutSeconds, &quota.CreatedAt, &quota.UpdatedAt); err != nil {
+			return nil, err
+		}
+		quotas = append(quotas, quota)
+	}
+	return quotas, rows.Err()
+}
+
+func (s *SQLiteStore) DeleteOwnerQuota(ctx context.Context, ownerID string) error {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM owner_quotas WHERE owner_id = ?`, ownerID)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return NotFoundError("owner_quota", ownerID)
+	}
+	return nil
+}
+
 // --- Exec Logs ---
 
 func (s *SQLiteStore) CreateExecLog(ctx context.Context, log *ExecLogRecord) error {

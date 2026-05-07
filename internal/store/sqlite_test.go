@@ -430,3 +430,46 @@ func TestEnvironmentBuildArtifactAndRegistryCRUD(t *testing.T) {
 		t.Fatalf("delete registry connection: %v", err)
 	}
 }
+
+func TestOwnerQuotaStore(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	quota := &OwnerQuotaRecord{
+		OwnerID:               "owner-1",
+		MaxSandboxes:          3,
+		MaxTTLSeconds:         3600,
+		MaxExecTimeoutSeconds: 60,
+	}
+	if err := s.SaveOwnerQuota(ctx, quota); err != nil {
+		t.Fatalf("save quota: %v", err)
+	}
+
+	got, err := s.GetOwnerQuota(ctx, "owner-1")
+	if err != nil {
+		t.Fatalf("get quota: %v", err)
+	}
+	if got.MaxSandboxes != 3 || got.MaxTTLSeconds != 3600 || got.MaxExecTimeoutSeconds != 60 {
+		t.Fatalf("unexpected quota: %+v", got)
+	}
+
+	quota.MaxSandboxes = 5
+	if err := s.SaveOwnerQuota(ctx, quota); err != nil {
+		t.Fatalf("update quota: %v", err)
+	}
+
+	quotas, err := s.ListOwnerQuotas(ctx)
+	if err != nil {
+		t.Fatalf("list quotas: %v", err)
+	}
+	if len(quotas) != 1 || quotas[0].MaxSandboxes != 5 {
+		t.Fatalf("unexpected quotas: %+v", quotas)
+	}
+
+	if err := s.DeleteOwnerQuota(ctx, "owner-1"); err != nil {
+		t.Fatalf("delete quota: %v", err)
+	}
+	if _, err := s.GetOwnerQuota(ctx, "owner-1"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound after delete, got %v", err)
+	}
+}

@@ -104,6 +104,15 @@ type RegistryConnectionRecord struct {
 	UpdatedAt time.Time
 }
 
+type OwnerQuotaRecord struct {
+	OwnerID               string
+	MaxSandboxes          int
+	MaxTTLSeconds         int64
+	MaxExecTimeoutSeconds int64
+	CreatedAt             time.Time
+	UpdatedAt             time.Time
+}
+
 // Store defines the persistence interface.
 type Store interface {
 	// Sandbox CRUD
@@ -116,6 +125,12 @@ type Store interface {
 	ListExpiredSandboxes(ctx context.Context, before time.Time) ([]*SandboxRecord, error)
 	ListSandboxesByOwner(ctx context.Context, ownerID string) ([]*SandboxRecord, error)
 	CountSandboxesByVM(ctx context.Context, vmID string) (int, error)
+
+	// Owner quotas
+	SaveOwnerQuota(ctx context.Context, quota *OwnerQuotaRecord) error
+	GetOwnerQuota(ctx context.Context, ownerID string) (*OwnerQuotaRecord, error)
+	ListOwnerQuotas(ctx context.Context) ([]*OwnerQuotaRecord, error)
+	DeleteOwnerQuota(ctx context.Context, ownerID string) error
 
 	// Exec logs
 	CreateExecLog(ctx context.Context, log *ExecLogRecord) error

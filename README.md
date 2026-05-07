@@ -413,10 +413,16 @@ Auth: pass `X-API-Key: <your-key>` if `auth.enabled: true`. For pool mode, also 
 | `GET` | `/providers` | List configured providers |
 | `GET` | `/providers/{name}` | Provider details + sandbox count |
 | `POST` | `/providers/test` | Health-check all providers |
+| `GET` | `/quotas` | List owner quota overrides |
+| `PUT` | `/quotas/{ownerID}` | Create or update owner quota |
+| `GET` | `/quotas/{ownerID}/usage` | Owner usage against effective quota |
 | `GET` | `/pool/status` | Pool VM and user counts |
 | `GET` | `/snapshots` | Available VM snapshots |
 | `GET` | `/health` | Health check |
+| `GET` | `/ready` | Readiness check |
+| `GET` | `/diagnostics` | Redacted operational diagnostics |
 | `GET` | `/metrics` | Runtime metrics (goroutines, alloc, sandbox counts) |
+| `GET` | `/metrics/prometheus` | Prometheus-compatible metrics |
 | `GET` | `/events` | Server-sent events stream |
 
 Full schemas, request/response examples, and error codes: **[docs/api.md](docs/api.md)**.

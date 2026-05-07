@@ -381,6 +381,75 @@ Optional override body:
 
 ---
 
+## Quotas
+
+Owner quotas are persisted overrides for per-owner sandbox and runtime limits. They apply when requests include an owner via `X-User-ID` or `owner_id`.
+
+### List owner quotas
+
+```
+GET /api/v1/quotas
+```
+
+**Response** `200 OK`:
+```json
+[
+  {
+    "owner_id": "team-a",
+    "max_sandboxes": 5,
+    "max_ttl": "2h0m0s",
+    "max_exec_timeout": "1m0s",
+    "created_at": "2026-05-08T10:30:00Z",
+    "updated_at": "2026-05-08T10:30:00Z"
+  }
+]
+```
+
+### Save owner quota
+
+```
+PUT /api/v1/quotas/{ownerID}
+```
+
+**Request**:
+```json
+{
+  "max_sandboxes": 5,
+  "max_ttl": "2h",
+  "max_exec_timeout": "1m"
+}
+```
+
+**Response** `200 OK`: full owner quota object.
+
+### Get owner usage
+
+```
+GET /api/v1/quotas/{ownerID}/usage
+```
+
+**Response** `200 OK`:
+```json
+{
+  "owner_id": "team-a",
+  "active_sandboxes": 3,
+  "max_sandboxes": 5,
+  "max_ttl": "2h0m0s",
+  "max_exec_timeout": "1m0s",
+  "quota_configured": true
+}
+```
+
+### Delete owner quota
+
+```
+DELETE /api/v1/quotas/{ownerID}
+```
+
+**Response** `200 OK`: `{ "status": "deleted" }`.
+
+---
+
 ## Providers
 
 ### List providers

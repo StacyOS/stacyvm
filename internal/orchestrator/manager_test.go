@@ -309,6 +309,51 @@ func TestManager_SpawnOwnerLimit(t *testing.T) {
 	}
 }
 
+func TestManager_PersistentOwnerQuotaLimit(t *testing.T) {
+	m := setupManagerWithConfig(t, ManagerConfig{
+		DefaultTTL:    5 * time.Minute,
+		DefaultImage:  "alpine:latest",
+		DefaultMemory: 512,
+		DefaultVCPUs:  1,
+	})
+	_, err := m.SaveOwnerQuota(context.Background(), OwnerQuota{
+		OwnerID:        "owner-quota",
+		MaxSandboxes:   1,
+		MaxTTL:         "30m",
+		MaxExecTimeout: "2s",
+	})
+	if err != nil {
+		t.Fatalf("save owner quota: %v", err)
+	}
+
+	if _, err := m.Spawn(context.Background(), SpawnRequest{OwnerID: "owner-quota", TTL: "10m"}); err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	_, err = m.Spawn(context.Background(), SpawnRequest{OwnerID: "owner-quota", TTL: "10m"})
+	if !errors.Is(err, providers.ErrResourceLimit) {
+		t.Fatalf("expected owner quota resource limit, got %v", err)
+	}
+
+	usage, err := m.OwnerUsage(context.Background(), "owner-quota")
+	if err != nil {
+		t.Fatalf("owner usage: %v", err)
+	}
+	if !usage.QuotaConfigured || usage.ActiveSandboxes != 1 || usage.MaxSandboxes != 1 {
+		t.Fatalf("unexpected owner usage: %+v", usage)
+	}
+}
+
+func TestManager_PersistentOwnerQuotaTTLLimit(t *testing.T) {
+	m := setupManager(t)
+	if _, err := m.SaveOwnerQuota(context.Background(), OwnerQuota{OwnerID: "owner-ttl", MaxTTL: "5m"}); err != nil {
+		t.Fatalf("save quota: %v", err)
+	}
+	_, err := m.Spawn(context.Background(), SpawnRequest{OwnerID: "owner-ttl", TTL: "10m"})
+	if !errors.Is(err, providers.ErrResourceLimit) {
+		t.Fatalf("expected ttl quota resource limit, got %v", err)
+	}
+}
+
 func TestManager_SpawnMaxTTLLimit(t *testing.T) {
 	m := setupManagerWithConfig(t, ManagerConfig{
 		DefaultTTL:    5 * time.Minute,

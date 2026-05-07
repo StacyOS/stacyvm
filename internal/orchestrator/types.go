@@ -113,3 +113,21 @@ type OperationalLimitsInfo struct {
 	MaxExecTimeout       string `json:"max_exec_timeout"`
 	MaxTTL               string `json:"max_ttl"`
 }
+
+type OwnerQuota struct {
+	OwnerID        string    `json:"owner_id"`
+	MaxSandboxes   int       `json:"max_sandboxes"`
+	MaxTTL         string    `json:"max_ttl"`
+	MaxExecTimeout string    `json:"max_exec_timeout"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
+}
+
+type OwnerUsage struct {
+	OwnerID         string `json:"owner_id"`
+	ActiveSandboxes int    `json:"active_sandboxes"`
+	MaxSandboxes    int    `json:"max_sandboxes"`
+	MaxTTL          string `json:"max_ttl"`
+	MaxExecTimeout  string `json:"max_exec_timeout"`
+	QuotaConfigured bool   `json:"quota_configured"`
+}

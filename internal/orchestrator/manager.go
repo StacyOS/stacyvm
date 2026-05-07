@@ -521,7 +521,7 @@ func (m *Manager) Exec(ctx context.Context, sandboxID string, req ExecRequest) (
 
 	execCtx := ctx
 	var cancel context.CancelFunc
-	timeout, err := m.resolveExecTimeout(req.Timeout)
+	timeout, err := m.resolveExecTimeout(req.Timeout, sb.OwnerID)
 	if err != nil {
 		metricsErr = err
 		m.publishFailureForError(sandboxID, OperationExec, metricsProvider, err)
@@ -608,7 +608,7 @@ func (m *Manager) ExecStream(ctx context.Context, sandboxID string, req ExecRequ
 
 	execCtx := ctx
 	var cancel context.CancelFunc
-	timeout, err := m.resolveExecTimeout(req.Timeout)
+	timeout, err := m.resolveExecTimeout(req.Timeout, sb.OwnerID)
 	if err != nil {
 		metricsErr = err
 		m.publishFailureForError(sandboxID, OperationExecStream, metricsProvider, err)
@@ -963,6 +963,84 @@ func (m *Manager) Limits() OperationalLimitsInfo {
 	}
 }
 
+func (m *Manager) GetOwnerQuota(ctx context.Context, ownerID string) (*OwnerQuota, error) {
+	rec, err := m.store.GetOwnerQuota(ctx, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	return ownerQuotaFromRecord(rec), nil
+}
+
+func (m *Manager) ListOwnerQuotas(ctx context.Context) ([]*OwnerQuota, error) {
+	records, err := m.store.ListOwnerQuotas(ctx)
+	if err != nil {
+		return nil, err
+	}
+	quotas := make([]*OwnerQuota, 0, len(records))
+	for _, rec := range records {
+		quotas = append(quotas, ownerQuotaFromRecord(rec))
+	}
+	return quotas, nil
+}
+
+func (m *Manager) SaveOwnerQuota(ctx context.Context, quota OwnerQuota) (*OwnerQuota, error) {
+	if quota.OwnerID == "" {
+		return nil, fmt.Errorf("owner_id is required")
+	}
+	maxTTL, err := parseOptionalDurationSeconds(quota.MaxTTL)
+	if err != nil {
+		return nil, fmt.Errorf("parsing max_ttl: %w", err)
+	}
+	maxExecTimeout, err := parseOptionalDurationSeconds(quota.MaxExecTimeout)
+	if err != nil {
+		return nil, fmt.Errorf("parsing max_exec_timeout: %w", err)
+	}
+	if quota.MaxSandboxes < 0 {
+		return nil, providers.ResourceLimitError("max_sandboxes cannot be negative")
+	}
+	rec := &store.OwnerQuotaRecord{
+		OwnerID:               quota.OwnerID,
+		MaxSandboxes:          quota.MaxSandboxes,
+		MaxTTLSeconds:         maxTTL,
+		MaxExecTimeoutSeconds: maxExecTimeout,
+	}
+	if err := m.store.SaveOwnerQuota(ctx, rec); err != nil {
+		return nil, err
+	}
+	return m.GetOwnerQuota(ctx, quota.OwnerID)
+}
+
+func (m *Manager) DeleteOwnerQuota(ctx context.Context, ownerID string) error {
+	return m.store.DeleteOwnerQuota(ctx, ownerID)
+}
+
+func (m *Manager) OwnerUsage(ctx context.Context, ownerID string) (*OwnerUsage, error) {
+	records, err := m.store.ListSandboxesByOwner(ctx, ownerID)
+	if err != nil {
+		return nil, err
+	}
+	usage := &OwnerUsage{
+		OwnerID:         ownerID,
+		ActiveSandboxes: len(records),
+		MaxSandboxes:    m.limits.MaxSandboxesPerOwner,
+		MaxTTL:          m.limits.MaxTTL.String(),
+		MaxExecTimeout:  m.limits.MaxExecTimeout.String(),
+	}
+	if quota, err := m.store.GetOwnerQuota(ctx, ownerID); err == nil {
+		usage.QuotaConfigured = true
+		if quota.MaxSandboxes > 0 {
+			usage.MaxSandboxes = quota.MaxSandboxes
+		}
+		if quota.MaxTTLSeconds > 0 {
+			usage.MaxTTL = (time.Duration(quota.MaxTTLSeconds) * time.Second).String()
+		}
+		if quota.MaxExecTimeoutSeconds > 0 {
+			usage.MaxExecTimeout = (time.Duration(quota.MaxExecTimeoutSeconds) * time.Second).String()
+		}
+	}
+	return usage, nil
+}
+
 func (m *Manager) recordOperation(operation, provider string, duration time.Duration, err error) {
 	if m.metrics == nil {
 		return
@@ -1006,11 +1084,12 @@ func (m *Manager) publishOperationalEvent(eventType EventType, sandboxID string,
 }
 
 func (m *Manager) enforceSpawnLimits(ctx context.Context, ownerID string, ttl time.Duration) error {
-	if m.limits.MaxTTL > 0 && ttl > m.limits.MaxTTL {
-		return providers.ResourceLimitError(fmt.Sprintf("ttl %s exceeds max ttl %s", ttl, m.limits.MaxTTL))
+	maxTTL, maxPerOwner := m.ownerLimitOverrides(ctx, ownerID)
+	if maxTTL > 0 && ttl > maxTTL {
+		return providers.ResourceLimitError(fmt.Sprintf("ttl %s exceeds max ttl %s", ttl, maxTTL))
 	}
 
-	if m.limits.MaxSandboxes <= 0 && (ownerID == "" || m.limits.MaxSandboxesPerOwner <= 0) {
+	if m.limits.MaxSandboxes <= 0 && (ownerID == "" || maxPerOwner <= 0) {
 		return nil
 	}
 
@@ -1032,13 +1111,13 @@ func (m *Manager) enforceSpawnLimits(ctx context.Context, ownerID string, ttl ti
 	if m.limits.MaxSandboxes > 0 && total >= m.limits.MaxSandboxes {
 		return providers.ResourceLimitError(fmt.Sprintf("max sandboxes reached (%d)", m.limits.MaxSandboxes))
 	}
-	if ownerID != "" && m.limits.MaxSandboxesPerOwner > 0 && ownerTotal >= m.limits.MaxSandboxesPerOwner {
-		return providers.ResourceLimitError(fmt.Sprintf("max sandboxes per owner reached (%d)", m.limits.MaxSandboxesPerOwner))
+	if ownerID != "" && maxPerOwner > 0 && ownerTotal >= maxPerOwner {
+		return providers.ResourceLimitError(fmt.Sprintf("max sandboxes per owner reached (%d)", maxPerOwner))
 	}
 	return nil
 }
 
-func (m *Manager) resolveExecTimeout(raw string) (time.Duration, error) {
+func (m *Manager) resolveExecTimeout(raw string, ownerID string) (time.Duration, error) {
 	timeout := m.limits.DefaultExecTimeout
 	if raw != "" {
 		parsed, err := time.ParseDuration(raw)
@@ -1050,10 +1129,77 @@ func (m *Manager) resolveExecTimeout(raw string) (time.Duration, error) {
 	if timeout < 0 {
 		return 0, providers.ResourceLimitError("exec timeout cannot be negative")
 	}
-	if m.limits.MaxExecTimeout > 0 && timeout > m.limits.MaxExecTimeout {
-		return 0, providers.ResourceLimitError(fmt.Sprintf("exec timeout %s exceeds max exec timeout %s", timeout, m.limits.MaxExecTimeout))
+	maxExecTimeout := m.ownerMaxExecTimeout(context.Background(), ownerID)
+	if maxExecTimeout > 0 && timeout > maxExecTimeout {
+		return 0, providers.ResourceLimitError(fmt.Sprintf("exec timeout %s exceeds max exec timeout %s", timeout, maxExecTimeout))
 	}
 	return timeout, nil
+}
+
+func (m *Manager) ownerLimitOverrides(ctx context.Context, ownerID string) (time.Duration, int) {
+	maxTTL := m.limits.MaxTTL
+	maxPerOwner := m.limits.MaxSandboxesPerOwner
+	if ownerID == "" {
+		return maxTTL, maxPerOwner
+	}
+	quota, err := m.store.GetOwnerQuota(ctx, ownerID)
+	if err != nil {
+		return maxTTL, maxPerOwner
+	}
+	if quota.MaxTTLSeconds > 0 {
+		maxTTL = time.Duration(quota.MaxTTLSeconds) * time.Second
+	}
+	if quota.MaxSandboxes > 0 {
+		maxPerOwner = quota.MaxSandboxes
+	}
+	return maxTTL, maxPerOwner
+}
+
+func (m *Manager) ownerMaxExecTimeout(ctx context.Context, ownerID string) time.Duration {
+	maxExecTimeout := m.limits.MaxExecTimeout
+	if ownerID == "" {
+		return maxExecTimeout
+	}
+	quota, err := m.store.GetOwnerQuota(ctx, ownerID)
+	if err != nil {
+		return maxExecTimeout
+	}
+	if quota.MaxExecTimeoutSeconds > 0 {
+		return time.Duration(quota.MaxExecTimeoutSeconds) * time.Second
+	}
+	return maxExecTimeout
+}
+
+func ownerQuotaFromRecord(rec *store.OwnerQuotaRecord) *OwnerQuota {
+	return &OwnerQuota{
+		OwnerID:        rec.OwnerID,
+		MaxSandboxes:   rec.MaxSandboxes,
+		MaxTTL:         optionalSecondsString(rec.MaxTTLSeconds),
+		MaxExecTimeout: optionalSecondsString(rec.MaxExecTimeoutSeconds),
+		CreatedAt:      rec.CreatedAt,
+		UpdatedAt:      rec.UpdatedAt,
+	}
+}
+
+func parseOptionalDurationSeconds(raw string) (int64, error) {
+	if raw == "" || raw == "0" || raw == "0s" {
+		return 0, nil
+	}
+	d, err := time.ParseDuration(raw)
+	if err != nil {
+		return 0, err
+	}
+	if d < 0 {
+		return 0, providers.ResourceLimitError("duration cannot be negative")
+	}
+	return int64(d.Seconds()), nil
+}
+
+func optionalSecondsString(seconds int64) string {
+	if seconds <= 0 {
+		return "0s"
+	}
+	return (time.Duration(seconds) * time.Second).String()
 }
 
 // InitVMPool initializes the VM pool manager if pool mode is enabled.
