@@ -63,20 +63,20 @@ type PRootConfig struct {
 }
 
 type DockerConfig struct {
-	Enabled        bool              `mapstructure:"enabled"`
-	Socket         string            `mapstructure:"socket"`
-	Runtime        string            `mapstructure:"runtime"`
-	DefaultImage   string            `mapstructure:"default_image"`
-	NetworkMode    string            `mapstructure:"network_mode"`
-	SeccompProfile string            `mapstructure:"seccomp_profile"`
-	ReadOnlyRootfs bool              `mapstructure:"read_only_rootfs"`
-	Memory         string            `mapstructure:"memory"`
-	CPUs           string            `mapstructure:"cpus"`
-	PidsLimit      int64             `mapstructure:"pids_limit"`
-	User           string            `mapstructure:"user"`
-	DroppedCaps    []string          `mapstructure:"dropped_caps"`
-	AddedCaps      []string          `mapstructure:"added_caps"`
-	Tmpfs          map[string]string `mapstructure:"tmpfs"`
+	Enabled        bool               `mapstructure:"enabled"`
+	Socket         string             `mapstructure:"socket"`
+	Runtime        string             `mapstructure:"runtime"`
+	DefaultImage   string             `mapstructure:"default_image"`
+	NetworkMode    string             `mapstructure:"network_mode"`
+	SeccompProfile string             `mapstructure:"seccomp_profile"`
+	ReadOnlyRootfs bool               `mapstructure:"read_only_rootfs"`
+	Memory         string             `mapstructure:"memory"`
+	CPUs           string             `mapstructure:"cpus"`
+	PidsLimit      int64              `mapstructure:"pids_limit"`
+	User           string             `mapstructure:"user"`
+	DroppedCaps    []string           `mapstructure:"dropped_caps"`
+	AddedCaps      []string           `mapstructure:"added_caps"`
+	Tmpfs          map[string]string  `mapstructure:"tmpfs"`
 	PoolSecurity   PoolSecurityConfig `mapstructure:"pool_security"`
 }
 
@@ -115,13 +115,18 @@ type FirecrackerConfig struct {
 }
 
 type DefaultsConfig struct {
-	TTL          string `mapstructure:"ttl"`
-	Image        string `mapstructure:"image"`
-	MemoryMB     int    `mapstructure:"memory_mb"`
-	VCPUs        int    `mapstructure:"vcpus"`
-	DiskSizeMB   int    `mapstructure:"disk_size_mb"`
-	PoolSize     int    `mapstructure:"pool_size"`
-	PoolTemplate string `mapstructure:"pool_template"`
+	TTL                  string `mapstructure:"ttl"`
+	Image                string `mapstructure:"image"`
+	MemoryMB             int    `mapstructure:"memory_mb"`
+	VCPUs                int    `mapstructure:"vcpus"`
+	DiskSizeMB           int    `mapstructure:"disk_size_mb"`
+	PoolSize             int    `mapstructure:"pool_size"`
+	PoolTemplate         string `mapstructure:"pool_template"`
+	MaxTTL               string `mapstructure:"max_ttl"`
+	DefaultExecTimeout   string `mapstructure:"default_exec_timeout"`
+	MaxExecTimeout       string `mapstructure:"max_exec_timeout"`
+	MaxSandboxes         int    `mapstructure:"max_sandboxes"`
+	MaxSandboxesPerOwner int    `mapstructure:"max_sandboxes_per_owner"`
 }
 
 type AuthConfig struct {
@@ -195,6 +200,11 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("defaults.disk_size_mb", 1024)
 	v.SetDefault("defaults.pool_size", 0)
 	v.SetDefault("defaults.pool_template", "")
+	v.SetDefault("defaults.max_ttl", "24h")
+	v.SetDefault("defaults.default_exec_timeout", "0s")
+	v.SetDefault("defaults.max_exec_timeout", "10m")
+	v.SetDefault("defaults.max_sandboxes", 0)
+	v.SetDefault("defaults.max_sandboxes_per_owner", 0)
 
 	v.SetDefault("auth.enabled", false)
 	v.SetDefault("auth.api_key", "")

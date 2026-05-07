@@ -584,6 +584,13 @@ GET /api/v1/diagnostics
     "healthy": true,
     "latency_ms": 1
   },
+  "limits": {
+    "max_sandboxes": 100,
+    "max_sandboxes_per_owner": 10,
+    "default_exec_timeout": "30s",
+    "max_exec_timeout": "10m0s",
+    "max_ttl": "24h0m0s"
+  },
   "providers": [
     {
       "name": "docker",

@@ -174,6 +174,7 @@ func (s *SystemRoutes) Diagnostics(w http.ResponseWriter, r *http.Request) {
 			},
 		},
 		"store":      storeStatus,
+		"limits":     s.manager.Limits(),
 		"providers":  metrics.providerHealth,
 		"sandboxes":  metrics.sandboxSummary(),
 		"events":     metrics.eventStats,

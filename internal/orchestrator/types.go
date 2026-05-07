@@ -97,3 +97,19 @@ type SandboxInfo struct {
 	FileCount     int               `json:"file_count"`
 	PreviewDomain string            `json:"preview_domain,omitempty"`
 }
+
+type OperationalLimits struct {
+	MaxSandboxes         int           `json:"max_sandboxes"`
+	MaxSandboxesPerOwner int           `json:"max_sandboxes_per_owner"`
+	DefaultExecTimeout   time.Duration `json:"default_exec_timeout"`
+	MaxExecTimeout       time.Duration `json:"max_exec_timeout"`
+	MaxTTL               time.Duration `json:"max_ttl"`
+}
+
+type OperationalLimitsInfo struct {
+	MaxSandboxes         int    `json:"max_sandboxes"`
+	MaxSandboxesPerOwner int    `json:"max_sandboxes_per_owner"`
+	DefaultExecTimeout   string `json:"default_exec_timeout"`
+	MaxExecTimeout       string `json:"max_exec_timeout"`
+	MaxTTL               string `json:"max_ttl"`
+}

@@ -32,6 +32,7 @@ type Manager struct {
 	defaultImage  string
 	defaultMemory int
 	defaultVCPUs  int
+	limits        OperationalLimits
 
 	vmPoolMgr  *VMPoolManager
 	poolConfig config.PoolConfig
@@ -49,6 +50,7 @@ type ManagerConfig struct {
 	DefaultVCPUs  int
 	Pool          config.PoolConfig
 	PreviewDomain string
+	Limits        OperationalLimits
 }
 
 func NewManager(registry *providers.Registry, st store.Store, events *EventBus, logger zerolog.Logger, cfg ManagerConfig) *Manager {
@@ -64,6 +66,7 @@ func NewManager(registry *providers.Registry, st store.Store, events *EventBus, 
 		defaultImage:  cfg.DefaultImage,
 		defaultMemory: cfg.DefaultMemory,
 		defaultVCPUs:  cfg.DefaultVCPUs,
+		limits:        cfg.Limits,
 		poolConfig:    cfg.Pool,
 		previewDomain: cfg.PreviewDomain,
 		ctx:           ctx,
@@ -336,6 +339,11 @@ func (m *Manager) Spawn(ctx context.Context, req SpawnRequest) (*Sandbox, error)
 		}
 		ttl = parsed
 	}
+	if err := m.enforceSpawnLimits(ctx, req.OwnerID, ttl); err != nil {
+		metricsErr = err
+		m.publishFailureForError("", OperationSpawn, metricsProvider, err)
+		return nil, err
+	}
 
 	now := time.Now()
 
@@ -513,13 +521,13 @@ func (m *Manager) Exec(ctx context.Context, sandboxID string, req ExecRequest) (
 
 	execCtx := ctx
 	var cancel context.CancelFunc
-	if req.Timeout != "" {
-		timeout, err := time.ParseDuration(req.Timeout)
-		if err != nil {
-			metricsErr = err
-			m.publishOperationFailure(EventExecFailed, sandboxID, OperationExec, metricsProvider, err)
-			return nil, fmt.Errorf("parsing exec timeout: %w", err)
-		}
+	timeout, err := m.resolveExecTimeout(req.Timeout)
+	if err != nil {
+		metricsErr = err
+		m.publishFailureForError(sandboxID, OperationExec, metricsProvider, err)
+		return nil, err
+	}
+	if timeout > 0 {
 		execCtx, cancel = context.WithTimeout(ctx, timeout)
 		defer cancel()
 	}
@@ -600,13 +608,13 @@ func (m *Manager) ExecStream(ctx context.Context, sandboxID string, req ExecRequ
 
 	execCtx := ctx
 	var cancel context.CancelFunc
-	if req.Timeout != "" {
-		timeout, err := time.ParseDuration(req.Timeout)
-		if err != nil {
-			metricsErr = err
-			m.publishOperationFailure(EventExecFailed, sandboxID, OperationExecStream, metricsProvider, err)
-			return nil, fmt.Errorf("parsing exec timeout: %w", err)
-		}
+	timeout, err := m.resolveExecTimeout(req.Timeout)
+	if err != nil {
+		metricsErr = err
+		m.publishFailureForError(sandboxID, OperationExecStream, metricsProvider, err)
+		return nil, err
+	}
+	if timeout > 0 {
 		execCtx, cancel = context.WithTimeout(ctx, timeout)
 	}
 
@@ -945,6 +953,16 @@ func (m *Manager) OperationMetrics() []OperationMetrics {
 	return m.metrics.Snapshot()
 }
 
+func (m *Manager) Limits() OperationalLimitsInfo {
+	return OperationalLimitsInfo{
+		MaxSandboxes:         m.limits.MaxSandboxes,
+		MaxSandboxesPerOwner: m.limits.MaxSandboxesPerOwner,
+		DefaultExecTimeout:   m.limits.DefaultExecTimeout.String(),
+		MaxExecTimeout:       m.limits.MaxExecTimeout.String(),
+		MaxTTL:               m.limits.MaxTTL.String(),
+	}
+}
+
 func (m *Manager) recordOperation(operation, provider string, duration time.Duration, err error) {
 	if m.metrics == nil {
 		return
@@ -985,6 +1003,57 @@ func (m *Manager) publishOperationalEvent(eventType EventType, sandboxID string,
 		SandboxID: sandboxID,
 		Data:      payload,
 	})
+}
+
+func (m *Manager) enforceSpawnLimits(ctx context.Context, ownerID string, ttl time.Duration) error {
+	if m.limits.MaxTTL > 0 && ttl > m.limits.MaxTTL {
+		return providers.ResourceLimitError(fmt.Sprintf("ttl %s exceeds max ttl %s", ttl, m.limits.MaxTTL))
+	}
+
+	if m.limits.MaxSandboxes <= 0 && (ownerID == "" || m.limits.MaxSandboxesPerOwner <= 0) {
+		return nil
+	}
+
+	records, err := m.store.ListSandboxes(ctx)
+	if err != nil {
+		return fmt.Errorf("checking sandbox limits: %w", err)
+	}
+	total := 0
+	ownerTotal := 0
+	for _, rec := range records {
+		if SandboxState(rec.State) == StateDestroyed {
+			continue
+		}
+		total++
+		if ownerID != "" && rec.OwnerID == ownerID {
+			ownerTotal++
+		}
+	}
+	if m.limits.MaxSandboxes > 0 && total >= m.limits.MaxSandboxes {
+		return providers.ResourceLimitError(fmt.Sprintf("max sandboxes reached (%d)", m.limits.MaxSandboxes))
+	}
+	if ownerID != "" && m.limits.MaxSandboxesPerOwner > 0 && ownerTotal >= m.limits.MaxSandboxesPerOwner {
+		return providers.ResourceLimitError(fmt.Sprintf("max sandboxes per owner reached (%d)", m.limits.MaxSandboxesPerOwner))
+	}
+	return nil
+}
+
+func (m *Manager) resolveExecTimeout(raw string) (time.Duration, error) {
+	timeout := m.limits.DefaultExecTimeout
+	if raw != "" {
+		parsed, err := time.ParseDuration(raw)
+		if err != nil {
+			return 0, fmt.Errorf("parsing exec timeout: %w", err)
+		}
+		timeout = parsed
+	}
+	if timeout < 0 {
+		return 0, providers.ResourceLimitError("exec timeout cannot be negative")
+	}
+	if m.limits.MaxExecTimeout > 0 && timeout > m.limits.MaxExecTimeout {
+		return 0, providers.ResourceLimitError(fmt.Sprintf("exec timeout %s exceeds max exec timeout %s", timeout, m.limits.MaxExecTimeout))
+	}
+	return timeout, nil
 }
 
 // InitVMPool initializes the VM pool manager if pool mode is enabled.

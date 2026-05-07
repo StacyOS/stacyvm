@@ -123,7 +123,7 @@ func TestSystemRoutes_Diagnostics(t *testing.T) {
 	}
 	var body map[string]interface{}
 	decodeSystemResponse(t, w, &body)
-	for _, field := range []string{"generated_at", "build", "process", "store", "providers", "sandboxes", "events", "operations", "redactions"} {
+	for _, field := range []string{"generated_at", "build", "process", "store", "limits", "providers", "sandboxes", "events", "operations", "redactions"} {
 		if _, ok := body[field]; !ok {
 			t.Fatalf("diagnostics missing %s: %#v", field, body)
 		}

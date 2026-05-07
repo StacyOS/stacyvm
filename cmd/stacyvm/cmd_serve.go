@@ -163,6 +163,9 @@ func runServe() error {
 
 	// Manager
 	ttl, _ := time.ParseDuration(cfg.Defaults.TTL)
+	maxTTL, _ := time.ParseDuration(cfg.Defaults.MaxTTL)
+	defaultExecTimeout, _ := time.ParseDuration(cfg.Defaults.DefaultExecTimeout)
+	maxExecTimeout, _ := time.ParseDuration(cfg.Defaults.MaxExecTimeout)
 	mgr := orchestrator.NewManager(registry, st, events, logger, orchestrator.ManagerConfig{
 		DefaultTTL:    ttl,
 		DefaultImage:  cfg.Defaults.Image,
@@ -170,6 +173,13 @@ func runServe() error {
 		DefaultVCPUs:  cfg.Defaults.VCPUs,
 		Pool:          cfg.Pool,
 		PreviewDomain: cfg.Server.PreviewDomain,
+		Limits: orchestrator.OperationalLimits{
+			MaxSandboxes:         cfg.Defaults.MaxSandboxes,
+			MaxSandboxesPerOwner: cfg.Defaults.MaxSandboxesPerOwner,
+			DefaultExecTimeout:   defaultExecTimeout,
+			MaxExecTimeout:       maxExecTimeout,
+			MaxTTL:               maxTTL,
+		},
 	})
 	if err := mgr.Reconcile(context.Background()); err != nil {
 		return err

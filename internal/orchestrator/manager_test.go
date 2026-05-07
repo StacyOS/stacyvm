@@ -15,6 +15,16 @@ import (
 
 func setupManager(t *testing.T) *Manager {
 	t.Helper()
+	return setupManagerWithConfig(t, ManagerConfig{
+		DefaultTTL:    5 * time.Minute,
+		DefaultImage:  "alpine:latest",
+		DefaultMemory: 512,
+		DefaultVCPUs:  1,
+	})
+}
+
+func setupManagerWithConfig(t *testing.T, cfg ManagerConfig) *Manager {
+	t.Helper()
 	dir := t.TempDir()
 	st, err := store.NewSQLiteStore(filepath.Join(dir, "test.db"))
 	if err != nil {
@@ -30,12 +40,7 @@ func setupManager(t *testing.T) *Manager {
 	events := NewEventBus()
 	logger := zerolog.Nop()
 
-	m := NewManager(reg, st, events, logger, ManagerConfig{
-		DefaultTTL:    5 * time.Minute,
-		DefaultImage:  "alpine:latest",
-		DefaultMemory: 512,
-		DefaultVCPUs:  1,
-	})
+	m := NewManager(reg, st, events, logger, cfg)
 	m.Start()
 	t.Cleanup(func() { m.Stop() })
 	return m
@@ -237,6 +242,88 @@ func TestManager_ExecTimeout(t *testing.T) {
 		t.Fatalf("expected ErrExecTimeout, got %v", err)
 	}
 	assertEventType(t, m.events.History(10), EventExecTimeout)
+}
+
+func TestManager_MaxExecTimeoutLimit(t *testing.T) {
+	m := setupManagerWithConfig(t, ManagerConfig{
+		DefaultTTL:    5 * time.Minute,
+		DefaultImage:  "alpine:latest",
+		DefaultMemory: 512,
+		DefaultVCPUs:  1,
+		Limits: OperationalLimits{
+			MaxExecTimeout: 50 * time.Millisecond,
+		},
+	})
+	sb, _ := m.Spawn(context.Background(), SpawnRequest{Image: "alpine:latest"})
+
+	_, err := m.Exec(context.Background(), sb.ID, ExecRequest{
+		Command: "echo nope",
+		Timeout: "1s",
+	})
+	if !errors.Is(err, providers.ErrResourceLimit) {
+		t.Fatalf("expected resource limit, got %v", err)
+	}
+	assertEventType(t, m.events.History(10), EventResourceLimit)
+}
+
+func TestManager_SpawnLimits(t *testing.T) {
+	m := setupManagerWithConfig(t, ManagerConfig{
+		DefaultTTL:    5 * time.Minute,
+		DefaultImage:  "alpine:latest",
+		DefaultMemory: 512,
+		DefaultVCPUs:  1,
+		Limits: OperationalLimits{
+			MaxSandboxes:         1,
+			MaxSandboxesPerOwner: 1,
+			MaxTTL:               time.Hour,
+		},
+	})
+
+	if _, err := m.Spawn(context.Background(), SpawnRequest{OwnerID: "owner-a"}); err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	_, err := m.Spawn(context.Background(), SpawnRequest{OwnerID: "owner-b"})
+	if !errors.Is(err, providers.ErrResourceLimit) {
+		t.Fatalf("expected total resource limit, got %v", err)
+	}
+	assertEventType(t, m.events.History(10), EventResourceLimit)
+}
+
+func TestManager_SpawnOwnerLimit(t *testing.T) {
+	m := setupManagerWithConfig(t, ManagerConfig{
+		DefaultTTL:    5 * time.Minute,
+		DefaultImage:  "alpine:latest",
+		DefaultMemory: 512,
+		DefaultVCPUs:  1,
+		Limits: OperationalLimits{
+			MaxSandboxesPerOwner: 1,
+		},
+	})
+
+	if _, err := m.Spawn(context.Background(), SpawnRequest{OwnerID: "owner-a"}); err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	_, err := m.Spawn(context.Background(), SpawnRequest{OwnerID: "owner-a"})
+	if !errors.Is(err, providers.ErrResourceLimit) {
+		t.Fatalf("expected owner resource limit, got %v", err)
+	}
+}
+
+func TestManager_SpawnMaxTTLLimit(t *testing.T) {
+	m := setupManagerWithConfig(t, ManagerConfig{
+		DefaultTTL:    5 * time.Minute,
+		DefaultImage:  "alpine:latest",
+		DefaultMemory: 512,
+		DefaultVCPUs:  1,
+		Limits: OperationalLimits{
+			MaxTTL: time.Hour,
+		},
+	})
+
+	_, err := m.Spawn(context.Background(), SpawnRequest{TTL: "2h"})
+	if !errors.Is(err, providers.ErrResourceLimit) {
+		t.Fatalf("expected ttl resource limit, got %v", err)
+	}
 }
 
 func TestManager_ExecStreamTimeoutEmitsErrorChunk(t *testing.T) {

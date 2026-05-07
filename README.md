@@ -497,6 +497,11 @@ defaults:
   image: "alpine:latest"
   memory_mb: 1024
   vcpus: 1
+  max_ttl: "24h"
+  default_exec_timeout: "0s"    # disabled unless set
+  max_exec_timeout: "10m"
+  max_sandboxes: 0              # 0 = unlimited
+  max_sandboxes_per_owner: 0    # 0 = unlimited
 
 auth:
   enabled: false
