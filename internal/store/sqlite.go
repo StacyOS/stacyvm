@@ -94,7 +94,7 @@ func (s *SQLiteStore) GetSandbox(ctx context.Context, id string) (*SandboxRecord
 	).Scan(&sb.ID, &sb.State, &sb.Provider, &sb.Image, &sb.MemoryMB, &sb.VCPUs,
 		&sb.Metadata, &sb.OwnerID, &sb.VMID, &sb.CreatedAt, &sb.ExpiresAt, &sb.UpdatedAt)
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("sandbox %q not found", id)
+		return nil, NotFoundError("sandbox", id)
 	}
 	return sb, err
 }
@@ -130,7 +130,7 @@ func (s *SQLiteStore) UpdateSandboxState(ctx context.Context, id string, state s
 	}
 	n, _ := res.RowsAffected()
 	if n == 0 {
-		return fmt.Errorf("sandbox %q not found", id)
+		return NotFoundError("sandbox", id)
 	}
 	return nil
 }
@@ -145,7 +145,7 @@ func (s *SQLiteStore) UpdateSandboxExpiresAt(ctx context.Context, id string, exp
 	}
 	n, _ := res.RowsAffected()
 	if n == 0 {
-		return fmt.Errorf("sandbox %q not found or already destroyed", id)
+		return NotFoundError("sandbox", id)
 	}
 	return nil
 }
@@ -245,7 +245,7 @@ func (s *SQLiteStore) GetProviderConfig(ctx context.Context, name string) (*Prov
 		SELECT name, config, enabled, updated_at FROM provider_configs WHERE name = ?`, name,
 	).Scan(&cfg.Name, &cfg.Config, &cfg.Enabled, &cfg.UpdatedAt)
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("provider config %q not found", name)
+		return nil, NotFoundError("provider config", name)
 	}
 	return cfg, err
 }
@@ -287,6 +287,9 @@ func (s *SQLiteStore) CreateTemplate(ctx context.Context, t *TemplateRecord) err
 		t.MemoryMB, t.CPUCores, t.TTLSeconds, t.Env, t.Secrets, t.PoolSize,
 		t.CreatedAt.UTC(), t.UpdatedAt.UTC(),
 	)
+	if IsConstraintError(err) {
+		return ConflictError("template already exists")
+	}
 	return err
 }
 
@@ -299,7 +302,7 @@ func (s *SQLiteStore) GetTemplate(ctx context.Context, name string) (*TemplateRe
 		&t.MemoryMB, &t.CPUCores, &t.TTLSeconds, &t.Env, &t.Secrets, &t.PoolSize,
 		&t.CreatedAt, &t.UpdatedAt)
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("template %q not found", name)
+		return nil, NotFoundError("template", name)
 	}
 	return t, err
 }
@@ -340,7 +343,7 @@ func (s *SQLiteStore) UpdateTemplate(ctx context.Context, t *TemplateRecord) err
 	}
 	n, _ := res.RowsAffected()
 	if n == 0 {
-		return fmt.Errorf("template %q not found", t.Name)
+		return NotFoundError("template", t.Name)
 	}
 	return nil
 }
@@ -352,7 +355,7 @@ func (s *SQLiteStore) DeleteTemplate(ctx context.Context, name string) error {
 	}
 	n, _ := res.RowsAffected()
 	if n == 0 {
-		return fmt.Errorf("template %q not found", name)
+		return NotFoundError("template", name)
 	}
 	return nil
 }
@@ -366,6 +369,9 @@ func (s *SQLiteStore) CreateEnvironmentSpec(ctx context.Context, spec *Environme
 		spec.ID, spec.OwnerID, spec.Name, spec.BaseImage, spec.PythonPackages, spec.AptPackages, spec.PythonVersion,
 		spec.CreatedAt.UTC(), spec.UpdatedAt.UTC(),
 	)
+	if IsConstraintError(err) {
+		return ConflictError("spec name already exists for this owner")
+	}
 	return err
 }
 
@@ -379,7 +385,7 @@ func (s *SQLiteStore) GetEnvironmentSpec(ctx context.Context, id string) (*Envir
 		&spec.PythonVersion, &spec.CreatedAt, &spec.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("environment spec %q not found", id)
+		return nil, NotFoundError("environment spec", id)
 	}
 	return spec, err
 }
@@ -422,7 +428,7 @@ func (s *SQLiteStore) UpdateEnvironmentSpec(ctx context.Context, spec *Environme
 	}
 	n, _ := res.RowsAffected()
 	if n == 0 {
-		return fmt.Errorf("environment spec %q not found", spec.ID)
+		return NotFoundError("environment spec", spec.ID)
 	}
 	return nil
 }
@@ -434,7 +440,7 @@ func (s *SQLiteStore) DeleteEnvironmentSpec(ctx context.Context, id string) erro
 	}
 	n, _ := res.RowsAffected()
 	if n == 0 {
-		return fmt.Errorf("environment spec %q not found", id)
+		return NotFoundError("environment spec", id)
 	}
 	return nil
 }
@@ -464,7 +470,7 @@ func (s *SQLiteStore) GetEnvironmentBuild(ctx context.Context, id string) (*Envi
 		&build.DigestLocal, &build.Error, &build.CreatedAt, &finishedAt, &build.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("environment build %q not found", id)
+		return nil, NotFoundError("environment build", id)
 	}
 	if err != nil {
 		return nil, err
@@ -519,7 +525,7 @@ func (s *SQLiteStore) UpdateEnvironmentBuild(ctx context.Context, build *Environ
 	}
 	n, _ := res.RowsAffected()
 	if n == 0 {
-		return fmt.Errorf("environment build %q not found", build.ID)
+		return NotFoundError("environment build", build.ID)
 	}
 	return nil
 }
@@ -583,6 +589,9 @@ func (s *SQLiteStore) SaveRegistryConnection(ctx context.Context, conn *Registry
 		conn.ID, conn.OwnerID, conn.Provider, conn.Username, conn.SecretRef, conn.IsDefault,
 		time.Now().UTC(), time.Now().UTC(),
 	)
+	if IsConstraintError(err) {
+		return ConflictError("registry connection already exists")
+	}
 	return err
 }
 
@@ -594,7 +603,7 @@ func (s *SQLiteStore) GetRegistryConnection(ctx context.Context, id string) (*Re
 		WHERE id = ?`, id,
 	).Scan(&conn.ID, &conn.OwnerID, &conn.Provider, &conn.Username, &conn.SecretRef, &conn.IsDefault, &conn.CreatedAt, &conn.UpdatedAt)
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("registry connection %q not found", id)
+		return nil, NotFoundError("registry connection", id)
 	}
 	return conn, err
 }
@@ -630,7 +639,7 @@ func (s *SQLiteStore) DeleteRegistryConnection(ctx context.Context, id string) e
 	}
 	n, _ := res.RowsAffected()
 	if n == 0 {
-		return fmt.Errorf("registry connection %q not found", id)
+		return NotFoundError("registry connection", id)
 	}
 	return nil
 }

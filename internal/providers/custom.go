@@ -63,6 +63,23 @@ func NewCustomProvider(cfg CustomProviderConfig) *CustomProvider {
 
 func (p *CustomProvider) Name() string { return p.name }
 
+func customHTTPError(operation string, code int, data []byte, sandboxID string) error {
+	switch code {
+	case http.StatusNotFound:
+		return SandboxNotFoundError(sandboxID)
+	case http.StatusGone:
+		return SandboxDestroyedError(sandboxID)
+	case http.StatusRequestTimeout:
+		return ExecTimeoutError(sandboxID)
+	case http.StatusTooManyRequests:
+		return ResourceLimitError(operation)
+	case http.StatusServiceUnavailable:
+		return ProviderUnavailableError("custom", fmt.Errorf("%s", string(data)))
+	default:
+		return fmt.Errorf("%s failed (HTTP %d): %s", operation, code, string(data))
+	}
+}
+
 // doRequest is a shared helper that builds, signs, and executes an HTTP
 // request against the remote custom endpoint.
 func (p *CustomProvider) doRequest(ctx context.Context, method, path string, body interface{}) ([]byte, int, error) {
@@ -143,7 +160,7 @@ func (p *CustomProvider) Spawn(ctx context.Context, opts SpawnOptions) (string, 
 		return "", fmt.Errorf("custom spawn: %w", err)
 	}
 	if code >= 400 {
-		return "", fmt.Errorf("custom spawn failed (HTTP %d): %s", code, string(data))
+		return "", customHTTPError("custom spawn", code, data, "")
 	}
 
 	var result struct {
@@ -181,7 +198,7 @@ func (p *CustomProvider) Exec(ctx context.Context, sandboxID string, opts ExecOp
 		return nil, fmt.Errorf("custom exec: %w", err)
 	}
 	if code >= 400 {
-		return nil, fmt.Errorf("custom exec failed (HTTP %d): %s", code, string(data))
+		return nil, customHTTPError("custom exec", code, data, sandboxID)
 	}
 
 	var result struct {
@@ -225,7 +242,7 @@ func (p *CustomProvider) ExecStream(ctx context.Context, sandboxID string, opts 
 	if resp.StatusCode >= 400 {
 		data, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
-		return nil, fmt.Errorf("custom exec stream failed (HTTP %d): %s", resp.StatusCode, string(data))
+		return nil, customHTTPError("custom exec stream", resp.StatusCode, data, sandboxID)
 	}
 
 	ch := make(chan StreamChunk, 64)
@@ -242,6 +259,12 @@ func (p *CustomProvider) ExecStream(ctx context.Context, sandboxID string, opts 
 			var chunk StreamChunk
 			if err := json.Unmarshal(line, &chunk); err == nil {
 				ch <- chunk
+			}
+		}
+		if ctx.Err() == context.DeadlineExceeded {
+			select {
+			case ch <- StreamChunk{Stream: "stderr", Data: ExecTimeoutError(sandboxID).Error()}:
+			default:
 			}
 		}
 	}()
@@ -271,7 +294,7 @@ func (p *CustomProvider) WriteFile(ctx context.Context, sandboxID string, path s
 		return fmt.Errorf("custom write: %w", err)
 	}
 	if code >= 400 {
-		return fmt.Errorf("custom write failed (HTTP %d): %s", code, string(respData))
+		return customHTTPError("custom write", code, respData, sandboxID)
 	}
 	return nil
 }
@@ -288,7 +311,7 @@ func (p *CustomProvider) ReadFile(ctx context.Context, sandboxID string, path st
 		return nil, fmt.Errorf("custom read: %w", err)
 	}
 	if code >= 400 {
-		return nil, fmt.Errorf("custom read failed (HTTP %d): %s", code, string(data))
+		return nil, customHTTPError("custom read", code, data, sandboxID)
 	}
 	return io.NopCloser(bytes.NewReader(data)), nil
 }
@@ -305,7 +328,7 @@ func (p *CustomProvider) ListFiles(ctx context.Context, sandboxID string, path s
 		return nil, fmt.Errorf("custom list: %w", err)
 	}
 	if code >= 400 {
-		return nil, fmt.Errorf("custom list failed (HTTP %d): %s", code, string(data))
+		return nil, customHTTPError("custom list", code, data, sandboxID)
 	}
 
 	var files []FileInfo
@@ -326,7 +349,7 @@ func (p *CustomProvider) DeleteFile(ctx context.Context, sandboxID string, path 
 		return fmt.Errorf("custom delete: %w", err)
 	}
 	if code >= 400 {
-		return fmt.Errorf("custom delete failed (HTTP %d): %s", code, string(data))
+		return customHTTPError("custom delete", code, data, sandboxID)
 	}
 	return nil
 }
@@ -342,7 +365,7 @@ func (p *CustomProvider) MoveFile(ctx context.Context, sandboxID string, oldPath
 		return fmt.Errorf("custom move: %w", err)
 	}
 	if code >= 400 {
-		return fmt.Errorf("custom move failed (HTTP %d): %s", code, string(data))
+		return customHTTPError("custom move", code, data, sandboxID)
 	}
 	return nil
 }
@@ -358,7 +381,7 @@ func (p *CustomProvider) ChmodFile(ctx context.Context, sandboxID string, path s
 		return fmt.Errorf("custom chmod: %w", err)
 	}
 	if code >= 400 {
-		return fmt.Errorf("custom chmod failed (HTTP %d): %s", code, string(data))
+		return customHTTPError("custom chmod", code, data, sandboxID)
 	}
 	return nil
 }
@@ -373,7 +396,7 @@ func (p *CustomProvider) StatFile(ctx context.Context, sandboxID string, path st
 		return nil, fmt.Errorf("custom stat: %w", err)
 	}
 	if code >= 400 {
-		return nil, fmt.Errorf("custom stat failed (HTTP %d): %s", code, string(data))
+		return nil, customHTTPError("custom stat", code, data, sandboxID)
 	}
 
 	var fi FileInfo
@@ -393,7 +416,7 @@ func (p *CustomProvider) GlobFiles(ctx context.Context, sandboxID string, patter
 		return nil, fmt.Errorf("custom glob: %w", err)
 	}
 	if code >= 400 {
-		return nil, fmt.Errorf("custom glob failed (HTTP %d): %s", code, string(data))
+		return nil, customHTTPError("custom glob", code, data, sandboxID)
 	}
 
 	var matches []string
@@ -411,10 +434,10 @@ func (p *CustomProvider) Status(ctx context.Context, sandboxID string) (*Sandbox
 		return nil, fmt.Errorf("custom status: %w", err)
 	}
 	if code == 404 {
-		return &SandboxStatus{ID: sandboxID, State: "destroyed"}, nil
+		return nil, SandboxNotFoundError(sandboxID)
 	}
 	if code >= 400 {
-		return nil, fmt.Errorf("custom status failed (HTTP %d): %s", code, string(data))
+		return nil, customHTTPError("custom status", code, data, sandboxID)
 	}
 
 	var result struct {
@@ -445,7 +468,7 @@ func (p *CustomProvider) Destroy(ctx context.Context, sandboxID string) error {
 		return fmt.Errorf("custom destroy: %w", err)
 	}
 	if code >= 400 && code != 404 {
-		return fmt.Errorf("custom destroy failed (HTTP %d): %s", code, string(data))
+		return customHTTPError("custom destroy", code, data, sandboxID)
 	}
 	return nil
 }

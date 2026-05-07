@@ -8,12 +8,14 @@ import (
 type ErrorCode string
 
 const (
-	CodeNotFound    ErrorCode = "NOT_FOUND"
-	CodeBadRequest  ErrorCode = "BAD_REQUEST"
-	CodeInternal    ErrorCode = "INTERNAL_ERROR"
-	CodeUnauth      ErrorCode = "UNAUTHORIZED"
-	CodeConflict    ErrorCode = "CONFLICT"
-	CodeUnavailable ErrorCode = "UNAVAILABLE"
+	CodeNotFound      ErrorCode = "NOT_FOUND"
+	CodeBadRequest    ErrorCode = "BAD_REQUEST"
+	CodeInternal      ErrorCode = "INTERNAL_ERROR"
+	CodeUnauth        ErrorCode = "UNAUTHORIZED"
+	CodeConflict      ErrorCode = "CONFLICT"
+	CodeUnavailable   ErrorCode = "UNAVAILABLE"
+	CodeTimeout       ErrorCode = "TIMEOUT"
+	CodeResourceLimit ErrorCode = "RESOURCE_LIMIT"
 )
 
 type APIError struct {

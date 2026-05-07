@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"encoding/json"
 	"fmt"
 	"io"
 	"path"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/filters"
 	dockerimage "github.com/docker/docker/api/types/image"
 	"github.com/docker/docker/client"
 	"github.com/docker/docker/pkg/stdcopy"
@@ -150,7 +152,15 @@ func (d *DockerProvider) Spawn(ctx context.Context, opts SpawnOptions) (string, 
 	sandboxID := fmt.Sprintf("sb-%x", b)
 
 	labels := map[string]string{
-		"stacyvm": "true",
+		"stacyvm":          "true",
+		"stacyvm.provider": "docker",
+		"stacyvm.sandbox":  sandboxID,
+		"stacyvm.image":    image,
+	}
+	if len(opts.Metadata) > 0 {
+		if data, err := json.Marshal(opts.Metadata); err == nil {
+			labels["stacyvm.metadata"] = string(data)
+		}
 	}
 
 	if d.config.PreviewDomain != "" {
@@ -241,22 +251,34 @@ func (d *DockerProvider) Exec(ctx context.Context, sandboxID string, opts ExecOp
 
 	execID, err := d.cli.ContainerExecCreate(ctx, sandboxID, execCfg)
 	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return nil, ExecTimeoutError(sandboxID)
+		}
 		return nil, fmt.Errorf("exec create: %w", err)
 	}
 
 	resp, err := d.cli.ContainerExecAttach(ctx, execID.ID, container.ExecStartOptions{})
 	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return nil, ExecTimeoutError(sandboxID)
+		}
 		return nil, fmt.Errorf("exec attach: %w", err)
 	}
 	defer resp.Close()
 
 	var stdout, stderr bytes.Buffer
 	if _, err := stdcopy.StdCopy(&stdout, &stderr, resp.Reader); err != nil && err != io.EOF {
+		if ctx.Err() == context.DeadlineExceeded {
+			return nil, ExecTimeoutError(sandboxID)
+		}
 		d.logger.Debug().Err(err).Msg("stdcopy exec error")
 	}
 
 	inspect, err := d.cli.ContainerExecInspect(ctx, execID.ID)
 	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return nil, ExecTimeoutError(sandboxID)
+		}
 		return nil, fmt.Errorf("exec inspect: %w", err)
 	}
 
@@ -308,6 +330,12 @@ func (d *DockerProvider) ExecStream(ctx context.Context, sandboxID string, opts 
 		stderrW := &ctxChanWriter{ch: ch, stream: "stderr", ctx: ctx}
 		if _, err := stdcopy.StdCopy(stdoutW, stderrW, resp.Reader); err != nil && err != io.EOF {
 			d.logger.Debug().Err(err).Msg("stdcopy stream error")
+		}
+		if ctx.Err() == context.DeadlineExceeded {
+			select {
+			case ch <- StreamChunk{Stream: "stderr", Data: ExecTimeoutError(sandboxID).Error()}:
+			default:
+			}
 		}
 	}()
 
@@ -529,6 +557,9 @@ func (d *DockerProvider) GlobFiles(ctx context.Context, sandboxID string, patter
 func (d *DockerProvider) Status(ctx context.Context, sandboxID string) (*SandboxStatus, error) {
 	info, err := d.cli.ContainerInspect(ctx, sandboxID)
 	if err != nil {
+		if client.IsErrNotFound(err) {
+			return nil, SandboxNotFoundError(sandboxID)
+		}
 		return nil, fmt.Errorf("inspect container %q: %w", sandboxID, err)
 	}
 
@@ -560,6 +591,9 @@ func (d *DockerProvider) Destroy(ctx context.Context, sandboxID string) error {
 		d.logger.Debug().Err(err).Msg("container stop (continuing with remove)")
 	}
 	if err := d.cli.ContainerRemove(ctx, sandboxID, container.RemoveOptions{Force: true}); err != nil {
+		if client.IsErrNotFound(err) {
+			return SandboxNotFoundError(sandboxID)
+		}
 		return fmt.Errorf("removing container %q: %w", sandboxID, err)
 	}
 
@@ -605,18 +639,109 @@ func (d *DockerProvider) ConsoleLog(ctx context.Context, sandboxID string, lines
 	return result, nil
 }
 
+func (d *DockerProvider) ListRuntimeSandboxes(ctx context.Context) ([]RuntimeSandbox, error) {
+	args := filters.NewArgs(filters.Arg("label", "stacyvm=true"))
+	containers, err := d.cli.ContainerList(ctx, container.ListOptions{All: true, Filters: args})
+	if err != nil {
+		return nil, fmt.Errorf("list stacyvm containers: %w", err)
+	}
+
+	out := make([]RuntimeSandbox, 0, len(containers))
+	for _, c := range containers {
+		id := c.Labels["stacyvm.sandbox"]
+		if id == "" && len(c.Names) > 0 {
+			id = strings.TrimPrefix(c.Names[0], "/")
+		}
+		if id == "" {
+			id = c.ID
+		}
+
+		image := c.Labels["stacyvm.image"]
+		if image == "" {
+			image = c.Image
+		}
+
+		metadata := map[string]string{}
+		if raw := c.Labels["stacyvm.metadata"]; raw != "" {
+			_ = json.Unmarshal([]byte(raw), &metadata)
+		}
+
+		out = append(out, RuntimeSandbox{
+			ID:        id,
+			State:     dockerContainerState(c.State),
+			Provider:  d.Name(),
+			Image:     image,
+			CreatedAt: time.Unix(c.Created, 0).UTC(),
+			Metadata:  metadata,
+		})
+		d.rememberSandbox(id, image, dockerContainerState(c.State))
+	}
+	return out, nil
+}
+
 // ---------------------------------------------------------------------------
 // Private helpers
 // ---------------------------------------------------------------------------
 
 func (d *DockerProvider) getSandbox(id string) (*dockerSandbox, error) {
 	d.mu.RLock()
-	defer d.mu.RUnlock()
 	sb, ok := d.sandboxes[id]
+	d.mu.RUnlock()
 	if !ok {
-		return nil, fmt.Errorf("sandbox %q not found (may have been destroyed)", id)
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		info, err := d.cli.ContainerInspect(ctx, id)
+		if err != nil {
+			if client.IsErrNotFound(err) {
+				return nil, SandboxNotFoundError(id)
+			}
+			return nil, fmt.Errorf("inspect container %q: %w", id, err)
+		}
+		if info.Config == nil || info.Config.Labels["stacyvm"] != "true" {
+			return nil, SandboxNotFoundError(id)
+		}
+		image := info.Config.Labels["stacyvm.image"]
+		if image == "" {
+			image = info.Config.Image
+		}
+		state := "unknown"
+		if info.State != nil {
+			state = dockerContainerState(info.State.Status)
+		}
+		return d.rememberSandbox(id, image, state), nil
 	}
 	return sb, nil
+}
+
+func (d *DockerProvider) rememberSandbox(id, image, state string) *dockerSandbox {
+	if state == "" {
+		state = "running"
+	}
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	sb := &dockerSandbox{id: id, image: image, state: state}
+	d.sandboxes[id] = sb
+	return sb
+}
+
+func dockerContainerState(state string) string {
+	switch state {
+	case "running":
+		return "running"
+	case "paused":
+		return "paused"
+	case "restarting":
+		return "restarting"
+	case "created":
+		return "creating"
+	case "exited", "dead", "removing":
+		return "stopped"
+	default:
+		if state == "" {
+			return "unknown"
+		}
+		return state
+	}
 }
 
 // containerExec runs a one-shot command inside the container and returns the result.
@@ -801,4 +926,3 @@ func parseStatOutput(output string) []FileInfo {
 	}
 	return files
 }
-

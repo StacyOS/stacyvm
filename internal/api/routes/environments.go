@@ -181,11 +181,7 @@ func (e *EnvironmentRoutes) CreateSpec(w http.ResponseWriter, r *http.Request) {
 		UpdatedAt:      now,
 	}
 	if err := e.store.CreateEnvironmentSpec(r.Context(), rec); err != nil {
-		if strings.Contains(err.Error(), "UNIQUE constraint") {
-			httputil.WriteError(w, http.StatusConflict, httputil.CodeConflict, "spec name already exists for this owner")
-			return
-		}
-		httputil.WriteError(w, http.StatusInternalServerError, httputil.CodeInternal, err.Error())
+		writeRouteError(w, err)
 		return
 	}
 
@@ -216,11 +212,7 @@ func (e *EnvironmentRoutes) GetSpec(w http.ResponseWriter, r *http.Request) {
 	specID := chi.URLParam(r, "specID")
 	rec, err := e.store.GetEnvironmentSpec(r.Context(), specID)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
-			httputil.WriteError(w, http.StatusNotFound, httputil.CodeNotFound, err.Error())
-			return
-		}
-		httputil.WriteError(w, http.StatusInternalServerError, httputil.CodeInternal, err.Error())
+		writeRouteError(w, err)
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, toSpecResponse(rec))
@@ -230,11 +222,7 @@ func (e *EnvironmentRoutes) Suggestions(w http.ResponseWriter, r *http.Request) 
 	specID := chi.URLParam(r, "specID")
 	rec, err := e.store.GetEnvironmentSpec(r.Context(), specID)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
-			httputil.WriteError(w, http.StatusNotFound, httputil.CodeNotFound, err.Error())
-			return
-		}
-		httputil.WriteError(w, http.StatusInternalServerError, httputil.CodeInternal, err.Error())
+		writeRouteError(w, err)
 		return
 	}
 
@@ -265,11 +253,7 @@ func (e *EnvironmentRoutes) StartBuild(w http.ResponseWriter, r *http.Request) {
 
 	spec, err := e.store.GetEnvironmentSpec(r.Context(), req.SpecID)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
-			httputil.WriteError(w, http.StatusNotFound, httputil.CodeNotFound, err.Error())
-			return
-		}
-		httputil.WriteError(w, http.StatusInternalServerError, httputil.CodeInternal, err.Error())
+		writeRouteError(w, err)
 		return
 	}
 
@@ -327,11 +311,7 @@ func (e *EnvironmentRoutes) GetBuild(w http.ResponseWriter, r *http.Request) {
 	buildID := chi.URLParam(r, "buildID")
 	resp, err := e.getBuildResponse(r, buildID)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
-			httputil.WriteError(w, http.StatusNotFound, httputil.CodeNotFound, err.Error())
-			return
-		}
-		httputil.WriteError(w, http.StatusInternalServerError, httputil.CodeInternal, err.Error())
+		writeRouteError(w, err)
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, resp)
@@ -394,11 +374,7 @@ func (e *EnvironmentRoutes) CancelBuild(w http.ResponseWriter, r *http.Request) 
 	buildID := chi.URLParam(r, "buildID")
 	build, err := e.store.GetEnvironmentBuild(r.Context(), buildID)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
-			httputil.WriteError(w, http.StatusNotFound, httputil.CodeNotFound, err.Error())
-			return
-		}
-		httputil.WriteError(w, http.StatusInternalServerError, httputil.CodeInternal, err.Error())
+		writeRouteError(w, err)
 		return
 	}
 
@@ -432,11 +408,7 @@ func (e *EnvironmentRoutes) SpawnConfig(w http.ResponseWriter, r *http.Request) 
 	buildID := chi.URLParam(r, "buildID")
 	build, err := e.store.GetEnvironmentBuild(r.Context(), buildID)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
-			httputil.WriteError(w, http.StatusNotFound, httputil.CodeNotFound, err.Error())
-			return
-		}
-		httputil.WriteError(w, http.StatusInternalServerError, httputil.CodeInternal, err.Error())
+		writeRouteError(w, err)
 		return
 	}
 
@@ -507,11 +479,7 @@ func (e *EnvironmentRoutes) SaveRegistryConnection(w http.ResponseWriter, r *htt
 		UpdatedAt: now,
 	}
 	if err := e.store.SaveRegistryConnection(r.Context(), rec); err != nil {
-		if strings.Contains(err.Error(), "UNIQUE constraint") {
-			httputil.WriteError(w, http.StatusConflict, httputil.CodeConflict, "registry connection already exists")
-			return
-		}
-		httputil.WriteError(w, http.StatusInternalServerError, httputil.CodeInternal, err.Error())
+		writeRouteError(w, err)
 		return
 	}
 	httputil.WriteJSON(w, http.StatusCreated, toRegistryConnectionResponse(rec))
@@ -538,11 +506,7 @@ func (e *EnvironmentRoutes) ListRegistryConnections(w http.ResponseWriter, r *ht
 func (e *EnvironmentRoutes) DeleteRegistryConnection(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "connectionID")
 	if err := e.store.DeleteRegistryConnection(r.Context(), id); err != nil {
-		if strings.Contains(err.Error(), "not found") {
-			httputil.WriteError(w, http.StatusNotFound, httputil.CodeNotFound, err.Error())
-			return
-		}
-		httputil.WriteError(w, http.StatusInternalServerError, httputil.CodeInternal, err.Error())
+		writeRouteError(w, err)
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "deleted"})

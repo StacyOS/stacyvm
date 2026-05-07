@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/StacyOs/stacyvm/internal/orchestrator"
 	"github.com/StacyOs/stacyvm/internal/providers"
 	"github.com/StacyOs/stacyvm/internal/store"
+	"github.com/go-chi/chi/v5"
 	"github.com/rs/zerolog"
 )
 
@@ -125,6 +125,21 @@ func TestExecInSandbox(t *testing.T) {
 	json.NewDecoder(w.Body).Decode(&result)
 	if result.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d", result.ExitCode)
+	}
+}
+
+func TestExecInSandbox_Timeout(t *testing.T) {
+	r, _ := setupTestRouter(t)
+
+	sbID := createTestSandbox(t, r)
+	execBody := `{"command":"sleep 1","timeout":"1ms"}`
+	req := httptest.NewRequest("POST", "/api/v1/sandboxes/"+sbID+"/exec", bytes.NewBufferString(execBody))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusRequestTimeout {
+		t.Fatalf("expected 408, got %d: %s", w.Code, w.Body.String())
 	}
 }
 

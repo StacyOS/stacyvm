@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -118,6 +119,156 @@ func (m *Manager) pruneExpired() {
 	}
 }
 
+// Reconcile refreshes persisted sandbox state against provider runtime state.
+// It is intended for startup recovery after the server process restarts.
+func (m *Manager) Reconcile(ctx context.Context) error {
+	records, err := m.store.ListSandboxes(ctx)
+	if err != nil {
+		return fmt.Errorf("listing sandboxes for reconciliation: %w", err)
+	}
+
+	known := make(map[string]struct{}, len(records))
+	for _, rec := range records {
+		known[rec.ID] = struct{}{}
+		if SandboxState(rec.State) == StateDestroyed {
+			continue
+		}
+
+		prov, err := m.registry.Get(rec.Provider)
+		if err != nil {
+			m.logger.Warn().Err(err).Str("sandbox", rec.ID).Str("provider", rec.Provider).Msg("reconcile: provider unavailable")
+			if updateErr := m.store.UpdateSandboxState(ctx, rec.ID, string(StateError)); updateErr != nil {
+				return fmt.Errorf("marking sandbox %s error: %w", rec.ID, updateErr)
+			}
+			continue
+		}
+
+		status, err := prov.Status(ctx, rec.ID)
+		if err != nil {
+			if errors.Is(err, providers.ErrSandboxNotFound) || errors.Is(err, providers.ErrSandboxDestroyed) {
+				if updateErr := m.store.UpdateSandboxState(ctx, rec.ID, string(StateDestroyed)); updateErr != nil {
+					return fmt.Errorf("marking stale sandbox %s destroyed: %w", rec.ID, updateErr)
+				}
+				m.mu.Lock()
+				delete(m.sandboxes, rec.ID)
+				m.mu.Unlock()
+				m.logger.Info().Str("sandbox", rec.ID).Msg("reconcile: stale sandbox marked destroyed")
+				continue
+			}
+			m.logger.Warn().Err(err).Str("sandbox", rec.ID).Msg("reconcile: provider status failed")
+			if updateErr := m.store.UpdateSandboxState(ctx, rec.ID, string(StateError)); updateErr != nil {
+				return fmt.Errorf("marking sandbox %s error: %w", rec.ID, updateErr)
+			}
+			continue
+		}
+
+		state := SandboxState(status.State)
+		if state == "" {
+			state = StateRunning
+		}
+		if state == StateDestroyed {
+			if err := m.store.UpdateSandboxState(ctx, rec.ID, string(StateDestroyed)); err != nil {
+				return fmt.Errorf("marking sandbox %s destroyed: %w", rec.ID, err)
+			}
+			continue
+		}
+		if state != SandboxState(rec.State) {
+			if err := m.store.UpdateSandboxState(ctx, rec.ID, string(state)); err != nil {
+				return fmt.Errorf("updating reconciled sandbox %s state: %w", rec.ID, err)
+			}
+		}
+
+		sb := recordToSandbox(rec)
+		sb.State = state
+		sb.PreviewDomain = m.previewDomain
+		m.mu.Lock()
+		m.sandboxes[rec.ID] = sb
+		m.mu.Unlock()
+	}
+
+	if err := m.reconcileProviderRuntimes(ctx, known); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (m *Manager) reconcileProviderRuntimes(ctx context.Context, known map[string]struct{}) error {
+	for _, name := range m.registry.List() {
+		prov, err := m.registry.Get(name)
+		if err != nil {
+			continue
+		}
+		lister, ok := prov.(providers.RuntimeSandboxLister)
+		if !ok {
+			continue
+		}
+
+		runtimes, err := lister.ListRuntimeSandboxes(ctx)
+		if err != nil {
+			m.logger.Warn().Err(err).Str("provider", name).Msg("reconcile: runtime inventory failed")
+			continue
+		}
+		for _, runtime := range runtimes {
+			if _, ok := known[runtime.ID]; ok {
+				continue
+			}
+			if runtime.State == "" {
+				runtime.State = string(StateRunning)
+			}
+			if SandboxState(runtime.State) == StateDestroyed {
+				continue
+			}
+			if runtime.Provider == "" {
+				runtime.Provider = prov.Name()
+			}
+			if runtime.Image == "" {
+				runtime.Image = m.defaultImage
+			}
+			if runtime.CreatedAt.IsZero() {
+				runtime.CreatedAt = time.Now().UTC()
+			}
+			expiresAt := runtime.CreatedAt.Add(m.defaultTTL)
+			if expiresAt.Before(time.Now()) {
+				expiresAt = time.Now().Add(m.defaultTTL)
+			}
+
+			metaJSON, _ := json.Marshal(runtime.Metadata)
+			rec := &store.SandboxRecord{
+				ID:        runtime.ID,
+				State:     runtime.State,
+				Provider:  runtime.Provider,
+				Image:     runtime.Image,
+				MemoryMB:  m.defaultMemory,
+				VCPUs:     m.defaultVCPUs,
+				Metadata:  string(metaJSON),
+				CreatedAt: runtime.CreatedAt,
+				ExpiresAt: expiresAt,
+				UpdatedAt: time.Now().UTC(),
+			}
+			if err := m.store.CreateSandbox(ctx, rec); err != nil {
+				if errors.Is(err, store.ErrConflict) {
+					continue
+				}
+				return fmt.Errorf("adopting runtime sandbox %s: %w", runtime.ID, err)
+			}
+
+			sb := recordToSandbox(rec)
+			sb.PreviewDomain = m.previewDomain
+			m.mu.Lock()
+			m.sandboxes[runtime.ID] = sb
+			m.mu.Unlock()
+			known[runtime.ID] = struct{}{}
+
+			m.logger.Info().
+				Str("sandbox", runtime.ID).
+				Str("provider", runtime.Provider).
+				Msg("reconcile: adopted provider runtime")
+		}
+	}
+	return nil
+}
+
 func (m *Manager) Spawn(ctx context.Context, req SpawnRequest) (*Sandbox, error) {
 	providerName := req.Provider
 	prov, err := m.registry.Get(providerName)
@@ -227,6 +378,9 @@ func (m *Manager) spawnPooled(ctx context.Context, prov providers.Provider, req 
 	// Acquire a VM slot (may spawn a new VM if needed).
 	vmID, err := m.vmPoolMgr.Acquire(ctx, sandboxID)
 	if err != nil {
+		if errors.Is(err, ErrVMPoolFull) {
+			return nil, providers.ResourceLimitError(err.Error())
+		}
 		return nil, fmt.Errorf("pool acquire: %w", err)
 	}
 
@@ -296,6 +450,17 @@ func (m *Manager) Exec(ctx context.Context, sandboxID string, req ExecRequest) (
 		return nil, err
 	}
 
+	execCtx := ctx
+	var cancel context.CancelFunc
+	if req.Timeout != "" {
+		timeout, err := time.ParseDuration(req.Timeout)
+		if err != nil {
+			return nil, fmt.Errorf("parsing exec timeout: %w", err)
+		}
+		execCtx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
+
 	m.events.Publish(Event{
 		Type:      EventExecStarted,
 		SandboxID: sandboxID,
@@ -308,13 +473,16 @@ func (m *Manager) Exec(ctx context.Context, sandboxID string, req ExecRequest) (
 	}
 
 	start := time.Now()
-	result, err := prov.Exec(ctx, m.resolveVMID(sb), providers.ExecOptions{
+	result, err := prov.Exec(execCtx, m.resolveVMID(sb), providers.ExecOptions{
 		Command: req.Command,
 		Args:    req.Args,
 		Env:     req.Env,
 		WorkDir: workDir,
 	})
 	if err != nil {
+		if execCtx.Err() == context.DeadlineExceeded {
+			return nil, providers.ExecTimeoutError(sandboxID)
+		}
 		return nil, fmt.Errorf("exec: %w", err)
 	}
 	duration := time.Since(start)
@@ -351,17 +519,60 @@ func (m *Manager) ExecStream(ctx context.Context, sandboxID string, req ExecRequ
 		return nil, err
 	}
 
+	execCtx := ctx
+	var cancel context.CancelFunc
+	if req.Timeout != "" {
+		timeout, err := time.ParseDuration(req.Timeout)
+		if err != nil {
+			return nil, fmt.Errorf("parsing exec timeout: %w", err)
+		}
+		execCtx, cancel = context.WithTimeout(ctx, timeout)
+	}
+
 	workDir := req.WorkDir
 	if workDir == "" && sb.VMID != "" {
 		workDir = "/workspace/" + sandboxID
 	}
 
-	return prov.ExecStream(ctx, m.resolveVMID(sb), providers.ExecOptions{
+	ch, err := prov.ExecStream(execCtx, m.resolveVMID(sb), providers.ExecOptions{
 		Command: req.Command,
 		Args:    req.Args,
 		Env:     req.Env,
 		WorkDir: workDir,
 	})
+	if err != nil {
+		if cancel != nil {
+			cancel()
+		}
+		if execCtx.Err() == context.DeadlineExceeded {
+			return nil, providers.ExecTimeoutError(sandboxID)
+		}
+		return nil, err
+	}
+	if cancel == nil {
+		return ch, nil
+	}
+
+	out := make(chan providers.StreamChunk, 64)
+	go func() {
+		defer close(out)
+		defer cancel()
+		timedOut := false
+		for chunk := range ch {
+			select {
+			case out <- chunk:
+			case <-execCtx.Done():
+				timedOut = true
+			}
+		}
+		if execCtx.Err() == context.DeadlineExceeded || timedOut {
+			select {
+			case out <- providers.StreamChunk{Stream: "stderr", Data: providers.ExecTimeoutError(sandboxID).Error()}:
+			case <-ctx.Done():
+			}
+		}
+	}()
+	return out, nil
 }
 
 func (m *Manager) WriteFile(ctx context.Context, sandboxID string, req FileWriteRequest) error {
@@ -626,11 +837,11 @@ func (m *Manager) Get(ctx context.Context, id string) (*Sandbox, error) {
 	// Fall back to store
 	rec, err := m.store.GetSandbox(ctx, id)
 	if err != nil {
-		return nil, err
+		return nil, providers.SandboxNotFoundError(id)
 	}
 	sb = recordToSandbox(rec)
 	if sb.State == StateDestroyed {
-		return nil, fmt.Errorf("sandbox %q not found", id)
+		return nil, providers.SandboxDestroyedError(id)
 	}
 	return sb, nil
 }
@@ -793,13 +1004,13 @@ func (m *Manager) getSandboxAndProvider(id string) (*Sandbox, providers.Provider
 	if !ok {
 		rec, err := m.store.GetSandbox(context.Background(), id)
 		if err != nil {
-			return nil, nil, fmt.Errorf("sandbox %q not found", id)
+			return nil, nil, providers.SandboxNotFoundError(id)
 		}
 		sb = recordToSandbox(rec)
 	}
 
 	if sb.State == StateDestroyed {
-		return nil, nil, fmt.Errorf("sandbox %q is destroyed", id)
+		return nil, nil, providers.SandboxDestroyedError(id)
 	}
 
 	prov, err := m.registry.Get(sb.Provider)
@@ -818,7 +1029,7 @@ func (m *Manager) getProvider(id string) (providers.Provider, error) {
 	if !ok {
 		rec, err := m.store.GetSandbox(context.Background(), id)
 		if err != nil {
-			return nil, fmt.Errorf("sandbox %q not found", id)
+			return nil, providers.SandboxNotFoundError(id)
 		}
 		sb = recordToSandbox(rec)
 	}
@@ -843,4 +1054,3 @@ func recordToSandbox(r *store.SandboxRecord) *Sandbox {
 		Metadata:  metadata,
 	}
 }
-

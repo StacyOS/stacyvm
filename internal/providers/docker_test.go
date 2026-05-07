@@ -2,6 +2,7 @@ package providers
 
 import (
 	"context"
+	"errors"
 	"io"
 	"os"
 	"os/exec"
@@ -179,6 +180,44 @@ func TestDockerIntegration_Healthy(t *testing.T) {
 	if !p.Healthy(ctx) {
 		t.Error("Healthy() = false, want true")
 	}
+}
+
+func TestDockerIntegration_Conformance(t *testing.T) {
+	skipIfNoDocker(t)
+	runProviderConformance(t, func(t *testing.T) Provider {
+		t.Helper()
+		p, err := newTestDockerProvider(t)
+		if err != nil {
+			t.Fatalf("provider: %v", err)
+		}
+		return p
+	})
+}
+
+func TestDockerIntegration_ListRuntimeSandboxes(t *testing.T) {
+	skipIfNoDocker(t)
+	p, err := newTestDockerProvider(t)
+	if err != nil {
+		t.Fatalf("provider: %v", err)
+	}
+	id := spawnTestSandbox(t, p)
+
+	runtimes, err := p.ListRuntimeSandboxes(context.Background())
+	if err != nil {
+		t.Fatalf("list runtime sandboxes: %v", err)
+	}
+	for _, runtime := range runtimes {
+		if runtime.ID == id {
+			if runtime.Provider != "docker" {
+				t.Fatalf("provider = %q, want docker", runtime.Provider)
+			}
+			if runtime.Image == "" {
+				t.Fatal("runtime image is empty")
+			}
+			return
+		}
+	}
+	t.Fatalf("spawned sandbox %s not found in runtime inventory", id)
 }
 
 func TestDockerIntegration_SpawnAndDestroy(t *testing.T) {
@@ -536,6 +575,9 @@ func TestDockerIntegration_StatusNotFound(t *testing.T) {
 	if err == nil {
 		t.Error("expected error for nonexistent container")
 	}
+	if !errors.Is(err, ErrSandboxNotFound) {
+		t.Fatalf("expected ErrSandboxNotFound, got %v", err)
+	}
 }
 
 func TestDockerIntegration_DestroyNotFound(t *testing.T) {
@@ -548,6 +590,9 @@ func TestDockerIntegration_DestroyNotFound(t *testing.T) {
 	err = p.Destroy(ctx, "nonexistent-container-id-12345")
 	if err == nil {
 		t.Error("expected error for nonexistent container")
+	}
+	if !errors.Is(err, ErrSandboxNotFound) {
+		t.Fatalf("expected ErrSandboxNotFound, got %v", err)
 	}
 }
 
@@ -563,8 +608,8 @@ func TestDockerIntegration_PoolWorkspaceIsolation(t *testing.T) {
 	userA, userB := "sb-aaaa0001", "sb-bbbb0002"
 
 	// Create workspace dirs
-	p.Exec(ctx, vmID, ExecOptions{Command: "mkdir -p /workspace/" + userA})  //nolint:errcheck
-	p.Exec(ctx, vmID, ExecOptions{Command: "mkdir -p /workspace/" + userB})  //nolint:errcheck
+	p.Exec(ctx, vmID, ExecOptions{Command: "mkdir -p /workspace/" + userA}) //nolint:errcheck
+	p.Exec(ctx, vmID, ExecOptions{Command: "mkdir -p /workspace/" + userB}) //nolint:errcheck
 
 	// User A writes secret
 	p.Exec(ctx, vmID, ExecOptions{Command: "echo TOP_SECRET > /workspace/" + userA + "/secret.txt"}) //nolint:errcheck
@@ -593,7 +638,7 @@ func TestDockerIntegration_ConcurrentUsers(t *testing.T) {
 
 	users := []string{"sb-u001", "sb-u002", "sb-u003"}
 	for _, u := range users {
-		p.Exec(ctx, vmID, ExecOptions{Command: "mkdir -p /workspace/" + u})                      //nolint:errcheck
+		p.Exec(ctx, vmID, ExecOptions{Command: "mkdir -p /workspace/" + u})                     //nolint:errcheck
 		p.Exec(ctx, vmID, ExecOptions{Command: "echo " + u + " > /workspace/" + u + "/id.txt"}) //nolint:errcheck
 	}
 

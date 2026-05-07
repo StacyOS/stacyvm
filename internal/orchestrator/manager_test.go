@@ -2,7 +2,9 @@ package orchestrator
 
 import (
 	"context"
+	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -76,6 +78,93 @@ func TestManager_List(t *testing.T) {
 	}
 }
 
+func TestManager_ReconcileMarksMissingRuntimeDestroyed(t *testing.T) {
+	m := setupManager(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	if err := m.store.CreateSandbox(ctx, &store.SandboxRecord{
+		ID:        "sb-missing-runtime",
+		State:     string(StateRunning),
+		Provider:  "mock",
+		Image:     "alpine:latest",
+		MemoryMB:  512,
+		VCPUs:     1,
+		Metadata:  "{}",
+		CreatedAt: now,
+		ExpiresAt: now.Add(time.Hour),
+		UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("create stale sandbox record: %v", err)
+	}
+
+	if err := m.Reconcile(ctx); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+
+	rec, err := m.store.GetSandbox(ctx, "sb-missing-runtime")
+	if err != nil {
+		t.Fatalf("get reconciled sandbox: %v", err)
+	}
+	if rec.State != string(StateDestroyed) {
+		t.Fatalf("expected destroyed after reconcile, got %s", rec.State)
+	}
+}
+
+type runtimeListerProvider struct {
+	providers.Provider
+	runtimes []providers.RuntimeSandbox
+}
+
+func (p *runtimeListerProvider) ListRuntimeSandboxes(ctx context.Context) ([]providers.RuntimeSandbox, error) {
+	return p.runtimes, nil
+}
+
+func TestManager_ReconcileAdoptsProviderRuntime(t *testing.T) {
+	dir := t.TempDir()
+	st, err := store.NewSQLiteStore(filepath.Join(dir, "test.db"))
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	t.Cleanup(func() { st.Close() })
+
+	reg := providers.NewRegistry()
+	mock := &runtimeListerProvider{
+		Provider: providers.NewMockProvider(),
+		runtimes: []providers.RuntimeSandbox{{
+			ID:        "sb-adopted-runtime",
+			State:     string(StateRunning),
+			Provider:  "mock",
+			Image:     "alpine:latest",
+			CreatedAt: time.Now().UTC(),
+			Metadata:  map[string]string{"source": "runtime"},
+		}},
+	}
+	reg.Register(mock)
+	reg.SetDefault("mock")
+
+	m := NewManager(reg, st, NewEventBus(), zerolog.Nop(), ManagerConfig{
+		DefaultTTL:    time.Hour,
+		DefaultImage:  "alpine:latest",
+		DefaultMemory: 512,
+		DefaultVCPUs:  1,
+	})
+
+	if err := m.Reconcile(context.Background()); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	rec, err := st.GetSandbox(context.Background(), "sb-adopted-runtime")
+	if err != nil {
+		t.Fatalf("get adopted sandbox: %v", err)
+	}
+	if rec.State != string(StateRunning) {
+		t.Fatalf("expected running adopted state, got %s", rec.State)
+	}
+	if rec.Provider != "mock" {
+		t.Fatalf("expected mock provider, got %s", rec.Provider)
+	}
+}
+
 func TestManager_Exec(t *testing.T) {
 	m := setupManager(t)
 	ctx := context.Background()
@@ -91,6 +180,46 @@ func TestManager_Exec(t *testing.T) {
 	}
 	if result.Stdout == "" {
 		t.Fatal("expected stdout")
+	}
+}
+
+func TestManager_ExecTimeout(t *testing.T) {
+	m := setupManager(t)
+	ctx := context.Background()
+
+	sb, _ := m.Spawn(ctx, SpawnRequest{Image: "alpine:latest"})
+
+	_, err := m.Exec(ctx, sb.ID, ExecRequest{
+		Command: "sleep 1",
+		Timeout: "1ms",
+	})
+	if !errors.Is(err, ErrExecTimeout) {
+		t.Fatalf("expected ErrExecTimeout, got %v", err)
+	}
+}
+
+func TestManager_ExecStreamTimeoutEmitsErrorChunk(t *testing.T) {
+	m := setupManager(t)
+	ctx := context.Background()
+
+	sb, _ := m.Spawn(ctx, SpawnRequest{Image: "alpine:latest"})
+
+	ch, err := m.ExecStream(ctx, sb.ID, ExecRequest{
+		Command: "sleep 1",
+		Timeout: "1ms",
+	})
+	if err != nil {
+		t.Fatalf("exec stream: %v", err)
+	}
+
+	var sawTimeout bool
+	for chunk := range ch {
+		if chunk.Stream == "stderr" && strings.Contains(chunk.Data, ErrExecTimeout.Error()) {
+			sawTimeout = true
+		}
+	}
+	if !sawTimeout {
+		t.Fatal("expected timeout error chunk")
 	}
 }
 

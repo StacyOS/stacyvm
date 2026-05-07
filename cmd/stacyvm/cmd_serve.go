@@ -171,6 +171,9 @@ func runServe() error {
 		Pool:          cfg.Pool,
 		PreviewDomain: cfg.Server.PreviewDomain,
 	})
+	if err := mgr.Reconcile(context.Background()); err != nil {
+		return err
+	}
 	mgr.Start()
 	mgr.InitVMPool()
 	defer mgr.Stop()

@@ -45,7 +45,21 @@ type SandboxStatus struct {
 	State string
 }
 
+// RuntimeSandbox describes a provider-owned runtime discovered outside the
+// orchestrator's in-memory state, usually during startup reconciliation.
+type RuntimeSandbox struct {
+	ID        string
+	State     string
+	Provider  string
+	Image     string
+	CreatedAt time.Time
+	Metadata  map[string]string
+}
+
 // Provider defines the interface for sandbox execution backends.
+//
+// Implementations must satisfy the behavior documented in
+// docs/provider-contract.md and exercised by provider_conformance_test.go.
 type Provider interface {
 	// Name returns the unique provider identifier.
 	Name() string
@@ -107,4 +121,10 @@ type SnapshotSummary struct {
 // to expose their cached snapshots.
 type SnapshotLister interface {
 	ListSnapshots() []SnapshotSummary
+}
+
+// RuntimeSandboxLister is implemented by providers that can enumerate
+// already-running runtimes for startup reconciliation.
+type RuntimeSandboxLister interface {
+	ListRuntimeSandboxes(ctx context.Context) ([]RuntimeSandbox, error)
 }

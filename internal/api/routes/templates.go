@@ -3,11 +3,10 @@ package routes
 import (
 	"encoding/json"
 	"net/http"
-	"strings"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/StacyOs/stacyvm/internal/httputil"
 	"github.com/StacyOs/stacyvm/internal/orchestrator"
+	"github.com/go-chi/chi/v5"
 )
 
 type TemplateRoutes struct {
@@ -53,11 +52,7 @@ func (t *TemplateRoutes) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := t.registry.Create(r.Context(), &tmpl); err != nil {
-		if strings.Contains(err.Error(), "UNIQUE constraint") {
-			httputil.WriteError(w, http.StatusConflict, httputil.CodeConflict, "template already exists")
-			return
-		}
-		httputil.WriteError(w, http.StatusInternalServerError, httputil.CodeInternal, err.Error())
+		writeRouteError(w, err)
 		return
 	}
 	httputil.WriteJSON(w, http.StatusCreated, tmpl)
@@ -101,11 +96,7 @@ func (t *TemplateRoutes) Get(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 	tmpl, err := t.registry.Get(r.Context(), name)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
-			httputil.WriteError(w, http.StatusNotFound, httputil.CodeNotFound, err.Error())
-			return
-		}
-		httputil.WriteError(w, http.StatusInternalServerError, httputil.CodeInternal, err.Error())
+		writeRouteError(w, err)
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, tmpl)
@@ -135,11 +126,7 @@ func (t *TemplateRoutes) Update(w http.ResponseWriter, r *http.Request) {
 	}
 	tmpl.Name = name
 	if err := t.registry.Update(r.Context(), &tmpl); err != nil {
-		if strings.Contains(err.Error(), "not found") {
-			httputil.WriteError(w, http.StatusNotFound, httputil.CodeNotFound, err.Error())
-			return
-		}
-		httputil.WriteError(w, http.StatusInternalServerError, httputil.CodeInternal, err.Error())
+		writeRouteError(w, err)
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, tmpl)
@@ -160,11 +147,7 @@ func (t *TemplateRoutes) Update(w http.ResponseWriter, r *http.Request) {
 func (t *TemplateRoutes) Delete(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 	if err := t.registry.Delete(r.Context(), name); err != nil {
-		if strings.Contains(err.Error(), "not found") {
-			httputil.WriteError(w, http.StatusNotFound, httputil.CodeNotFound, err.Error())
-			return
-		}
-		httputil.WriteError(w, http.StatusInternalServerError, httputil.CodeInternal, err.Error())
+		writeRouteError(w, err)
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
@@ -188,11 +171,7 @@ func (t *TemplateRoutes) Spawn(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 	tmpl, err := t.registry.Get(r.Context(), name)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
-			httputil.WriteError(w, http.StatusNotFound, httputil.CodeNotFound, err.Error())
-			return
-		}
-		httputil.WriteError(w, http.StatusInternalServerError, httputil.CodeInternal, err.Error())
+		writeRouteError(w, err)
 		return
 	}
 
@@ -213,7 +192,7 @@ func (t *TemplateRoutes) Spawn(w http.ResponseWriter, r *http.Request) {
 
 	sb, err := t.manager.Spawn(r.Context(), req)
 	if err != nil {
-		httputil.WriteError(w, http.StatusInternalServerError, httputil.CodeInternal, err.Error())
+		writeRouteError(w, err)
 		return
 	}
 	httputil.WriteJSON(w, http.StatusCreated, sb)

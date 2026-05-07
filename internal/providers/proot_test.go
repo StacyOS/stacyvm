@@ -538,6 +538,21 @@ func TestPRootProvider_Integration_Exec(t *testing.T) {
 	}
 }
 
+func TestPRootProvider_Integration_Conformance(t *testing.T) {
+	prootPath := skipIfNoPRoot(t)
+	runProviderConformance(t, func(t *testing.T) Provider {
+		t.Helper()
+		tmpDir := t.TempDir()
+		return NewPRootProvider(PRootProviderConfig{
+			RootfsPath:     "/",
+			PRootBinary:    prootPath,
+			WorkspaceBase:  filepath.Join(tmpDir, "workspaces"),
+			DefaultTimeout: 30 * time.Second,
+			MaxSandboxes:   5,
+		}, testPRootLogger())
+	})
+}
+
 func TestPRootProvider_Integration_ExecStream(t *testing.T) {
 	prootPath := skipIfNoPRoot(t)
 	tmpDir := t.TempDir()

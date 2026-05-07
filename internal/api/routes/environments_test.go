@@ -109,6 +109,40 @@ func TestEnvironmentFlow_CreateBuildSpawnConfig(t *testing.T) {
 	}
 }
 
+func TestEnvironmentCreateSpecDuplicateReturnsConflict(t *testing.T) {
+	r := setupEnvTestRouter(t)
+
+	specReq := map[string]any{
+		"owner_id":   "user-dupe",
+		"name":       "same-name",
+		"base_image": "python:3.12-slim",
+	}
+	body, _ := json.Marshal(specReq)
+	for i := 0; i < 2; i++ {
+		req := httptest.NewRequest("POST", "/api/v1/environments/specs", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if i == 0 && w.Code != http.StatusCreated {
+			t.Fatalf("first create: expected 201, got %d: %s", w.Code, w.Body.String())
+		}
+		if i == 1 && w.Code != http.StatusConflict {
+			t.Fatalf("second create: expected 409, got %d: %s", w.Code, w.Body.String())
+		}
+	}
+}
+
+func TestEnvironmentGetSpecMissingReturnsNotFound(t *testing.T) {
+	r := setupEnvTestRouter(t)
+
+	req := httptest.NewRequest("GET", "/api/v1/environments/specs/spec-nope", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
 func TestEnvironmentBuildCancel(t *testing.T) {
 	r := setupEnvTestRouter(t)
 

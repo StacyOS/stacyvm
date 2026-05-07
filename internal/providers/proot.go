@@ -110,7 +110,7 @@ func (p *PRootProvider) Spawn(ctx context.Context, opts SpawnOptions) (string, e
 		}
 	}
 	if activeCount >= p.config.MaxSandboxes {
-		return "", fmt.Errorf("max sandboxes reached (%d)", p.config.MaxSandboxes)
+		return "", ResourceLimitError(fmt.Sprintf("max sandboxes reached (%d)", p.config.MaxSandboxes))
 	}
 
 	id := generatePRootSandboxID()
@@ -139,10 +139,10 @@ func (p *PRootProvider) getSandbox(id string) (*prootSandbox, error) {
 	defer p.mu.RUnlock()
 	sb, ok := p.sandboxes[id]
 	if !ok {
-		return nil, fmt.Errorf("sandbox %q not found", id)
+		return nil, SandboxNotFoundError(id)
 	}
 	if sb.state == "destroyed" {
-		return nil, fmt.Errorf("sandbox %q is destroyed", id)
+		return nil, SandboxDestroyedError(id)
 	}
 	return sb, nil
 }
@@ -223,6 +223,9 @@ func (p *PRootProvider) Exec(ctx context.Context, sandboxID string, opts ExecOpt
 	err = cmd.Run()
 	exitCode := 0
 	if err != nil {
+		if execCtx.Err() == context.DeadlineExceeded {
+			return nil, ExecTimeoutError(sandboxID)
+		}
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			exitCode = exitErr.ExitCode()
 		} else {
@@ -295,7 +298,12 @@ func (p *PRootProvider) ExecStream(ctx context.Context, sandboxID string, opts E
 		go readStream("stderr", stderrPipe)
 
 		wg.Wait()
-		cmd.Wait()
+		if err := cmd.Wait(); err != nil && execCtx.Err() == context.DeadlineExceeded {
+			select {
+			case ch <- StreamChunk{Stream: "stderr", Data: ExecTimeoutError(sandboxID).Error()}:
+			case <-ctx.Done():
+			}
+		}
 	}()
 
 	return ch, nil
@@ -499,7 +507,7 @@ func (p *PRootProvider) Status(ctx context.Context, sandboxID string) (*SandboxS
 	defer p.mu.RUnlock()
 	sb, ok := p.sandboxes[sandboxID]
 	if !ok {
-		return nil, fmt.Errorf("sandbox %q not found", sandboxID)
+		return nil, SandboxNotFoundError(sandboxID)
 	}
 	return &SandboxStatus{
 		ID:    sb.id,
@@ -512,7 +520,7 @@ func (p *PRootProvider) Destroy(ctx context.Context, sandboxID string) error {
 	sb, ok := p.sandboxes[sandboxID]
 	if !ok {
 		p.mu.Unlock()
-		return fmt.Errorf("sandbox %q not found", sandboxID)
+		return SandboxNotFoundError(sandboxID)
 	}
 	sb.state = "destroyed"
 	delete(p.sandboxes, sandboxID)

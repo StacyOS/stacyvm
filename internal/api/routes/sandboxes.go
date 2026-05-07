@@ -4,12 +4,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/StacyOs/stacyvm/internal/httputil"
 	"github.com/StacyOs/stacyvm/internal/orchestrator"
+	"github.com/go-chi/chi/v5"
 	"nhooyr.io/websocket"
 	"nhooyr.io/websocket/wsjson"
 )
@@ -118,11 +117,7 @@ func (s *SandboxRoutes) Get(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "sandboxID")
 	sb, err := s.manager.Get(r.Context(), id)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
-			httputil.WriteError(w, http.StatusNotFound, httputil.CodeNotFound, err.Error())
-			return
-		}
-		httputil.WriteError(w, http.StatusInternalServerError, httputil.CodeInternal, err.Error())
+		writeRouteError(w, err)
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, sb)
@@ -143,11 +138,7 @@ func (s *SandboxRoutes) Get(w http.ResponseWriter, r *http.Request) {
 func (s *SandboxRoutes) Destroy(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "sandboxID")
 	if err := s.manager.Destroy(r.Context(), id); err != nil {
-		if strings.Contains(err.Error(), "not found") {
-			httputil.WriteError(w, http.StatusNotFound, httputil.CodeNotFound, err.Error())
-			return
-		}
-		httputil.WriteError(w, http.StatusInternalServerError, httputil.CodeInternal, err.Error())
+		writeRouteError(w, err)
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "destroyed"})
@@ -196,11 +187,7 @@ func (s *SandboxRoutes) Extend(w http.ResponseWriter, r *http.Request) {
 
 	sb, err := s.manager.ExtendTTL(r.Context(), id, duration)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
-			httputil.WriteError(w, http.StatusNotFound, httputil.CodeNotFound, err.Error())
-			return
-		}
-		httputil.WriteError(w, http.StatusInternalServerError, httputil.CodeInternal, err.Error())
+		writeRouteError(w, err)
 		return
 	}
 
@@ -236,11 +223,7 @@ func (s *SandboxRoutes) Exec(w http.ResponseWriter, r *http.Request) {
 
 	result, err := s.manager.Exec(r.Context(), id, req)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "destroyed") {
-			httputil.WriteError(w, http.StatusNotFound, httputil.CodeNotFound, err.Error())
-			return
-		}
-		httputil.WriteError(w, http.StatusInternalServerError, httputil.CodeInternal, err.Error())
+		writeRouteError(w, err)
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, result)
@@ -292,11 +275,7 @@ func (s *SandboxRoutes) WriteFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.manager.WriteFile(r.Context(), id, req); err != nil {
-		if strings.Contains(err.Error(), "not found") {
-			httputil.WriteError(w, http.StatusNotFound, httputil.CodeNotFound, err.Error())
-			return
-		}
-		httputil.WriteError(w, http.StatusInternalServerError, httputil.CodeInternal, err.Error())
+		writeRouteError(w, err)
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "written"})
@@ -326,11 +305,7 @@ func (s *SandboxRoutes) ReadFile(w http.ResponseWriter, r *http.Request) {
 
 	data, err := s.manager.ReadFile(r.Context(), id, path)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
-			httputil.WriteError(w, http.StatusNotFound, httputil.CodeNotFound, err.Error())
-			return
-		}
-		httputil.WriteError(w, http.StatusInternalServerError, httputil.CodeInternal, err.Error())
+		writeRouteError(w, err)
 		return
 	}
 
@@ -361,11 +336,7 @@ func (s *SandboxRoutes) ListFiles(w http.ResponseWriter, r *http.Request) {
 
 	files, err := s.manager.ListFiles(r.Context(), id, path)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
-			httputil.WriteError(w, http.StatusNotFound, httputil.CodeNotFound, err.Error())
-			return
-		}
-		httputil.WriteError(w, http.StatusInternalServerError, httputil.CodeInternal, err.Error())
+		writeRouteError(w, err)
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, files)
@@ -386,11 +357,7 @@ func (s *SandboxRoutes) DeleteFile(w http.ResponseWriter, r *http.Request) {
 		Path:      path,
 		Recursive: recursive,
 	}); err != nil {
-		if strings.Contains(err.Error(), "not found") {
-			httputil.WriteError(w, http.StatusNotFound, httputil.CodeNotFound, err.Error())
-			return
-		}
-		httputil.WriteError(w, http.StatusInternalServerError, httputil.CodeInternal, err.Error())
+		writeRouteError(w, err)
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "deleted"})
@@ -406,11 +373,7 @@ func (s *SandboxRoutes) MoveFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.manager.MoveFile(r.Context(), id, req); err != nil {
-		if strings.Contains(err.Error(), "not found") {
-			httputil.WriteError(w, http.StatusNotFound, httputil.CodeNotFound, err.Error())
-			return
-		}
-		httputil.WriteError(w, http.StatusInternalServerError, httputil.CodeInternal, err.Error())
+		writeRouteError(w, err)
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "moved"})
@@ -426,11 +389,7 @@ func (s *SandboxRoutes) ChmodFile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.manager.ChmodFile(r.Context(), id, req); err != nil {
-		if strings.Contains(err.Error(), "not found") {
-			httputil.WriteError(w, http.StatusNotFound, httputil.CodeNotFound, err.Error())
-			return
-		}
-		httputil.WriteError(w, http.StatusInternalServerError, httputil.CodeInternal, err.Error())
+		writeRouteError(w, err)
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "chmod applied"})
@@ -447,11 +406,7 @@ func (s *SandboxRoutes) StatFile(w http.ResponseWriter, r *http.Request) {
 
 	fi, err := s.manager.StatFile(r.Context(), id, path)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
-			httputil.WriteError(w, http.StatusNotFound, httputil.CodeNotFound, err.Error())
-			return
-		}
-		httputil.WriteError(w, http.StatusInternalServerError, httputil.CodeInternal, err.Error())
+		writeRouteError(w, err)
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, fi)
@@ -468,11 +423,7 @@ func (s *SandboxRoutes) GlobFiles(w http.ResponseWriter, r *http.Request) {
 
 	matches, err := s.manager.GlobFiles(r.Context(), id, pattern)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
-			httputil.WriteError(w, http.StatusNotFound, httputil.CodeNotFound, err.Error())
-			return
-		}
-		httputil.WriteError(w, http.StatusInternalServerError, httputil.CodeInternal, err.Error())
+		writeRouteError(w, err)
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, matches)
@@ -534,11 +485,7 @@ func (s *SandboxRoutes) ConsoleLog(w http.ResponseWriter, r *http.Request) {
 
 	log, err := s.manager.ConsoleLog(r.Context(), id, lines)
 	if err != nil {
-		if strings.Contains(err.Error(), "not found") {
-			httputil.WriteError(w, http.StatusNotFound, httputil.CodeNotFound, err.Error())
-			return
-		}
-		httputil.WriteError(w, http.StatusInternalServerError, httputil.CodeInternal, err.Error())
+		writeRouteError(w, err)
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, log)

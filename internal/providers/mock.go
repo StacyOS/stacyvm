@@ -73,10 +73,10 @@ func (m *MockProvider) getSandbox(id string) (*mockSandbox, error) {
 	defer m.mu.RUnlock()
 	sb, ok := m.sandboxes[id]
 	if !ok {
-		return nil, fmt.Errorf("sandbox %q not found", id)
+		return nil, SandboxNotFoundError(id)
 	}
 	if sb.state == "destroyed" {
-		return nil, fmt.Errorf("sandbox %q is destroyed", id)
+		return nil, SandboxDestroyedError(id)
 	}
 	return sb, nil
 }
@@ -111,6 +111,9 @@ func (m *MockProvider) Exec(ctx context.Context, sandboxID string, opts ExecOpti
 	err = cmd.Run()
 	exitCode := 0
 	if err != nil {
+		if ctx.Err() == context.DeadlineExceeded {
+			return nil, ExecTimeoutError(sandboxID)
+		}
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			exitCode = exitErr.ExitCode()
 		} else {
@@ -354,7 +357,7 @@ func (m *MockProvider) Status(ctx context.Context, sandboxID string) (*SandboxSt
 	defer m.mu.RUnlock()
 	sb, ok := m.sandboxes[sandboxID]
 	if !ok {
-		return nil, fmt.Errorf("sandbox %q not found", sandboxID)
+		return nil, SandboxNotFoundError(sandboxID)
 	}
 	return &SandboxStatus{
 		ID:    sb.id,
@@ -367,7 +370,7 @@ func (m *MockProvider) Destroy(ctx context.Context, sandboxID string) error {
 	defer m.mu.Unlock()
 	sb, ok := m.sandboxes[sandboxID]
 	if !ok {
-		return fmt.Errorf("sandbox %q not found", sandboxID)
+		return SandboxNotFoundError(sandboxID)
 	}
 	sb.state = "destroyed"
 	return os.RemoveAll(sb.root)

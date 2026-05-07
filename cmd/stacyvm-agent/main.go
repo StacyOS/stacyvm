@@ -1,3 +1,5 @@
+//go:build linux
+
 // stacyvm-agent runs inside a Firecracker VM and serves exec/file requests
 // over vsock. Build with: GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o bin/stacyvm-agent ./cmd/stacyvm-agent
 package main

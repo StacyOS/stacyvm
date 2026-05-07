@@ -4,9 +4,9 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/StacyOs/stacyvm/internal/httputil"
 	"github.com/StacyOs/stacyvm/internal/providers"
+	"github.com/go-chi/chi/v5"
 )
 
 type sandboxCounter interface {
@@ -117,7 +117,7 @@ func (p *ProviderRoutes) Detail(w http.ResponseWriter, r *http.Request) {
 
 	prov, err := p.registry.Get(name)
 	if err != nil {
-		httputil.WriteError(w, http.StatusNotFound, httputil.CodeNotFound, "provider not found")
+		writeRouteError(w, err)
 		return
 	}
 

@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -247,6 +248,9 @@ func TestUpdateSandboxExpiresAt_Destroyed(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error extending destroyed sandbox")
 	}
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
 }
 
 func TestUpdateSandboxExpiresAt_NotFound(t *testing.T) {
@@ -255,6 +259,9 @@ func TestUpdateSandboxExpiresAt_NotFound(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for nonexistent sandbox")
 	}
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
 }
 
 func TestGetSandboxNotFound(t *testing.T) {
@@ -262,6 +269,9 @@ func TestGetSandboxNotFound(t *testing.T) {
 	_, err := s.GetSandbox(context.Background(), "sb-nope")
 	if err == nil {
 		t.Fatal("expected error for nonexistent sandbox")
+	}
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
 	}
 }
 
@@ -284,6 +294,11 @@ func TestEnvironmentSpecCRUD(t *testing.T) {
 
 	if err := s.CreateEnvironmentSpec(ctx, spec); err != nil {
 		t.Fatalf("create spec: %v", err)
+	}
+	conflicting := *spec
+	conflicting.ID = "envspec-conflict"
+	if err := s.CreateEnvironmentSpec(ctx, &conflicting); !errors.Is(err, ErrConflict) {
+		t.Fatalf("expected ErrConflict for duplicate owner/name, got %v", err)
 	}
 
 	got, err := s.GetEnvironmentSpec(ctx, spec.ID)
@@ -313,6 +328,8 @@ func TestEnvironmentSpecCRUD(t *testing.T) {
 	}
 	if _, err := s.GetEnvironmentSpec(ctx, spec.ID); err == nil {
 		t.Fatal("expected get to fail after delete")
+	} else if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound after delete, got %v", err)
 	}
 }
 

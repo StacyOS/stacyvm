@@ -22,6 +22,13 @@ func TestMockProvider_Healthy(t *testing.T) {
 	}
 }
 
+func TestMockProvider_Conformance(t *testing.T) {
+	runProviderConformance(t, func(t *testing.T) Provider {
+		t.Helper()
+		return NewMockProvider()
+	})
+}
+
 func TestMockProvider_Spawn(t *testing.T) {
 	p := NewMockProvider()
 	ctx := context.Background()
