@@ -10,20 +10,23 @@ import (
 type EventType string
 
 const (
-	EventSandboxCreated   EventType = "sandbox.created"
-	EventSandboxRunning   EventType = "sandbox.running"
-	EventSandboxDestroyed EventType = "sandbox.destroyed"
-	EventSandboxError     EventType = "sandbox.error"
-	EventExecStarted      EventType = "exec.started"
-	EventExecCompleted    EventType = "exec.completed"
-	EventExecFailed       EventType = "exec.failed"
-	EventExecTimeout      EventType = "exec.timeout"
-	EventFileWritten      EventType = "file.written"
-	EventFileRead         EventType = "file.read"
-	EventOperationFailed  EventType = "operation.failed"
-	EventResourceLimit    EventType = "resource.limit"
-	EventProviderFailed   EventType = "provider.failed"
-	EventReconcileAction  EventType = "reconcile.action"
+	EventSandboxCreated    EventType = "sandbox.created"
+	EventSandboxRunning    EventType = "sandbox.running"
+	EventSandboxDestroyed  EventType = "sandbox.destroyed"
+	EventSandboxError      EventType = "sandbox.error"
+	EventExecStarted       EventType = "exec.started"
+	EventExecCompleted     EventType = "exec.completed"
+	EventExecFailed        EventType = "exec.failed"
+	EventExecTimeout       EventType = "exec.timeout"
+	EventFileWritten       EventType = "file.written"
+	EventFileRead          EventType = "file.read"
+	EventOperationFailed   EventType = "operation.failed"
+	EventResourceLimit     EventType = "resource.limit"
+	EventProviderFailed    EventType = "provider.failed"
+	EventReconcileAction   EventType = "reconcile.action"
+	EventSpawnQueued       EventType = "spawn.queued"
+	EventSpawnDequeued     EventType = "spawn.dequeued"
+	EventSpawnQueueTimeout EventType = "spawn.queue_timeout"
 )
 
 type Event struct {

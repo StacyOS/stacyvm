@@ -127,6 +127,9 @@ type DefaultsConfig struct {
 	MaxExecTimeout       string `mapstructure:"max_exec_timeout"`
 	MaxSandboxes         int    `mapstructure:"max_sandboxes"`
 	MaxSandboxesPerOwner int    `mapstructure:"max_sandboxes_per_owner"`
+	SpawnOverflow        string `mapstructure:"spawn_overflow"`
+	SpawnQueueTimeout    string `mapstructure:"spawn_queue_timeout"`
+	MaxSpawnQueue        int    `mapstructure:"max_spawn_queue"`
 }
 
 type AuthConfig struct {
@@ -205,6 +208,9 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("defaults.max_exec_timeout", "10m")
 	v.SetDefault("defaults.max_sandboxes", 0)
 	v.SetDefault("defaults.max_sandboxes_per_owner", 0)
+	v.SetDefault("defaults.spawn_overflow", "reject")
+	v.SetDefault("defaults.spawn_queue_timeout", "30s")
+	v.SetDefault("defaults.max_spawn_queue", 100)
 
 	v.SetDefault("auth.enabled", false)
 	v.SetDefault("auth.api_key", "")

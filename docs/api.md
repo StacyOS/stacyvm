@@ -658,7 +658,10 @@ GET /api/v1/diagnostics
     "max_sandboxes_per_owner": 10,
     "default_exec_timeout": "30s",
     "max_exec_timeout": "10m0s",
-    "max_ttl": "24h0m0s"
+    "max_ttl": "24h0m0s",
+    "spawn_overflow": "queue",
+    "spawn_queue_timeout": "30s",
+    "max_spawn_queue": 100
   },
   "providers": [
     {
@@ -783,6 +786,7 @@ Common event types include:
 - `exec.started`, `exec.completed`, `exec.failed`, `exec.timeout`
 - `file.written`, `file.read`
 - `operation.failed`, `resource.limit`, `provider.failed`, `reconcile.action`
+- `spawn.queued`, `spawn.dequeued`, `spawn.queue_timeout`
 
 Use any SSE client (`EventSource` in browsers, `httpx-sse` in Python, etc.) to consume.
 

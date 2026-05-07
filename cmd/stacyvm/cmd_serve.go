@@ -166,6 +166,7 @@ func runServe() error {
 	maxTTL, _ := time.ParseDuration(cfg.Defaults.MaxTTL)
 	defaultExecTimeout, _ := time.ParseDuration(cfg.Defaults.DefaultExecTimeout)
 	maxExecTimeout, _ := time.ParseDuration(cfg.Defaults.MaxExecTimeout)
+	spawnQueueTimeout, _ := time.ParseDuration(cfg.Defaults.SpawnQueueTimeout)
 	mgr := orchestrator.NewManager(registry, st, events, logger, orchestrator.ManagerConfig{
 		DefaultTTL:    ttl,
 		DefaultImage:  cfg.Defaults.Image,
@@ -179,6 +180,9 @@ func runServe() error {
 			DefaultExecTimeout:   defaultExecTimeout,
 			MaxExecTimeout:       maxExecTimeout,
 			MaxTTL:               maxTTL,
+			SpawnOverflow:        cfg.Defaults.SpawnOverflow,
+			SpawnQueueTimeout:    spawnQueueTimeout,
+			MaxSpawnQueue:        cfg.Defaults.MaxSpawnQueue,
 		},
 	})
 	if err := mgr.Reconcile(context.Background()); err != nil {

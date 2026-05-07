@@ -371,6 +371,88 @@ func TestManager_SpawnMaxTTLLimit(t *testing.T) {
 	}
 }
 
+func TestManager_SpawnQueueWaitsForCapacity(t *testing.T) {
+	m := setupManagerWithConfig(t, ManagerConfig{
+		DefaultTTL:    5 * time.Minute,
+		DefaultImage:  "alpine:latest",
+		DefaultMemory: 512,
+		DefaultVCPUs:  1,
+		Limits: OperationalLimits{
+			MaxSandboxes:      1,
+			SpawnOverflow:     "queue",
+			SpawnQueueTimeout: 500 * time.Millisecond,
+			MaxSpawnQueue:     2,
+		},
+	})
+	ctx := context.Background()
+
+	first, err := m.Spawn(ctx, SpawnRequest{OwnerID: "owner-a"})
+	if err != nil {
+		t.Fatalf("first spawn: %v", err)
+	}
+
+	type spawnResult struct {
+		sb  *Sandbox
+		err error
+	}
+	resultCh := make(chan spawnResult, 1)
+	go func() {
+		sb, err := m.Spawn(ctx, SpawnRequest{OwnerID: "owner-b"})
+		resultCh <- spawnResult{sb: sb, err: err}
+	}()
+
+	select {
+	case result := <-resultCh:
+		t.Fatalf("second spawn returned before capacity opened: sb=%v err=%v", result.sb, result.err)
+	case <-time.After(25 * time.Millisecond):
+	}
+
+	if err := m.Destroy(ctx, first.ID); err != nil {
+		t.Fatalf("destroy first: %v", err)
+	}
+
+	select {
+	case result := <-resultCh:
+		if result.err != nil {
+			t.Fatalf("second spawn: %v", result.err)
+		}
+		if result.sb == nil || result.sb.OwnerID != "owner-b" {
+			t.Fatalf("unexpected second spawn: %+v", result.sb)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("second spawn did not resume after capacity opened")
+	}
+
+	events := m.events.History(20)
+	assertEventType(t, events, EventSpawnQueued)
+	assertEventType(t, events, EventSpawnDequeued)
+}
+
+func TestManager_SpawnQueueTimesOut(t *testing.T) {
+	m := setupManagerWithConfig(t, ManagerConfig{
+		DefaultTTL:    5 * time.Minute,
+		DefaultImage:  "alpine:latest",
+		DefaultMemory: 512,
+		DefaultVCPUs:  1,
+		Limits: OperationalLimits{
+			MaxSandboxes:      1,
+			SpawnOverflow:     "queue",
+			SpawnQueueTimeout: 20 * time.Millisecond,
+			MaxSpawnQueue:     2,
+		},
+	})
+
+	if _, err := m.Spawn(context.Background(), SpawnRequest{OwnerID: "owner-a"}); err != nil {
+		t.Fatalf("first spawn: %v", err)
+	}
+
+	_, err := m.Spawn(context.Background(), SpawnRequest{OwnerID: "owner-b"})
+	if !errors.Is(err, providers.ErrResourceLimit) {
+		t.Fatalf("expected queue timeout resource limit, got %v", err)
+	}
+	assertEventType(t, m.events.History(20), EventSpawnQueueTimeout)
+}
+
 func TestManager_ExecStreamTimeoutEmitsErrorChunk(t *testing.T) {
 	m := setupManager(t)
 	ctx := context.Background()

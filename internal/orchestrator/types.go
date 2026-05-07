@@ -104,6 +104,9 @@ type OperationalLimits struct {
 	DefaultExecTimeout   time.Duration `json:"default_exec_timeout"`
 	MaxExecTimeout       time.Duration `json:"max_exec_timeout"`
 	MaxTTL               time.Duration `json:"max_ttl"`
+	SpawnOverflow        string        `json:"spawn_overflow"`
+	SpawnQueueTimeout    time.Duration `json:"spawn_queue_timeout"`
+	MaxSpawnQueue        int           `json:"max_spawn_queue"`
 }
 
 type OperationalLimitsInfo struct {
@@ -112,6 +115,9 @@ type OperationalLimitsInfo struct {
 	DefaultExecTimeout   string `json:"default_exec_timeout"`
 	MaxExecTimeout       string `json:"max_exec_timeout"`
 	MaxTTL               string `json:"max_ttl"`
+	SpawnOverflow        string `json:"spawn_overflow"`
+	SpawnQueueTimeout    string `json:"spawn_queue_timeout"`
+	MaxSpawnQueue        int    `json:"max_spawn_queue"`
 }
 
 type OwnerQuota struct {

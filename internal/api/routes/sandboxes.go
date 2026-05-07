@@ -55,6 +55,7 @@ func (s *SandboxRoutes) Routes() chi.Router {
 //	@Param			request	body		orchestrator.SpawnRequest	true	"Spawn request"
 //	@Success		201		{object}	orchestrator.Sandbox
 //	@Failure		400		{object}	httputil.APIError
+//	@Failure		429		{object}	httputil.APIError
 //	@Failure		500		{object}	httputil.APIError
 //	@Security		ApiKeyAuth
 //	@Router			/sandboxes [post]
@@ -72,7 +73,7 @@ func (s *SandboxRoutes) Create(w http.ResponseWriter, r *http.Request) {
 
 	sb, err := s.manager.Spawn(r.Context(), req)
 	if err != nil {
-		httputil.WriteError(w, http.StatusInternalServerError, httputil.CodeInternal, err.Error())
+		writeRouteError(w, err)
 		return
 	}
 

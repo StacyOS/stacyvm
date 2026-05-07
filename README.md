@@ -508,6 +508,9 @@ defaults:
   max_exec_timeout: "10m"
   max_sandboxes: 0              # 0 = unlimited
   max_sandboxes_per_owner: 0    # 0 = unlimited
+  spawn_overflow: "reject"       # reject or queue when sandbox capacity is full
+  spawn_queue_timeout: "30s"
+  max_spawn_queue: 100
 
 auth:
   enabled: false

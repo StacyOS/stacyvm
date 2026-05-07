@@ -25,8 +25,11 @@ type Manager struct {
 	logger   zerolog.Logger
 	metrics  *MetricsRecorder
 
-	mu        sync.RWMutex
-	sandboxes map[string]*Sandbox
+	mu           sync.RWMutex
+	sandboxes    map[string]*Sandbox
+	queueMu      sync.Mutex
+	queueWaiters int
+	capacityCh   chan struct{}
 
 	defaultTTL    time.Duration
 	defaultImage  string
@@ -62,6 +65,7 @@ func NewManager(registry *providers.Registry, st store.Store, events *EventBus, 
 		logger:        logger.With().Str("component", "manager").Logger(),
 		metrics:       NewMetricsRecorder(),
 		sandboxes:     make(map[string]*Sandbox),
+		capacityCh:    make(chan struct{}),
 		defaultTTL:    cfg.DefaultTTL,
 		defaultImage:  cfg.DefaultImage,
 		defaultMemory: cfg.DefaultMemory,
@@ -83,6 +87,15 @@ func NewManager(registry *providers.Registry, st store.Store, events *EventBus, 
 	}
 	if m.defaultVCPUs == 0 {
 		m.defaultVCPUs = 1
+	}
+	if m.limits.SpawnOverflow == "" {
+		m.limits.SpawnOverflow = "reject"
+	}
+	if m.limits.SpawnQueueTimeout == 0 {
+		m.limits.SpawnQueueTimeout = 30 * time.Second
+	}
+	if m.limits.MaxSpawnQueue == 0 {
+		m.limits.MaxSpawnQueue = 100
 	}
 	return m
 }
@@ -339,7 +352,7 @@ func (m *Manager) Spawn(ctx context.Context, req SpawnRequest) (*Sandbox, error)
 		}
 		ttl = parsed
 	}
-	if err := m.enforceSpawnLimits(ctx, req.OwnerID, ttl); err != nil {
+	if err := m.waitForSpawnCapacity(ctx, req.OwnerID, ttl, metricsProvider); err != nil {
 		metricsErr = err
 		m.publishFailureForError("", OperationSpawn, metricsProvider, err)
 		return nil, err
@@ -960,6 +973,9 @@ func (m *Manager) Limits() OperationalLimitsInfo {
 		DefaultExecTimeout:   m.limits.DefaultExecTimeout.String(),
 		MaxExecTimeout:       m.limits.MaxExecTimeout.String(),
 		MaxTTL:               m.limits.MaxTTL.String(),
+		SpawnOverflow:        m.limits.SpawnOverflow,
+		SpawnQueueTimeout:    m.limits.SpawnQueueTimeout.String(),
+		MaxSpawnQueue:        m.limits.MaxSpawnQueue,
 	}
 }
 
@@ -1083,19 +1099,98 @@ func (m *Manager) publishOperationalEvent(eventType EventType, sandboxID string,
 	})
 }
 
-func (m *Manager) enforceSpawnLimits(ctx context.Context, ownerID string, ttl time.Duration) error {
+func (m *Manager) waitForSpawnCapacity(ctx context.Context, ownerID string, ttl time.Duration, provider string) error {
+	queueable, err := m.checkSpawnLimits(ctx, ownerID, ttl)
+	if err == nil {
+		return nil
+	}
+	if !queueable || !strings.EqualFold(m.limits.SpawnOverflow, "queue") {
+		return err
+	}
+
+	m.queueMu.Lock()
+	if m.queueWaiters >= m.limits.MaxSpawnQueue {
+		m.queueMu.Unlock()
+		return providers.ResourceLimitError(fmt.Sprintf("spawn queue full (%d)", m.limits.MaxSpawnQueue))
+	}
+	m.queueWaiters++
+	depth := m.queueWaiters
+	capacityCh := m.capacityCh
+	m.queueMu.Unlock()
+
+	m.publishOperationalEvent(EventSpawnQueued, "", map[string]interface{}{
+		"operation": OperationSpawn,
+		"provider":  provider,
+		"owner_id":  ownerID,
+		"depth":     depth,
+	})
+	defer func() {
+		m.queueMu.Lock()
+		m.queueWaiters--
+		m.queueMu.Unlock()
+	}()
+
+	waitCtx := ctx
+	cancel := func() {}
+	if m.limits.SpawnQueueTimeout > 0 {
+		waitCtx, cancel = context.WithTimeout(ctx, m.limits.SpawnQueueTimeout)
+	}
+	defer cancel()
+
+	for {
+		select {
+		case <-waitCtx.Done():
+			if errors.Is(waitCtx.Err(), context.DeadlineExceeded) {
+				err := providers.ResourceLimitError(fmt.Sprintf("spawn queue timeout after %s", m.limits.SpawnQueueTimeout))
+				m.publishOperationalEvent(EventSpawnQueueTimeout, "", map[string]interface{}{
+					"operation": OperationSpawn,
+					"provider":  provider,
+					"owner_id":  ownerID,
+					"error":     err.Error(),
+				})
+				return err
+			}
+			return waitCtx.Err()
+		case <-capacityCh:
+			queueable, err = m.checkSpawnLimits(ctx, ownerID, ttl)
+			if err == nil {
+				m.publishOperationalEvent(EventSpawnDequeued, "", map[string]interface{}{
+					"operation": OperationSpawn,
+					"provider":  provider,
+					"owner_id":  ownerID,
+				})
+				return nil
+			}
+			if !queueable {
+				return err
+			}
+			m.queueMu.Lock()
+			capacityCh = m.capacityCh
+			m.queueMu.Unlock()
+		}
+	}
+}
+
+func (m *Manager) notifySpawnCapacity() {
+	m.queueMu.Lock()
+	close(m.capacityCh)
+	m.capacityCh = make(chan struct{})
+	m.queueMu.Unlock()
+}
+
+func (m *Manager) checkSpawnLimits(ctx context.Context, ownerID string, ttl time.Duration) (bool, error) {
 	maxTTL, maxPerOwner := m.ownerLimitOverrides(ctx, ownerID)
 	if maxTTL > 0 && ttl > maxTTL {
-		return providers.ResourceLimitError(fmt.Sprintf("ttl %s exceeds max ttl %s", ttl, maxTTL))
+		return false, providers.ResourceLimitError(fmt.Sprintf("ttl %s exceeds max ttl %s", ttl, maxTTL))
 	}
 
 	if m.limits.MaxSandboxes <= 0 && (ownerID == "" || maxPerOwner <= 0) {
-		return nil
+		return false, nil
 	}
 
 	records, err := m.store.ListSandboxes(ctx)
 	if err != nil {
-		return fmt.Errorf("checking sandbox limits: %w", err)
+		return false, fmt.Errorf("checking sandbox limits: %w", err)
 	}
 	total := 0
 	ownerTotal := 0
@@ -1109,12 +1204,12 @@ func (m *Manager) enforceSpawnLimits(ctx context.Context, ownerID string, ttl ti
 		}
 	}
 	if m.limits.MaxSandboxes > 0 && total >= m.limits.MaxSandboxes {
-		return providers.ResourceLimitError(fmt.Sprintf("max sandboxes reached (%d)", m.limits.MaxSandboxes))
+		return true, providers.ResourceLimitError(fmt.Sprintf("max sandboxes reached (%d)", m.limits.MaxSandboxes))
 	}
 	if ownerID != "" && maxPerOwner > 0 && ownerTotal >= maxPerOwner {
-		return providers.ResourceLimitError(fmt.Sprintf("max sandboxes per owner reached (%d)", maxPerOwner))
+		return true, providers.ResourceLimitError(fmt.Sprintf("max sandboxes per owner reached (%d)", maxPerOwner))
 	}
-	return nil
+	return false, nil
 }
 
 func (m *Manager) resolveExecTimeout(raw string, ownerID string) (time.Duration, error) {
@@ -1365,6 +1460,7 @@ func (m *Manager) Destroy(ctx context.Context, id string) error {
 		m.mu.Lock()
 		delete(m.sandboxes, id)
 		m.mu.Unlock()
+		m.notifySpawnCapacity()
 		return nil
 	}
 	if sb != nil {
@@ -1389,6 +1485,7 @@ func (m *Manager) Destroy(ctx context.Context, id string) error {
 		Type:      EventSandboxDestroyed,
 		SandboxID: id,
 	})
+	m.notifySpawnCapacity()
 
 	m.logger.Info().Str("sandbox", id).Msg("sandbox destroyed")
 	return nil
@@ -1431,6 +1528,7 @@ func (m *Manager) destroyPooled(ctx context.Context, id string, sb *Sandbox) err
 	m.mu.Unlock()
 
 	m.events.Publish(Event{Type: EventSandboxDestroyed, SandboxID: id})
+	m.notifySpawnCapacity()
 	m.logger.Info().Str("sandbox", id).Str("vm_id", vmID).Msg("pooled sandbox destroyed")
 	return nil
 }
