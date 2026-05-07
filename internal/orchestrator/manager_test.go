@@ -183,6 +183,44 @@ func TestManager_Exec(t *testing.T) {
 	}
 }
 
+func TestManager_OperationMetrics(t *testing.T) {
+	m := setupManager(t)
+	ctx := context.Background()
+
+	sb, err := m.Spawn(ctx, SpawnRequest{Image: "alpine:latest"})
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	if _, err := m.Exec(ctx, sb.ID, ExecRequest{Command: "echo metrics"}); err != nil {
+		t.Fatalf("exec: %v", err)
+	}
+	if err := m.WriteFile(ctx, sb.ID, FileWriteRequest{Path: "/workspace/metrics.txt", Content: "ok"}); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if err := m.Destroy(ctx, sb.ID); err != nil {
+		t.Fatalf("destroy: %v", err)
+	}
+
+	metrics := m.OperationMetrics()
+	assertOperationMetric(t, metrics, OperationSpawn, "mock")
+	assertOperationMetric(t, metrics, OperationExec, "mock")
+	assertOperationMetric(t, metrics, OperationFileWrite, "mock")
+	assertOperationMetric(t, metrics, OperationDestroy, "mock")
+}
+
+func assertOperationMetric(t *testing.T, metrics []OperationMetrics, operation, provider string) {
+	t.Helper()
+	for _, metric := range metrics {
+		if metric.Operation == operation && metric.Provider == provider {
+			if metric.SuccessTotal == 0 {
+				t.Fatalf("%s/%s success total = 0", operation, provider)
+			}
+			return
+		}
+	}
+	t.Fatalf("operation metric %s/%s not found in %+v", operation, provider, metrics)
+}
+
 func TestManager_ExecTimeout(t *testing.T) {
 	m := setupManager(t)
 	ctx := context.Background()

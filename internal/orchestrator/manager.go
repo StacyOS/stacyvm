@@ -23,6 +23,7 @@ type Manager struct {
 	store    store.Store
 	events   *EventBus
 	logger   zerolog.Logger
+	metrics  *MetricsRecorder
 
 	mu        sync.RWMutex
 	sandboxes map[string]*Sandbox
@@ -57,6 +58,7 @@ func NewManager(registry *providers.Registry, st store.Store, events *EventBus, 
 		store:         st,
 		events:        events,
 		logger:        logger.With().Str("component", "manager").Logger(),
+		metrics:       NewMetricsRecorder(),
 		sandboxes:     make(map[string]*Sandbox),
 		defaultTTL:    cfg.DefaultTTL,
 		defaultImage:  cfg.DefaultImage,
@@ -270,11 +272,23 @@ func (m *Manager) reconcileProviderRuntimes(ctx context.Context, known map[strin
 }
 
 func (m *Manager) Spawn(ctx context.Context, req SpawnRequest) (*Sandbox, error) {
+	start := time.Now()
+	metricsProvider := req.Provider
+	if metricsProvider == "" {
+		metricsProvider = m.registry.Default()
+	}
+	var metricsErr error
+	defer func() {
+		m.recordOperation(OperationSpawn, metricsProvider, time.Since(start), metricsErr)
+	}()
+
 	providerName := req.Provider
 	prov, err := m.registry.Get(providerName)
 	if err != nil {
+		metricsErr = err
 		return nil, fmt.Errorf("getting provider: %w", err)
 	}
+	metricsProvider = prov.Name()
 
 	image := req.Image
 	if image == "" {
@@ -301,7 +315,9 @@ func (m *Manager) Spawn(ctx context.Context, req SpawnRequest) (*Sandbox, error)
 
 	// Pool mode: acquire a VM slot instead of spawning a new VM.
 	if m.vmPoolMgr != nil {
-		return m.spawnPooled(ctx, prov, req, image, memMB, vcpus, ttl, now)
+		sb, err := m.spawnPooled(ctx, prov, req, image, memMB, vcpus, ttl, now)
+		metricsErr = err
+		return sb, err
 	}
 
 	sb := &Sandbox{
@@ -325,6 +341,7 @@ func (m *Manager) Spawn(ctx context.Context, req SpawnRequest) (*Sandbox, error)
 		Metadata: req.Metadata,
 	})
 	if err != nil {
+		metricsErr = err
 		return nil, fmt.Errorf("spawning sandbox: %w", err)
 	}
 	sb.ID = id
@@ -348,6 +365,7 @@ func (m *Manager) Spawn(ctx context.Context, req SpawnRequest) (*Sandbox, error)
 	}); err != nil {
 		// Best effort: destroy the sandbox if DB write fails
 		prov.Destroy(ctx, id)
+		metricsErr = err
 		return nil, fmt.Errorf("persisting sandbox: %w", err)
 	}
 
@@ -445,16 +463,26 @@ func (m *Manager) spawnPooled(ctx context.Context, prov providers.Provider, req 
 }
 
 func (m *Manager) Exec(ctx context.Context, sandboxID string, req ExecRequest) (*ExecResult, error) {
+	start := time.Now()
+	metricsProvider := "unknown"
+	var metricsErr error
+	defer func() {
+		m.recordOperation(OperationExec, metricsProvider, time.Since(start), metricsErr)
+	}()
+
 	sb, prov, err := m.getSandboxAndProvider(sandboxID)
 	if err != nil {
+		metricsErr = err
 		return nil, err
 	}
+	metricsProvider = sb.Provider
 
 	execCtx := ctx
 	var cancel context.CancelFunc
 	if req.Timeout != "" {
 		timeout, err := time.ParseDuration(req.Timeout)
 		if err != nil {
+			metricsErr = err
 			return nil, fmt.Errorf("parsing exec timeout: %w", err)
 		}
 		execCtx, cancel = context.WithTimeout(ctx, timeout)
@@ -472,7 +500,7 @@ func (m *Manager) Exec(ctx context.Context, sandboxID string, req ExecRequest) (
 		workDir = "/workspace/" + sandboxID
 	}
 
-	start := time.Now()
+	execStart := time.Now()
 	result, err := prov.Exec(execCtx, m.resolveVMID(sb), providers.ExecOptions{
 		Command: req.Command,
 		Args:    req.Args,
@@ -481,11 +509,13 @@ func (m *Manager) Exec(ctx context.Context, sandboxID string, req ExecRequest) (
 	})
 	if err != nil {
 		if execCtx.Err() == context.DeadlineExceeded {
-			return nil, providers.ExecTimeoutError(sandboxID)
+			metricsErr = providers.ExecTimeoutError(sandboxID)
+			return nil, metricsErr
 		}
+		metricsErr = err
 		return nil, fmt.Errorf("exec: %w", err)
 	}
-	duration := time.Since(start)
+	duration := time.Since(execStart)
 
 	execResult := &ExecResult{
 		ExitCode: result.ExitCode,
@@ -514,16 +544,28 @@ func (m *Manager) Exec(ctx context.Context, sandboxID string, req ExecRequest) (
 }
 
 func (m *Manager) ExecStream(ctx context.Context, sandboxID string, req ExecRequest) (<-chan providers.StreamChunk, error) {
+	start := time.Now()
+	metricsProvider := "unknown"
+	var metricsErr error
+	defer func() {
+		if metricsErr != nil {
+			m.recordOperation(OperationExecStream, metricsProvider, time.Since(start), metricsErr)
+		}
+	}()
+
 	sb, prov, err := m.getSandboxAndProvider(sandboxID)
 	if err != nil {
+		metricsErr = err
 		return nil, err
 	}
+	metricsProvider = sb.Provider
 
 	execCtx := ctx
 	var cancel context.CancelFunc
 	if req.Timeout != "" {
 		timeout, err := time.ParseDuration(req.Timeout)
 		if err != nil {
+			metricsErr = err
 			return nil, fmt.Errorf("parsing exec timeout: %w", err)
 		}
 		execCtx, cancel = context.WithTimeout(ctx, timeout)
@@ -545,12 +587,22 @@ func (m *Manager) ExecStream(ctx context.Context, sandboxID string, req ExecRequ
 			cancel()
 		}
 		if execCtx.Err() == context.DeadlineExceeded {
-			return nil, providers.ExecTimeoutError(sandboxID)
+			metricsErr = providers.ExecTimeoutError(sandboxID)
+			return nil, metricsErr
 		}
+		metricsErr = err
 		return nil, err
 	}
 	if cancel == nil {
-		return ch, nil
+		out := make(chan providers.StreamChunk, 64)
+		go func() {
+			defer close(out)
+			for chunk := range ch {
+				out <- chunk
+			}
+			m.recordOperation(OperationExecStream, metricsProvider, time.Since(start), nil)
+		}()
+		return out, nil
 	}
 
 	out := make(chan providers.StreamChunk, 64)
@@ -566,20 +618,31 @@ func (m *Manager) ExecStream(ctx context.Context, sandboxID string, req ExecRequ
 			}
 		}
 		if execCtx.Err() == context.DeadlineExceeded || timedOut {
+			metricsErr = providers.ExecTimeoutError(sandboxID)
 			select {
-			case out <- providers.StreamChunk{Stream: "stderr", Data: providers.ExecTimeoutError(sandboxID).Error()}:
+			case out <- providers.StreamChunk{Stream: "stderr", Data: metricsErr.Error()}:
 			case <-ctx.Done():
 			}
 		}
+		m.recordOperation(OperationExecStream, metricsProvider, time.Since(start), metricsErr)
 	}()
 	return out, nil
 }
 
 func (m *Manager) WriteFile(ctx context.Context, sandboxID string, req FileWriteRequest) error {
+	start := time.Now()
+	metricsProvider := "unknown"
+	var metricsErr error
+	defer func() {
+		m.recordOperation(OperationFileWrite, metricsProvider, time.Since(start), metricsErr)
+	}()
+
 	sb, prov, err := m.getSandboxAndProvider(sandboxID)
 	if err != nil {
+		metricsErr = err
 		return err
 	}
+	metricsProvider = sb.Provider
 
 	mode := req.Mode
 	if mode == "" {
@@ -588,6 +651,7 @@ func (m *Manager) WriteFile(ctx context.Context, sandboxID string, req FileWrite
 
 	path := m.scopedPath(sb, req.Path)
 	if err := prov.WriteFile(ctx, m.resolveVMID(sb), path, strings.NewReader(req.Content), mode); err != nil {
+		metricsErr = err
 		return fmt.Errorf("writing file: %w", err)
 	}
 
@@ -599,19 +663,30 @@ func (m *Manager) WriteFile(ctx context.Context, sandboxID string, req FileWrite
 }
 
 func (m *Manager) ReadFile(ctx context.Context, sandboxID string, path string) ([]byte, error) {
+	start := time.Now()
+	metricsProvider := "unknown"
+	var metricsErr error
+	defer func() {
+		m.recordOperation(OperationFileRead, metricsProvider, time.Since(start), metricsErr)
+	}()
+
 	sb, prov, err := m.getSandboxAndProvider(sandboxID)
 	if err != nil {
+		metricsErr = err
 		return nil, err
 	}
+	metricsProvider = sb.Provider
 
 	rc, err := prov.ReadFile(ctx, m.resolveVMID(sb), m.scopedPath(sb, path))
 	if err != nil {
+		metricsErr = err
 		return nil, fmt.Errorf("reading file: %w", err)
 	}
 	defer rc.Close()
 
 	buf, err := io.ReadAll(rc)
 	if err != nil {
+		metricsErr = err
 		return nil, fmt.Errorf("reading file content: %w", err)
 	}
 
@@ -623,13 +698,23 @@ func (m *Manager) ReadFile(ctx context.Context, sandboxID string, path string) (
 }
 
 func (m *Manager) ListFiles(ctx context.Context, sandboxID string, path string) ([]FileInfo, error) {
+	start := time.Now()
+	metricsProvider := "unknown"
+	var metricsErr error
+	defer func() {
+		m.recordOperation(OperationFileList, metricsProvider, time.Since(start), metricsErr)
+	}()
+
 	sb, prov, err := m.getSandboxAndProvider(sandboxID)
 	if err != nil {
+		metricsErr = err
 		return nil, err
 	}
+	metricsProvider = sb.Provider
 
 	pFiles, err := prov.ListFiles(ctx, m.resolveVMID(sb), m.scopedPath(sb, path))
 	if err != nil {
+		metricsErr = err
 		return nil, err
 	}
 
@@ -647,45 +732,85 @@ func (m *Manager) ListFiles(ctx context.Context, sandboxID string, path string) 
 }
 
 func (m *Manager) DeleteFile(ctx context.Context, sandboxID string, req FileDeleteRequest) error {
+	start := time.Now()
+	metricsProvider := "unknown"
+	var metricsErr error
+	defer func() {
+		m.recordOperation(OperationFileDelete, metricsProvider, time.Since(start), metricsErr)
+	}()
+
 	sb, prov, err := m.getSandboxAndProvider(sandboxID)
 	if err != nil {
+		metricsErr = err
 		return err
 	}
+	metricsProvider = sb.Provider
 
 	path := m.scopedPath(sb, req.Path)
-	return prov.DeleteFile(ctx, m.resolveVMID(sb), path, req.Recursive)
+	metricsErr = prov.DeleteFile(ctx, m.resolveVMID(sb), path, req.Recursive)
+	return metricsErr
 }
 
 func (m *Manager) MoveFile(ctx context.Context, sandboxID string, req FileMoveRequest) error {
+	start := time.Now()
+	metricsProvider := "unknown"
+	var metricsErr error
+	defer func() {
+		m.recordOperation(OperationFileMove, metricsProvider, time.Since(start), metricsErr)
+	}()
+
 	sb, prov, err := m.getSandboxAndProvider(sandboxID)
 	if err != nil {
+		metricsErr = err
 		return err
 	}
+	metricsProvider = sb.Provider
 
 	oldPath := m.scopedPath(sb, req.OldPath)
 	newPath := m.scopedPath(sb, req.NewPath)
-	return prov.MoveFile(ctx, m.resolveVMID(sb), oldPath, newPath)
+	metricsErr = prov.MoveFile(ctx, m.resolveVMID(sb), oldPath, newPath)
+	return metricsErr
 }
 
 func (m *Manager) ChmodFile(ctx context.Context, sandboxID string, req FileChmodRequest) error {
+	start := time.Now()
+	metricsProvider := "unknown"
+	var metricsErr error
+	defer func() {
+		m.recordOperation(OperationFileChmod, metricsProvider, time.Since(start), metricsErr)
+	}()
+
 	sb, prov, err := m.getSandboxAndProvider(sandboxID)
 	if err != nil {
+		metricsErr = err
 		return err
 	}
+	metricsProvider = sb.Provider
 
 	path := m.scopedPath(sb, req.Path)
-	return prov.ChmodFile(ctx, m.resolveVMID(sb), path, req.Mode)
+	metricsErr = prov.ChmodFile(ctx, m.resolveVMID(sb), path, req.Mode)
+	return metricsErr
 }
 
 func (m *Manager) StatFile(ctx context.Context, sandboxID string, path string) (*FileInfo, error) {
+	start := time.Now()
+	metricsProvider := "unknown"
+	var metricsErr error
+	defer func() {
+		m.recordOperation(OperationFileStat, metricsProvider, time.Since(start), metricsErr)
+	}()
+
 	sb, prov, err := m.getSandboxAndProvider(sandboxID)
 	if err != nil {
+		metricsErr = err
 		return nil, err
 	}
+	metricsProvider = sb.Provider
 
 	scopedPath := m.scopedPath(sb, path)
 	fi, err := prov.StatFile(ctx, m.resolveVMID(sb), scopedPath)
 	if err != nil {
+		metricsErr = err
 		return nil, err
 	}
 	return &FileInfo{
@@ -698,13 +823,24 @@ func (m *Manager) StatFile(ctx context.Context, sandboxID string, path string) (
 }
 
 func (m *Manager) GlobFiles(ctx context.Context, sandboxID string, pattern string) ([]string, error) {
+	start := time.Now()
+	metricsProvider := "unknown"
+	var metricsErr error
+	defer func() {
+		m.recordOperation(OperationFileGlob, metricsProvider, time.Since(start), metricsErr)
+	}()
+
 	sb, prov, err := m.getSandboxAndProvider(sandboxID)
 	if err != nil {
+		metricsErr = err
 		return nil, err
 	}
+	metricsProvider = sb.Provider
 
 	scopedPattern := m.scopedPath(sb, pattern)
-	return prov.GlobFiles(ctx, m.resolveVMID(sb), scopedPattern)
+	matches, err := prov.GlobFiles(ctx, m.resolveVMID(sb), scopedPattern)
+	metricsErr = err
+	return matches, err
 }
 
 // scopedPath prefixes a path with the sandbox workspace when running in pool mode.
@@ -736,6 +872,17 @@ func (m *Manager) VMPoolStatus() *VMPoolStatus {
 	}
 	status := m.vmPoolMgr.Status()
 	return &status
+}
+
+func (m *Manager) OperationMetrics() []OperationMetrics {
+	return m.metrics.Snapshot()
+}
+
+func (m *Manager) recordOperation(operation, provider string, duration time.Duration, err error) {
+	if m.metrics == nil {
+		return
+	}
+	m.metrics.RecordOperation(operation, provider, duration, err)
 }
 
 // InitVMPool initializes the VM pool manager if pool mode is enabled.
@@ -871,13 +1018,24 @@ func (m *Manager) List(ctx context.Context) ([]*Sandbox, error) {
 }
 
 func (m *Manager) Destroy(ctx context.Context, id string) error {
+	start := time.Now()
+	metricsProvider := "unknown"
+	var metricsErr error
+	defer func() {
+		m.recordOperation(OperationDestroy, metricsProvider, time.Since(start), metricsErr)
+	}()
+
 	// Check if this is a pooled sandbox.
 	m.mu.RLock()
 	sb := m.sandboxes[id]
 	m.mu.RUnlock()
+	if sb != nil {
+		metricsProvider = sb.Provider
+	}
 
 	if sb != nil && sb.VMID != "" && m.vmPoolMgr != nil {
-		return m.destroyPooled(ctx, id, sb)
+		metricsErr = m.destroyPooled(ctx, id, sb)
+		return metricsErr
 	}
 
 	prov, err := m.getProvider(id)
@@ -888,6 +1046,9 @@ func (m *Manager) Destroy(ctx context.Context, id string) error {
 		delete(m.sandboxes, id)
 		m.mu.Unlock()
 		return nil
+	}
+	if sb != nil {
+		metricsProvider = sb.Provider
 	}
 
 	if err := prov.Destroy(ctx, id); err != nil {

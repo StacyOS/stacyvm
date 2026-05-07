@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -126,6 +127,45 @@ func TestSystemRoutes_MetricsIncludesOperationalBreakdown(t *testing.T) {
 	}
 	if _, ok := body["events"].(map[string]interface{}); !ok {
 		t.Fatal("expected events metrics")
+	}
+	operations := body["operations"].([]interface{})
+	if len(operations) == 0 {
+		t.Fatal("expected operation metrics")
+	}
+}
+
+func TestSystemRoutes_PrometheusMetrics(t *testing.T) {
+	routes, manager := setupSystemRoutes(t, true)
+	sb, err := manager.Spawn(context.Background(), orchestrator.SpawnRequest{Image: "alpine:latest"})
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	if _, err := manager.Exec(context.Background(), sb.ID, orchestrator.ExecRequest{Command: "echo prometheus"}); err != nil {
+		t.Fatalf("exec: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/metrics/prometheus", nil)
+	w := httptest.NewRecorder()
+
+	routes.PrometheusMetrics(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+	if got := w.Header().Get("Content-Type"); !strings.Contains(got, "text/plain") {
+		t.Fatalf("content type = %q, want text/plain", got)
+	}
+	body := w.Body.String()
+	for _, want := range []string{
+		"stacyvm_uptime_seconds",
+		"stacyvm_provider_healthy",
+		"stacyvm_operation_success_total",
+		`operation="spawn"`,
+		`operation="exec"`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("prometheus body missing %q:\n%s", want, body)
+		}
 	}
 }
 

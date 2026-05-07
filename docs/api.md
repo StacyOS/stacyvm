@@ -548,11 +548,42 @@ GET /api/v1/metrics
     "subscribers": 2,
     "history_size": 1000,
     "events_total": 2401
-  }
+  },
+  "operations": [
+    {
+      "operation": "exec",
+      "provider": "docker",
+      "success_total": 482,
+      "failure_total": 7,
+      "latency_count": 489,
+      "latency_total_ms": 39120,
+      "latency_min_ms": 3,
+      "latency_max_ms": 2500,
+      "latency_avg_ms": 80
+    }
+  ]
 }
 ```
 
-For Prometheus-style metrics, scrape this endpoint and parse to your needs (a `/metrics` Prometheus exporter is on the roadmap).
+### Prometheus metrics
+
+```
+GET /api/v1/metrics/prometheus
+```
+
+**Response** `200 OK`:
+```text
+# HELP stacyvm_uptime_seconds StacyVM API process uptime in seconds.
+# TYPE stacyvm_uptime_seconds gauge
+stacyvm_uptime_seconds 7980
+# HELP stacyvm_provider_healthy Provider health status where 1 is healthy and 0 is unhealthy.
+# TYPE stacyvm_provider_healthy gauge
+stacyvm_provider_healthy{provider="docker",default="true"} 1
+stacyvm_operation_success_total{operation="exec",provider="docker"} 482
+stacyvm_operation_failure_total{operation="exec",provider="docker"} 7
+```
+
+Use this endpoint for Prometheus-compatible scraping of runtime, provider, sandbox, event, and operation metrics.
 
 ---
 

@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -39,6 +40,7 @@ func (s *SystemRoutes) Routes() chi.Router {
 	r.Get("/live", s.Live)
 	r.Get("/ready", s.Ready)
 	r.Get("/metrics", s.Metrics)
+	r.Get("/metrics/prometheus", s.PrometheusMetrics)
 	r.Get("/events", s.Events)
 	return r
 }
@@ -126,13 +128,62 @@ func (s *SystemRoutes) Ready(w http.ResponseWriter, r *http.Request) {
 //	@Security		ApiKeyAuth
 //	@Router			/metrics [get]
 func (s *SystemRoutes) Metrics(w http.ResponseWriter, r *http.Request) {
-	var mem runtime.MemStats
-	runtime.ReadMemStats(&mem)
-
-	sandboxes, err := s.manager.List(r.Context())
+	metrics, err := s.collectMetrics(r.Context())
 	if err != nil {
 		writeRouteError(w, err)
 		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, metrics.toResponse())
+}
+
+// PrometheusMetrics returns Prometheus-compatible operational metrics.
+//
+//	@Summary		Get Prometheus metrics
+//	@Description	Return runtime, provider, sandbox, event, and operation metrics in Prometheus text format
+//	@Tags			system
+//	@Produce		text/plain
+//	@Success		200	{string}	string
+//	@Security		ApiKeyAuth
+//	@Router			/metrics/prometheus [get]
+func (s *SystemRoutes) PrometheusMetrics(w http.ResponseWriter, r *http.Request) {
+	metrics, err := s.collectMetrics(r.Context())
+	if err != nil {
+		writeRouteError(w, err)
+		return
+	}
+
+	var buf bytes.Buffer
+	writePrometheusMetrics(&buf, metrics)
+	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(buf.Bytes())
+}
+
+type systemMetricsSnapshot struct {
+	uptime              time.Duration
+	goroutines          int
+	memoryAlloc         uint64
+	memorySys           uint64
+	memoryHeapAlloc     uint64
+	gcCycles            uint32
+	sandboxTotal        int
+	sandboxActive       int
+	sandboxesByState    map[string]int
+	sandboxesByProvider map[string]int
+	providerHealth      []ProviderHealth
+	healthyProviders    int
+	eventStats          orchestrator.EventBusStats
+	operationMetrics    []orchestrator.OperationMetrics
+}
+
+func (s *SystemRoutes) collectMetrics(ctx context.Context) (systemMetricsSnapshot, error) {
+	var mem runtime.MemStats
+	runtime.ReadMemStats(&mem)
+
+	sandboxes, err := s.manager.List(ctx)
+	if err != nil {
+		return systemMetricsSnapshot{}, err
 	}
 
 	byState := make(map[string]int)
@@ -142,7 +193,7 @@ func (s *SystemRoutes) Metrics(w http.ResponseWriter, r *http.Request) {
 		byProvider[sb.Provider]++
 	}
 
-	providerHealth := s.providerHealth(r.Context())
+	providerHealth := s.providerHealth(ctx)
 	healthyProviders := 0
 	for _, provider := range providerHealth {
 		if provider.Healthy {
@@ -151,26 +202,46 @@ func (s *SystemRoutes) Metrics(w http.ResponseWriter, r *http.Request) {
 	}
 	eventStats := s.events.Stats()
 
-	httputil.WriteJSON(w, http.StatusOK, map[string]interface{}{
-		"uptime":            time.Since(s.startTime).String(),
-		"goroutines":        runtime.NumGoroutine(),
-		"memory_alloc":      mem.Alloc,
-		"memory_sys":        mem.Sys,
-		"memory_heap_alloc": mem.HeapAlloc,
-		"gc_cycles":         mem.NumGC,
+	return systemMetricsSnapshot{
+		uptime:              time.Since(s.startTime),
+		goroutines:          runtime.NumGoroutine(),
+		memoryAlloc:         mem.Alloc,
+		memorySys:           mem.Sys,
+		memoryHeapAlloc:     mem.HeapAlloc,
+		gcCycles:            mem.NumGC,
+		sandboxTotal:        len(sandboxes),
+		sandboxActive:       byState[string(orchestrator.StateRunning)],
+		sandboxesByState:    byState,
+		sandboxesByProvider: byProvider,
+		providerHealth:      providerHealth,
+		healthyProviders:    healthyProviders,
+		eventStats:          eventStats,
+		operationMetrics:    s.manager.OperationMetrics(),
+	}, nil
+}
+
+func (m systemMetricsSnapshot) toResponse() map[string]interface{} {
+	return map[string]interface{}{
+		"uptime":            m.uptime.String(),
+		"goroutines":        m.goroutines,
+		"memory_alloc":      m.memoryAlloc,
+		"memory_sys":        m.memorySys,
+		"memory_heap_alloc": m.memoryHeapAlloc,
+		"gc_cycles":         m.gcCycles,
 		"sandboxes": map[string]interface{}{
-			"total":       len(sandboxes),
-			"active":      byState[string(orchestrator.StateRunning)],
-			"by_state":    byState,
-			"by_provider": byProvider,
+			"total":       m.sandboxTotal,
+			"active":      m.sandboxActive,
+			"by_state":    m.sandboxesByState,
+			"by_provider": m.sandboxesByProvider,
 		},
 		"providers": map[string]interface{}{
-			"total":   len(providerHealth),
-			"healthy": healthyProviders,
-			"items":   providerHealth,
+			"total":   len(m.providerHealth),
+			"healthy": m.healthyProviders,
+			"items":   m.providerHealth,
 		},
-		"events": eventStats,
-	})
+		"events":     m.eventStats,
+		"operations": m.operationMetrics,
+	}
 }
 
 func (s *SystemRoutes) providerHealth(ctx context.Context) []ProviderHealth {
