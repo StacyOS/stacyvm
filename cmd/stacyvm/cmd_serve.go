@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/StacyOs/stacyvm/internal/api"
+	"github.com/StacyOs/stacyvm/internal/api/middleware"
 	"github.com/StacyOs/stacyvm/internal/config"
 	"github.com/StacyOs/stacyvm/internal/environments"
 	"github.com/StacyOs/stacyvm/internal/orchestrator"
@@ -215,6 +216,12 @@ func runServe() error {
 		Addr:    cfg.Server.Addr(),
 		APIKey:  cfg.Auth.APIKey,
 		Version: version,
+		RateLimit: middleware.RateLimitConfig{
+			Enabled:           cfg.RateLimit.Enabled,
+			RequestsPerMinute: cfg.RateLimit.RequestsPerMinute,
+			Burst:             cfg.RateLimit.Burst,
+			KeyBy:             cfg.RateLimit.KeyBy,
+		},
 	}, registry, mgr, events, templates, pool, st, envBuilds, logger)
 
 	// Graceful shutdown

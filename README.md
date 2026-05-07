@@ -516,6 +516,12 @@ auth:
   enabled: false
   api_key: ""
 
+rate_limit:
+  enabled: false
+  requests_per_minute: 120
+  burst: 60
+  key_by: "owner"        # owner, api_key, or ip
+
 database:
   path: "stacyvm.db"
 
@@ -540,6 +546,7 @@ pool:
 STACYVM_SERVER_PORT=8080
 STACYVM_PROVIDERS_DEFAULT=firecracker
 STACYVM_AUTH_API_KEY=sk-xyz123
+STACYVM_RATE_LIMIT_ENABLED=true
 STACYVM_LOGGING_LEVEL=debug
 ```
 

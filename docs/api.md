@@ -44,6 +44,22 @@ CORS is permissive by default (`*`). Lock it down via reverse proxy if you expos
 
 ---
 
+## Rate limiting
+
+API rate limiting is optional and disabled by default. When `rate_limit.enabled` is true, StacyVM applies an in-memory token bucket to API routes.
+
+```yaml
+rate_limit:
+  enabled: true
+  requests_per_minute: 120
+  burst: 60
+  key_by: owner # owner, api_key, or ip
+```
+
+The default `owner` mode uses `X-User-ID` when present, then falls back to `X-API-Key`, then client IP. Limited requests return `429 Too Many Requests` with `Retry-After`, `X-RateLimit-Limit`, and `X-RateLimit-Remaining` headers.
+
+---
+
 ## Conventions
 
 - **IDs.** Sandbox IDs look like `sb-a1b2c3d4`. Templates are addressed by `name`.
@@ -71,6 +87,7 @@ Errors return a JSON body with HTTP status reflecting the failure class:
 | `401` | `unauthorized` | Bad / missing API key |
 | `404` | `not_found` | Sandbox / template / provider does not exist |
 | `409` | `conflict` | Template name already exists |
+| `429` | `resource_limit` | Quota, capacity, or API rate limit exceeded |
 | `500` | `provider_error` | Provider failed (Docker, Firecracker, etc.) |
 | `503` | `unavailable` | Pool full with `overflow: reject` |
 

@@ -19,9 +19,10 @@ import (
 )
 
 type ServerConfig struct {
-	Addr    string
-	APIKey  string
-	Version string
+	Addr      string
+	APIKey    string
+	Version   string
+	RateLimit middleware.RateLimitConfig
 }
 
 type Server struct {
@@ -73,6 +74,10 @@ func NewServer(cfg ServerConfig, registry *providers.Registry, manager *orchestr
 				next.ServeHTTP(w, r)
 			})
 		})
+
+		if cfg.RateLimit.Enabled {
+			r.Use(middleware.RateLimit(cfg.RateLimit))
+		}
 
 		// Routes
 		sandboxRoutes := routes.NewSandboxRoutes(manager)

@@ -15,6 +15,7 @@ type Config struct {
 	Providers ProvidersConfig `mapstructure:"providers"`
 	Defaults  DefaultsConfig  `mapstructure:"defaults"`
 	Auth      AuthConfig      `mapstructure:"auth"`
+	RateLimit RateLimitConfig `mapstructure:"rate_limit"`
 	Database  DatabaseConfig  `mapstructure:"database"`
 	Logging   LoggingConfig   `mapstructure:"logging"`
 	Pool      PoolConfig      `mapstructure:"pool"`
@@ -137,6 +138,13 @@ type AuthConfig struct {
 	APIKey  string `mapstructure:"api_key"`
 }
 
+type RateLimitConfig struct {
+	Enabled           bool   `mapstructure:"enabled"`
+	RequestsPerMinute int    `mapstructure:"requests_per_minute"`
+	Burst             int    `mapstructure:"burst"`
+	KeyBy             string `mapstructure:"key_by"`
+}
+
 type DatabaseConfig struct {
 	Path string `mapstructure:"path"`
 }
@@ -214,6 +222,11 @@ func setDefaults(v *viper.Viper) {
 
 	v.SetDefault("auth.enabled", false)
 	v.SetDefault("auth.api_key", "")
+
+	v.SetDefault("rate_limit.enabled", false)
+	v.SetDefault("rate_limit.requests_per_minute", 120)
+	v.SetDefault("rate_limit.burst", 60)
+	v.SetDefault("rate_limit.key_by", "owner")
 
 	v.SetDefault("database.path", "stacyvm.db")
 

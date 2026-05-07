@@ -1,0 +1,157 @@
+package middleware
+
+import (
+	"encoding/json"
+	"fmt"
+	"math"
+	"net"
+	"net/http"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+)
+
+type RateLimitConfig struct {
+	Enabled           bool
+	RequestsPerMinute int
+	Burst             int
+	KeyBy             string
+	Now               func() time.Time
+}
+
+type rateBucket struct {
+	tokens     float64
+	lastRefill time.Time
+	lastSeen   time.Time
+}
+
+type RateLimiter struct {
+	mu       sync.Mutex
+	buckets  map[string]*rateBucket
+	rate     float64
+	burst    float64
+	keyBy    string
+	now      func() time.Time
+	disabled bool
+}
+
+func NewRateLimiter(cfg RateLimitConfig) *RateLimiter {
+	if cfg.RequestsPerMinute < 0 {
+		cfg.RequestsPerMinute = 0
+	}
+	if cfg.Burst <= 0 {
+		cfg.Burst = cfg.RequestsPerMinute
+	}
+	if cfg.Now == nil {
+		cfg.Now = time.Now
+	}
+	keyBy := strings.TrimSpace(strings.ToLower(cfg.KeyBy))
+	if keyBy == "" {
+		keyBy = "owner"
+	}
+	return &RateLimiter{
+		buckets:  make(map[string]*rateBucket),
+		rate:     float64(cfg.RequestsPerMinute) / 60.0,
+		burst:    float64(cfg.Burst),
+		keyBy:    keyBy,
+		now:      cfg.Now,
+		disabled: !cfg.Enabled || cfg.RequestsPerMinute == 0,
+	}
+}
+
+func RateLimit(cfg RateLimitConfig) func(http.Handler) http.Handler {
+	return NewRateLimiter(cfg).Middleware
+}
+
+func (rl *RateLimiter) Middleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if rl.disabled {
+			next.ServeHTTP(w, r)
+			return
+		}
+
+		allowed, remaining, retryAfter := rl.allow(rl.key(r))
+		w.Header().Set("X-RateLimit-Limit", strconv.Itoa(int(rl.burst)))
+		w.Header().Set("X-RateLimit-Remaining", strconv.Itoa(remaining))
+		if !allowed {
+			seconds := int(math.Ceil(retryAfter.Seconds()))
+			if seconds < 1 {
+				seconds = 1
+			}
+			w.Header().Set("Retry-After", strconv.Itoa(seconds))
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusTooManyRequests)
+			_ = json.NewEncoder(w).Encode(map[string]string{
+				"code":    "RESOURCE_LIMIT",
+				"message": fmt.Sprintf("rate limit exceeded; retry after %ds", seconds),
+			})
+			return
+		}
+
+		next.ServeHTTP(w, r)
+	})
+}
+
+func (rl *RateLimiter) allow(key string) (bool, int, time.Duration) {
+	now := rl.now()
+
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	bucket := rl.buckets[key]
+	if bucket == nil {
+		bucket = &rateBucket{tokens: rl.burst, lastRefill: now}
+		rl.buckets[key] = bucket
+	}
+
+	elapsed := now.Sub(bucket.lastRefill).Seconds()
+	if elapsed > 0 {
+		bucket.tokens = math.Min(rl.burst, bucket.tokens+elapsed*rl.rate)
+		bucket.lastRefill = now
+	}
+	bucket.lastSeen = now
+
+	if bucket.tokens >= 1 {
+		bucket.tokens--
+		return true, int(math.Floor(bucket.tokens)), 0
+	}
+
+	needed := 1 - bucket.tokens
+	retryAfter := time.Duration(math.Ceil(needed/rl.rate)) * time.Second
+	return false, 0, retryAfter
+}
+
+func (rl *RateLimiter) key(r *http.Request) string {
+	switch rl.keyBy {
+	case "api_key":
+		if apiKey := strings.TrimSpace(r.Header.Get("X-API-Key")); apiKey != "" {
+			return "api_key:" + apiKey
+		}
+	case "ip":
+		return "ip:" + clientIP(r)
+	default:
+		if ownerID := strings.TrimSpace(r.Header.Get("X-User-ID")); ownerID != "" {
+			return "owner:" + ownerID
+		}
+		if apiKey := strings.TrimSpace(r.Header.Get("X-API-Key")); apiKey != "" {
+			return "api_key:" + apiKey
+		}
+	}
+	return "ip:" + clientIP(r)
+}
+
+func clientIP(r *http.Request) string {
+	if forwardedFor := strings.TrimSpace(r.Header.Get("X-Forwarded-For")); forwardedFor != "" {
+		parts := strings.Split(forwardedFor, ",")
+		return strings.TrimSpace(parts[0])
+	}
+	if realIP := strings.TrimSpace(r.Header.Get("X-Real-IP")); realIP != "" {
+		return realIP
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err == nil {
+		return host
+	}
+	return r.RemoteAddr
+}
