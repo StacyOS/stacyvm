@@ -79,7 +79,7 @@ func NewServer(cfg ServerConfig, registry *providers.Registry, manager *orchestr
 		providerRoutes := routes.NewProviderRoutes(registry, manager)
 		templateRoutes := routes.NewTemplateRoutes(templates, manager)
 		snapshotRoutes := routes.NewSnapshotRoutes(registry)
-		systemRoutes := routes.NewSystemRoutes(registry, manager, events, cfg.Version)
+		systemRoutes := routes.NewSystemRoutes(registry, manager, events, st, cfg.Version)
 		environmentRoutes := routes.NewEnvironmentRoutes(st, envBuild)
 
 		r.Route("/api/v1", func(r chi.Router) {

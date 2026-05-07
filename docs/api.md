@@ -555,6 +555,64 @@ GET /api/v1/ready
 
 **Response** `503 Service Unavailable` when no configured provider is healthy.
 
+### Diagnostics
+
+```
+GET /api/v1/diagnostics
+```
+
+**Response** `200 OK`:
+```json
+{
+  "generated_at": "2026-05-08T10:30:00Z",
+  "build": {
+    "version": "0.5.1",
+    "goos": "linux",
+    "goarch": "amd64"
+  },
+  "process": {
+    "uptime": "2h13m",
+    "goroutines": 42,
+    "memory": {
+      "alloc": 17825792,
+      "sys": 71303168,
+      "heap_alloc": 17825792,
+      "gc_cycles": 8
+    }
+  },
+  "store": {
+    "healthy": true,
+    "latency_ms": 1
+  },
+  "providers": [
+    {
+      "name": "docker",
+      "healthy": true,
+      "default": true,
+      "latency_ms": 3,
+      "last_checked": "2026-05-08T10:30:00Z",
+      "capabilities": ["spawn", "exec", "files", "runtime_inventory", "container"],
+      "runtime_count": 4
+    }
+  ],
+  "sandboxes": {
+    "total": 138,
+    "active": 12,
+    "by_state": { "running": 12, "destroyed": 126 },
+    "by_provider": { "docker": 90, "firecracker": 48 }
+  },
+  "events": {
+    "subscribers": 2,
+    "history_size": 1000,
+    "events_total": 2401
+  },
+  "operations": [],
+  "redactions": ["provider secrets", "registry credentials", "environment secrets", "API keys"]
+}
+```
+
+Diagnostics are read-only and intentionally redacted. Use this endpoint for support bundles, incident debugging, and deployment sanity checks.
+
 ### Metrics
 
 ```

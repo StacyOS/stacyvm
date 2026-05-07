@@ -12,6 +12,7 @@ import (
 	"github.com/StacyOs/stacyvm/internal/httputil"
 	"github.com/StacyOs/stacyvm/internal/orchestrator"
 	"github.com/StacyOs/stacyvm/internal/providers"
+	"github.com/StacyOs/stacyvm/internal/store"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -20,15 +21,17 @@ type SystemRoutes struct {
 	registry  *providers.Registry
 	manager   *orchestrator.Manager
 	events    *orchestrator.EventBus
+	store     store.Store
 	startTime time.Time
 	version   string
 }
 
-func NewSystemRoutes(registry *providers.Registry, manager *orchestrator.Manager, events *orchestrator.EventBus, version string) *SystemRoutes {
+func NewSystemRoutes(registry *providers.Registry, manager *orchestrator.Manager, events *orchestrator.EventBus, st store.Store, version string) *SystemRoutes {
 	return &SystemRoutes{
 		registry:  registry,
 		manager:   manager,
 		events:    events,
+		store:     st,
 		startTime: time.Now(),
 		version:   version,
 	}
@@ -39,6 +42,7 @@ func (s *SystemRoutes) Routes() chi.Router {
 	r.Get("/health", s.Health)
 	r.Get("/live", s.Live)
 	r.Get("/ready", s.Ready)
+	r.Get("/diagnostics", s.Diagnostics)
 	r.Get("/metrics", s.Metrics)
 	r.Get("/metrics/prometheus", s.PrometheusMetrics)
 	r.Get("/events", s.Events)
@@ -115,6 +119,71 @@ func (s *SystemRoutes) Ready(w http.ResponseWriter, r *http.Request) {
 		"providers":       providers,
 		"ready_providers": readyProviders,
 		"total_providers": len(providers),
+	})
+}
+
+// Diagnostics returns redacted operational diagnostics.
+//
+//	@Summary		Get diagnostics
+//	@Description	Return redacted build, store, provider, sandbox, event, and operation diagnostics
+//	@Tags			system
+//	@Produce		json
+//	@Success		200	{object}	DiagnosticsResponse
+//	@Security		ApiKeyAuth
+//	@Router			/diagnostics [get]
+func (s *SystemRoutes) Diagnostics(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Second)
+	defer cancel()
+
+	metrics, err := s.collectMetrics(ctx)
+	if err != nil {
+		writeRouteError(w, err)
+		return
+	}
+
+	storeStatus := map[string]interface{}{
+		"healthy": false,
+	}
+	if s.store != nil {
+		start := time.Now()
+		if _, err := s.store.ListSandboxes(ctx); err != nil {
+			storeStatus["error"] = err.Error()
+		} else {
+			storeStatus["healthy"] = true
+		}
+		storeStatus["latency_ms"] = time.Since(start).Milliseconds()
+	} else {
+		storeStatus["error"] = "store unavailable"
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, map[string]interface{}{
+		"generated_at": time.Now().UTC().Format(time.RFC3339),
+		"build": map[string]interface{}{
+			"version": s.version,
+			"goos":    runtime.GOOS,
+			"goarch":  runtime.GOARCH,
+		},
+		"process": map[string]interface{}{
+			"uptime":     metrics.uptime.String(),
+			"goroutines": metrics.goroutines,
+			"memory": map[string]interface{}{
+				"alloc":      metrics.memoryAlloc,
+				"sys":        metrics.memorySys,
+				"heap_alloc": metrics.memoryHeapAlloc,
+				"gc_cycles":  metrics.gcCycles,
+			},
+		},
+		"store":      storeStatus,
+		"providers":  metrics.providerHealth,
+		"sandboxes":  metrics.sandboxSummary(),
+		"events":     metrics.eventStats,
+		"operations": metrics.operationMetrics,
+		"redactions": []string{
+			"provider secrets",
+			"registry credentials",
+			"environment secrets",
+			"API keys",
+		},
 	})
 }
 
@@ -228,12 +297,7 @@ func (m systemMetricsSnapshot) toResponse() map[string]interface{} {
 		"memory_sys":        m.memorySys,
 		"memory_heap_alloc": m.memoryHeapAlloc,
 		"gc_cycles":         m.gcCycles,
-		"sandboxes": map[string]interface{}{
-			"total":       m.sandboxTotal,
-			"active":      m.sandboxActive,
-			"by_state":    m.sandboxesByState,
-			"by_provider": m.sandboxesByProvider,
-		},
+		"sandboxes":         m.sandboxSummary(),
 		"providers": map[string]interface{}{
 			"total":   len(m.providerHealth),
 			"healthy": m.healthyProviders,
@@ -241,6 +305,15 @@ func (m systemMetricsSnapshot) toResponse() map[string]interface{} {
 		},
 		"events":     m.eventStats,
 		"operations": m.operationMetrics,
+	}
+}
+
+func (m systemMetricsSnapshot) sandboxSummary() map[string]interface{} {
+	return map[string]interface{}{
+		"total":       m.sandboxTotal,
+		"active":      m.sandboxActive,
+		"by_state":    m.sandboxesByState,
+		"by_provider": m.sandboxesByProvider,
 	}
 }
 

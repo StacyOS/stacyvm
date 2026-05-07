@@ -1,5 +1,7 @@
 package routes
 
+import "github.com/StacyOs/stacyvm/internal/orchestrator"
+
 // StatusResponse is a generic status response.
 type StatusResponse struct {
 	Status string `json:"status" example:"destroyed"`
@@ -37,6 +39,19 @@ type ReadinessResponse struct {
 	Providers      []ProviderHealth `json:"providers"`
 	ReadyProviders int              `json:"ready_providers" example:"1"`
 	TotalProviders int              `json:"total_providers" example:"2"`
+}
+
+// DiagnosticsResponse is the response from the diagnostics endpoint.
+type DiagnosticsResponse struct {
+	GeneratedAt string                          `json:"generated_at" example:"2026-05-08T10:30:00Z"`
+	Build       map[string]interface{}          `json:"build"`
+	Process     map[string]interface{}          `json:"process"`
+	Store       map[string]interface{}          `json:"store"`
+	Providers   []ProviderHealth                `json:"providers"`
+	Sandboxes   map[string]interface{}          `json:"sandboxes"`
+	Events      orchestrator.EventBusStats      `json:"events"`
+	Operations  []orchestrator.OperationMetrics `json:"operations"`
+	Redactions  []string                        `json:"redactions"`
 }
 
 // MetricsResponse is the response from the metrics endpoint.

@@ -43,7 +43,7 @@ func setupSystemRoutes(t *testing.T, withProvider bool) (*SystemRoutes, *orchest
 		DefaultVCPUs:  1,
 	})
 
-	return NewSystemRoutes(registry, manager, events, "test-version"), manager
+	return NewSystemRoutes(registry, manager, events, st, "test-version"), manager
 }
 
 func TestSystemRoutes_Live(t *testing.T) {
@@ -104,6 +104,36 @@ func TestSystemRoutes_ReadyNoProviders(t *testing.T) {
 	decodeSystemResponse(t, w, &body)
 	if body["status"] != "not_ready" {
 		t.Fatalf("status = %v, want not_ready", body["status"])
+	}
+}
+
+func TestSystemRoutes_Diagnostics(t *testing.T) {
+	routes, manager := setupSystemRoutes(t, true)
+	if _, err := manager.Spawn(context.Background(), orchestrator.SpawnRequest{Image: "alpine:latest"}); err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/diagnostics", nil)
+	w := httptest.NewRecorder()
+
+	routes.Diagnostics(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+	var body map[string]interface{}
+	decodeSystemResponse(t, w, &body)
+	for _, field := range []string{"generated_at", "build", "process", "store", "providers", "sandboxes", "events", "operations", "redactions"} {
+		if _, ok := body[field]; !ok {
+			t.Fatalf("diagnostics missing %s: %#v", field, body)
+		}
+	}
+	storeBody := body["store"].(map[string]interface{})
+	if storeBody["healthy"] != true {
+		t.Fatalf("store healthy = %v, want true", storeBody["healthy"])
+	}
+	if strings.Contains(w.Body.String(), "X-API-Key") {
+		t.Fatal("diagnostics response leaked API key header name")
 	}
 }
 
