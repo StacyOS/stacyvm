@@ -596,15 +596,19 @@ GET /api/v1/events
 **Response** `200 OK` with `Content-Type: text/event-stream`. The server emits orchestrator events as Server-Sent Events:
 
 ```
-event: sandbox.spawned
-data: {"id":"sb-a1b2c3d4","provider":"docker","image":"python:3.12"}
+data: {"id":"evt-1","type":"sandbox.created","sandbox_id":"sb-a1b2c3d4","timestamp":"2026-05-08T10:30:00Z"}
 
-event: sandbox.destroyed
-data: {"id":"sb-a1b2c3d4","reason":"ttl_expired"}
+data: {"id":"evt-2","type":"exec.timeout","sandbox_id":"sb-a1b2c3d4","timestamp":"2026-05-08T10:31:00Z","data":{"operation":"exec","provider":"docker","error":"exec timeout: sb-a1b2c3d4"}}
 
-event: sandbox.exec
-data: {"id":"sb-a1b2c3d4","command":"python3 main.py","exit_code":0}
+data: {"id":"evt-3","type":"reconcile.action","sandbox_id":"sb-a1b2c3d4","timestamp":"2026-05-08T10:32:00Z","data":{"action":"adopted_runtime","provider":"docker","image":"python:3.12"}}
 ```
+
+Common event types include:
+
+- `sandbox.created`, `sandbox.running`, `sandbox.destroyed`, `sandbox.error`
+- `exec.started`, `exec.completed`, `exec.failed`, `exec.timeout`
+- `file.written`, `file.read`
+- `operation.failed`, `resource.limit`, `provider.failed`, `reconcile.action`
 
 Use any SSE client (`EventSource` in browsers, `httpx-sse` in Python, etc.) to consume.
 

@@ -109,6 +109,7 @@ func TestManager_ReconcileMarksMissingRuntimeDestroyed(t *testing.T) {
 	if rec.State != string(StateDestroyed) {
 		t.Fatalf("expected destroyed after reconcile, got %s", rec.State)
 	}
+	assertEventType(t, m.events.History(10), EventReconcileAction)
 }
 
 type runtimeListerProvider struct {
@@ -163,6 +164,7 @@ func TestManager_ReconcileAdoptsProviderRuntime(t *testing.T) {
 	if rec.Provider != "mock" {
 		t.Fatalf("expected mock provider, got %s", rec.Provider)
 	}
+	assertEventType(t, m.events.History(10), EventReconcileAction)
 }
 
 func TestManager_Exec(t *testing.T) {
@@ -234,6 +236,7 @@ func TestManager_ExecTimeout(t *testing.T) {
 	if !errors.Is(err, ErrExecTimeout) {
 		t.Fatalf("expected ErrExecTimeout, got %v", err)
 	}
+	assertEventType(t, m.events.History(10), EventExecTimeout)
 }
 
 func TestManager_ExecStreamTimeoutEmitsErrorChunk(t *testing.T) {
@@ -259,6 +262,34 @@ func TestManager_ExecStreamTimeoutEmitsErrorChunk(t *testing.T) {
 	if !sawTimeout {
 		t.Fatal("expected timeout error chunk")
 	}
+	assertEventType(t, m.events.History(10), EventExecTimeout)
+}
+
+func TestManager_PublishesOperationFailureEvent(t *testing.T) {
+	m := setupManager(t)
+
+	if _, err := m.Exec(context.Background(), "sb-does-not-exist", ExecRequest{Command: "echo nope"}); err == nil {
+		t.Fatal("expected exec error")
+	}
+
+	assertEventType(t, m.events.History(10), EventExecFailed)
+}
+
+func assertEventType(t *testing.T, events []Event, eventType EventType) Event {
+	t.Helper()
+	for _, event := range events {
+		if event.Type == eventType {
+			if event.ID == "" {
+				t.Fatalf("event %s has empty ID", eventType)
+			}
+			if len(event.Data) == 0 {
+				t.Fatalf("event %s has empty data", eventType)
+			}
+			return event
+		}
+	}
+	t.Fatalf("event %s not found in %+v", eventType, events)
+	return Event{}
 }
 
 func TestManager_WriteAndReadFile(t *testing.T) {

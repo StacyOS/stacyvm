@@ -22,6 +22,9 @@ func TestEventBus_SubscribePublish(t *testing.T) {
 		if evt.SandboxID != "sb-001" {
 			t.Fatalf("expected sb-001, got %s", evt.SandboxID)
 		}
+		if evt.ID == "" {
+			t.Fatal("expected event ID")
+		}
 	case <-time.After(time.Second):
 		t.Fatal("timeout waiting for event")
 	}

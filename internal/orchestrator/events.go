@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"encoding/json"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -15,8 +16,14 @@ const (
 	EventSandboxError     EventType = "sandbox.error"
 	EventExecStarted      EventType = "exec.started"
 	EventExecCompleted    EventType = "exec.completed"
+	EventExecFailed       EventType = "exec.failed"
+	EventExecTimeout      EventType = "exec.timeout"
 	EventFileWritten      EventType = "file.written"
 	EventFileRead         EventType = "file.read"
+	EventOperationFailed  EventType = "operation.failed"
+	EventResourceLimit    EventType = "resource.limit"
+	EventProviderFailed   EventType = "provider.failed"
+	EventReconcileAction  EventType = "reconcile.action"
 )
 
 type Event struct {
@@ -64,6 +71,9 @@ func (eb *EventBus) Publish(evt Event) {
 		evt.Timestamp = time.Now()
 	}
 	eb.nextID++
+	if evt.ID == "" {
+		evt.ID = stringID(eb.nextID)
+	}
 
 	// Ring buffer: append or overwrite oldest
 	if len(eb.history) < eb.historySize {
@@ -79,6 +89,10 @@ func (eb *EventBus) Publish(evt Event) {
 			// Drop if subscriber is slow — non-blocking
 		}
 	}
+}
+
+func stringID(id int) string {
+	return "evt-" + strconv.Itoa(id)
 }
 
 // Subscribe creates a new subscription and returns a channel + unsubscribe key.
