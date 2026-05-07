@@ -1,5 +1,33 @@
 # Changelog
 
+## Phase 2 Observability And Ops - 2026-05-08
+
+This checkpoint adds production operations surfaces for health checks, diagnostics, metrics, audit events, and runtime limits.
+
+### Added
+
+- Liveness endpoint at `/api/v1/live`.
+- Readiness endpoint at `/api/v1/ready` with detailed provider health.
+- Redacted diagnostics endpoint at `/api/v1/diagnostics`.
+- Structured JSON operation metrics on `/api/v1/metrics`.
+- Prometheus-compatible metrics endpoint at `/api/v1/metrics/prometheus`.
+- Provider health detail with latency, last checked time, capabilities, error reason, and runtime inventory count when supported.
+- Operational audit events for exec failures, exec timeouts, provider failures, resource limits, and reconciliation actions.
+- Configurable operational limits for max TTL, default/max exec timeout, max sandboxes, and max sandboxes per owner.
+
+### Changed
+
+- `/api/v1/metrics` now includes sandbox state/provider breakdown, provider health, event bus stats, and operation metrics.
+- `/api/v1/providers` and `/api/v1/providers/{name}` now expose richer provider health details.
+- Diagnostics include store health, build/runtime data, sandbox counts, provider health, event stats, operation metrics, and explicit redaction categories.
+- Manager-level spawn and exec flows now enforce configured operational limits centrally.
+
+### Verified
+
+- `make test`
+- `make build`
+- `cd web && npm run build`
+
 ## Phase 1 Foundation Hardening - 2026-05-08
 
 This checkpoint closes the Phase 1 reliability and production-readiness foundation.
