@@ -479,6 +479,42 @@ GET /api/v1/health
 { "status": "ok", "version": "0.5.1", "uptime": "2h13m" }
 ```
 
+### Liveness
+
+```
+GET /api/v1/live
+```
+
+**Response** `200 OK`:
+```json
+{ "status": "alive", "version": "0.5.1", "uptime": "2h13m" }
+```
+
+Use this endpoint for process liveness checks. It only confirms that the API process is responding.
+
+### Readiness
+
+```
+GET /api/v1/ready
+```
+
+**Response** `200 OK`:
+```json
+{
+  "status": "ready",
+  "version": "0.5.1",
+  "uptime": "2h13m",
+  "ready_providers": 1,
+  "total_providers": 2,
+  "providers": [
+    { "name": "docker", "healthy": true, "default": true },
+    { "name": "firecracker", "healthy": false, "default": false }
+  ]
+}
+```
+
+**Response** `503 Service Unavailable` when no configured provider is healthy.
+
 ### Metrics
 
 ```
@@ -488,10 +524,31 @@ GET /api/v1/metrics
 **Response** `200 OK`:
 ```json
 {
+  "uptime": "2h13m",
   "goroutines": 42,
   "memory_alloc": 17825792,
-  "active_sandboxes": 12,
-  "total_sandboxes": 138
+  "memory_sys": 71303168,
+  "memory_heap_alloc": 17825792,
+  "gc_cycles": 8,
+  "sandboxes": {
+    "total": 138,
+    "active": 12,
+    "by_state": { "running": 12, "destroyed": 126 },
+    "by_provider": { "docker": 90, "firecracker": 48 }
+  },
+  "providers": {
+    "total": 2,
+    "healthy": 1,
+    "items": [
+      { "name": "docker", "healthy": true, "default": true },
+      { "name": "firecracker", "healthy": false, "default": false }
+    ]
+  },
+  "events": {
+    "subscribers": 2,
+    "history_size": 1000,
+    "events_total": 2401
+  }
 }
 ```
 

@@ -1,0 +1,137 @@
+package routes
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/StacyOs/stacyvm/internal/orchestrator"
+	"github.com/StacyOs/stacyvm/internal/providers"
+	"github.com/StacyOs/stacyvm/internal/store"
+	"github.com/rs/zerolog"
+)
+
+func setupSystemRoutes(t *testing.T, withProvider bool) (*SystemRoutes, *orchestrator.Manager) {
+	t.Helper()
+
+	dir := t.TempDir()
+	st, err := store.NewSQLiteStore(filepath.Join(dir, "test.db"))
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	t.Cleanup(func() { st.Close() })
+
+	registry := providers.NewRegistry()
+	if withProvider {
+		mock := providers.NewMockProvider()
+		registry.Register(mock)
+		if err := registry.SetDefault("mock"); err != nil {
+			t.Fatalf("set default provider: %v", err)
+		}
+	}
+
+	events := orchestrator.NewEventBus()
+	manager := orchestrator.NewManager(registry, st, events, zerolog.Nop(), orchestrator.ManagerConfig{
+		DefaultTTL:    5 * time.Minute,
+		DefaultImage:  "alpine:latest",
+		DefaultMemory: 512,
+		DefaultVCPUs:  1,
+	})
+
+	return NewSystemRoutes(registry, manager, events, "test-version"), manager
+}
+
+func TestSystemRoutes_Live(t *testing.T) {
+	routes, _ := setupSystemRoutes(t, true)
+	req := httptest.NewRequest(http.MethodGet, "/live", nil)
+	w := httptest.NewRecorder()
+
+	routes.Live(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+	var body map[string]interface{}
+	decodeSystemResponse(t, w, &body)
+	if body["status"] != "alive" {
+		t.Fatalf("status = %v, want alive", body["status"])
+	}
+}
+
+func TestSystemRoutes_Ready(t *testing.T) {
+	routes, _ := setupSystemRoutes(t, true)
+	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
+	w := httptest.NewRecorder()
+
+	routes.Ready(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+	var body map[string]interface{}
+	decodeSystemResponse(t, w, &body)
+	if body["status"] != "ready" {
+		t.Fatalf("status = %v, want ready", body["status"])
+	}
+	if body["ready_providers"].(float64) != 1 {
+		t.Fatalf("ready providers = %v, want 1", body["ready_providers"])
+	}
+}
+
+func TestSystemRoutes_ReadyNoProviders(t *testing.T) {
+	routes, _ := setupSystemRoutes(t, false)
+	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
+	w := httptest.NewRecorder()
+
+	routes.Ready(w, req)
+
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusServiceUnavailable)
+	}
+	var body map[string]interface{}
+	decodeSystemResponse(t, w, &body)
+	if body["status"] != "not_ready" {
+		t.Fatalf("status = %v, want not_ready", body["status"])
+	}
+}
+
+func TestSystemRoutes_MetricsIncludesOperationalBreakdown(t *testing.T) {
+	routes, manager := setupSystemRoutes(t, true)
+	if _, err := manager.Spawn(context.Background(), orchestrator.SpawnRequest{Image: "alpine:latest"}); err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	w := httptest.NewRecorder()
+
+	routes.Metrics(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+	var body map[string]interface{}
+	decodeSystemResponse(t, w, &body)
+
+	sandboxes := body["sandboxes"].(map[string]interface{})
+	if sandboxes["total"].(float64) != 1 {
+		t.Fatalf("sandbox total = %v, want 1", sandboxes["total"])
+	}
+	providersBody := body["providers"].(map[string]interface{})
+	if providersBody["healthy"].(float64) != 1 {
+		t.Fatalf("healthy providers = %v, want 1", providersBody["healthy"])
+	}
+	if _, ok := body["events"].(map[string]interface{}); !ok {
+		t.Fatal("expected events metrics")
+	}
+}
+
+func decodeSystemResponse(t *testing.T, w *httptest.ResponseRecorder, dst interface{}) {
+	t.Helper()
+	if err := json.Unmarshal(w.Body.Bytes(), dst); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+}

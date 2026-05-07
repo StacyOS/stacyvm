@@ -41,6 +41,12 @@ type EventBus struct {
 	nextID      int
 }
 
+type EventBusStats struct {
+	Subscribers int `json:"subscribers"`
+	HistorySize int `json:"history_size"`
+	EventsTotal int `json:"events_total"`
+}
+
 func NewEventBus() *EventBus {
 	return &EventBus{
 		subscribers: make(map[string]chan Event),
@@ -112,4 +118,15 @@ func (eb *EventBus) History(limit int) []Event {
 	result := make([]Event, limit)
 	copy(result, eb.history[start:])
 	return result
+}
+
+func (eb *EventBus) Stats() EventBusStats {
+	eb.mu.RLock()
+	defer eb.mu.RUnlock()
+
+	return EventBusStats{
+		Subscribers: len(eb.subscribers),
+		HistorySize: len(eb.history),
+		EventsTotal: eb.nextID,
+	}
 }
