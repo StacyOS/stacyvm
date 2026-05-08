@@ -690,21 +690,24 @@ func (m *Manager) ExecStream(ctx context.Context, sandboxID string, req ExecRequ
 	go func() {
 		defer close(out)
 		defer cancel()
-		timedOut := false
+		interrupted := false
 		for chunk := range ch {
 			select {
 			case out <- chunk:
 			case <-execCtx.Done():
-				timedOut = true
+				interrupted = true
 			}
 		}
-		if execCtx.Err() == context.DeadlineExceeded || timedOut {
+		if errors.Is(execCtx.Err(), context.DeadlineExceeded) {
 			metricsErr = providers.ExecTimeoutError(sandboxID)
 			m.publishOperationFailure(EventExecTimeout, sandboxID, OperationExecStream, metricsProvider, metricsErr)
 			select {
 			case out <- providers.StreamChunk{Stream: "stderr", Data: metricsErr.Error()}:
 			case <-ctx.Done():
 			}
+		} else if interrupted && execCtx.Err() != nil {
+			metricsErr = execCtx.Err()
+			m.publishOperationFailure(EventExecFailed, sandboxID, OperationExecStream, metricsProvider, metricsErr)
 		}
 		m.recordOperation(OperationExecStream, metricsProvider, time.Since(start), metricsErr)
 	}()

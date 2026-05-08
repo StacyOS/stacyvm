@@ -64,6 +64,35 @@ func (p *slowSpawnProvider) Spawn(ctx context.Context, opts providers.SpawnOptio
 	return p.Provider.Spawn(ctx, opts)
 }
 
+type cancellableStreamProvider struct {
+	providers.Provider
+	started chan struct{}
+	filled  chan struct{}
+	once    sync.Once
+	fill    sync.Once
+}
+
+func (p *cancellableStreamProvider) ExecStream(ctx context.Context, sandboxID string, opts providers.ExecOptions) (<-chan providers.StreamChunk, error) {
+	ch := make(chan providers.StreamChunk, 64)
+	go func() {
+		defer close(ch)
+		p.once.Do(func() { close(p.started) })
+		sent := 0
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case ch <- providers.StreamChunk{Stream: "stdout", Data: "streaming\n"}:
+				sent++
+				if sent >= 128 {
+					p.fill.Do(func() { close(p.filled) })
+				}
+			}
+		}
+	}()
+	return ch, nil
+}
+
 func TestManager_SpawnAndGet(t *testing.T) {
 	m := setupManager(t)
 	ctx := context.Background()
@@ -822,6 +851,66 @@ func TestManager_ExecStreamTimeoutEmitsErrorChunk(t *testing.T) {
 		t.Fatal("expected timeout error chunk")
 	}
 	assertEventType(t, m.events.History(10), EventExecTimeout)
+}
+
+func TestManager_ExecStreamCancellationDoesNotEmitTimeout(t *testing.T) {
+	m := setupManager(t)
+	base, err := m.registry.Get("mock")
+	if err != nil {
+		t.Fatalf("get mock provider: %v", err)
+	}
+	streamProvider := &cancellableStreamProvider{
+		Provider: base,
+		started:  make(chan struct{}),
+		filled:   make(chan struct{}),
+	}
+	m.registry.Register(streamProvider)
+
+	sb, err := m.Spawn(context.Background(), SpawnRequest{Image: "alpine:latest"})
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	ch, err := m.ExecStream(ctx, sb.ID, ExecRequest{Command: "stream forever"})
+	if err != nil {
+		t.Fatalf("exec stream: %v", err)
+	}
+
+	select {
+	case <-streamProvider.filled:
+	case <-time.After(time.Second):
+		t.Fatal("stream provider did not fill the stream buffers")
+	}
+	deadline := time.After(time.Second)
+	for len(ch) < cap(ch) {
+		select {
+		case <-deadline:
+			t.Fatalf("stream output buffer length = %d, want %d", len(ch), cap(ch))
+		default:
+			time.Sleep(time.Millisecond)
+		}
+	}
+	cancel()
+	time.Sleep(100 * time.Millisecond)
+
+	drained := make(chan struct{})
+	go func() {
+		defer close(drained)
+		for range ch {
+		}
+	}()
+	select {
+	case <-drained:
+	case <-time.After(time.Second):
+		t.Fatal("stream did not close after cancellation")
+	}
+
+	for _, event := range m.events.History(20) {
+		if event.Type == EventExecTimeout {
+			t.Fatalf("unexpected timeout event after cancellation: %+v", event)
+		}
+	}
 }
 
 func TestManager_PublishesOperationFailureEvent(t *testing.T) {
