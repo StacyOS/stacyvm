@@ -168,4 +168,43 @@ func TestRateLimitStats(t *testing.T) {
 	if stats.ActiveBuckets != 1 || stats.AllowedTotal != 1 || stats.LimitedTotal != 1 {
 		t.Fatalf("unexpected counters: %+v", stats)
 	}
+	if stats.BucketTTL == "" || stats.CleanupInterval == "" {
+		t.Fatalf("expected cleanup settings in stats: %+v", stats)
+	}
+}
+
+func TestRateLimitEvictsInactiveBuckets(t *testing.T) {
+	now := time.Date(2026, 5, 8, 12, 0, 0, 0, time.UTC)
+	limiter := NewRateLimiter(RateLimitConfig{
+		Enabled:           true,
+		RequestsPerMinute: 60,
+		Burst:             1,
+		KeyBy:             "ip",
+		BucketTTL:         time.Minute,
+		CleanupInterval:   time.Second,
+		Now:               func() time.Time { return now },
+	})
+
+	handler := limiter.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sandboxes", nil)
+	req.RemoteAddr = "203.0.113.40:5000"
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+	if limiter.Stats().ActiveBuckets != 1 {
+		t.Fatalf("expected one active bucket: %+v", limiter.Stats())
+	}
+
+	now = now.Add(2 * time.Minute)
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/sandboxes", nil)
+	req.RemoteAddr = "203.0.113.41:5000"
+	w = httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	stats := limiter.Stats()
+	if stats.ActiveBuckets != 1 || stats.EvictedTotal != 1 {
+		t.Fatalf("unexpected cleanup stats: %+v", stats)
+	}
 }

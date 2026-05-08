@@ -17,6 +17,8 @@ type RateLimitConfig struct {
 	RequestsPerMinute int
 	Burst             int
 	KeyBy             string
+	BucketTTL         time.Duration
+	CleanupInterval   time.Duration
 	Now               func() time.Time
 }
 
@@ -37,6 +39,10 @@ type RateLimiter struct {
 	disabled          bool
 	allowedTotal      uint64
 	limitedTotal      uint64
+	evictedTotal      uint64
+	bucketTTL         time.Duration
+	cleanupInterval   time.Duration
+	lastCleanup       time.Time
 }
 
 type RateLimitStats struct {
@@ -47,6 +53,9 @@ type RateLimitStats struct {
 	ActiveBuckets     int    `json:"active_buckets"`
 	AllowedTotal      uint64 `json:"allowed_total"`
 	LimitedTotal      uint64 `json:"limited_total"`
+	EvictedTotal      uint64 `json:"evicted_total"`
+	BucketTTL         string `json:"bucket_ttl"`
+	CleanupInterval   string `json:"cleanup_interval"`
 }
 
 func NewRateLimiter(cfg RateLimitConfig) *RateLimiter {
@@ -58,6 +67,12 @@ func NewRateLimiter(cfg RateLimitConfig) *RateLimiter {
 	}
 	if cfg.Now == nil {
 		cfg.Now = time.Now
+	}
+	if cfg.BucketTTL == 0 {
+		cfg.BucketTTL = 15 * time.Minute
+	}
+	if cfg.CleanupInterval == 0 {
+		cfg.CleanupInterval = time.Minute
 	}
 	keyBy := strings.TrimSpace(strings.ToLower(cfg.KeyBy))
 	if keyBy == "" {
@@ -71,6 +86,8 @@ func NewRateLimiter(cfg RateLimitConfig) *RateLimiter {
 		keyBy:             keyBy,
 		now:               cfg.Now,
 		disabled:          !cfg.Enabled || cfg.RequestsPerMinute == 0,
+		bucketTTL:         cfg.BucketTTL,
+		cleanupInterval:   cfg.CleanupInterval,
 	}
 }
 
@@ -113,6 +130,8 @@ func (rl *RateLimiter) allow(key string) (bool, int, time.Duration) {
 	rl.mu.Lock()
 	defer rl.mu.Unlock()
 
+	rl.cleanupExpiredLocked(now)
+
 	bucket := rl.buckets[key]
 	if bucket == nil {
 		bucket = &rateBucket{tokens: rl.burst, lastRefill: now}
@@ -152,6 +171,25 @@ func (rl *RateLimiter) Stats() RateLimitStats {
 		ActiveBuckets:     len(rl.buckets),
 		AllowedTotal:      rl.allowedTotal,
 		LimitedTotal:      rl.limitedTotal,
+		EvictedTotal:      rl.evictedTotal,
+		BucketTTL:         rl.bucketTTL.String(),
+		CleanupInterval:   rl.cleanupInterval.String(),
+	}
+}
+
+func (rl *RateLimiter) cleanupExpiredLocked(now time.Time) {
+	if rl.bucketTTL <= 0 || rl.cleanupInterval <= 0 {
+		return
+	}
+	if !rl.lastCleanup.IsZero() && now.Sub(rl.lastCleanup) < rl.cleanupInterval {
+		return
+	}
+	rl.lastCleanup = now
+	for key, bucket := range rl.buckets {
+		if now.Sub(bucket.lastSeen) > rl.bucketTTL {
+			delete(rl.buckets, key)
+			rl.evictedTotal++
+		}
 	}
 }
 

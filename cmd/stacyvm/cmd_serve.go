@@ -212,6 +212,8 @@ func runServe() error {
 	}
 
 	// Server
+	rateLimitBucketTTL, _ := time.ParseDuration(cfg.RateLimit.BucketTTL)
+	rateLimitCleanupInterval, _ := time.ParseDuration(cfg.RateLimit.CleanupInterval)
 	srv := api.NewServer(api.ServerConfig{
 		Addr:    cfg.Server.Addr(),
 		APIKey:  cfg.Auth.APIKey,
@@ -221,6 +223,8 @@ func runServe() error {
 			RequestsPerMinute: cfg.RateLimit.RequestsPerMinute,
 			Burst:             cfg.RateLimit.Burst,
 			KeyBy:             cfg.RateLimit.KeyBy,
+			BucketTTL:         rateLimitBucketTTL,
+			CleanupInterval:   rateLimitCleanupInterval,
 		},
 	}, registry, mgr, events, templates, pool, st, envBuilds, logger)
 

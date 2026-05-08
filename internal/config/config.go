@@ -143,6 +143,8 @@ type RateLimitConfig struct {
 	RequestsPerMinute int    `mapstructure:"requests_per_minute"`
 	Burst             int    `mapstructure:"burst"`
 	KeyBy             string `mapstructure:"key_by"`
+	BucketTTL         string `mapstructure:"bucket_ttl"`
+	CleanupInterval   string `mapstructure:"cleanup_interval"`
 }
 
 type DatabaseConfig struct {
@@ -227,6 +229,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("rate_limit.requests_per_minute", 120)
 	v.SetDefault("rate_limit.burst", 60)
 	v.SetDefault("rate_limit.key_by", "owner")
+	v.SetDefault("rate_limit.bucket_ttl", "15m")
+	v.SetDefault("rate_limit.cleanup_interval", "1m")
 
 	v.SetDefault("database.path", "stacyvm.db")
 

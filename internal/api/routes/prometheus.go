@@ -65,6 +65,8 @@ func writePrometheusMetrics(w io.Writer, metrics systemMetricsSnapshot) {
 	fmt.Fprintf(w, "stacyvm_rate_limit_allowed_total %d\n", metrics.rateLimitStats.AllowedTotal)
 	writePrometheusHelp(w, "stacyvm_rate_limit_blocked_total", "Total API requests blocked by the in-process rate limiter.")
 	fmt.Fprintf(w, "stacyvm_rate_limit_blocked_total %d\n", metrics.rateLimitStats.LimitedTotal)
+	writePrometheusHelp(w, "stacyvm_rate_limit_evicted_buckets_total", "Total inactive rate-limit buckets evicted from memory.")
+	fmt.Fprintf(w, "stacyvm_rate_limit_evicted_buckets_total %d\n", metrics.rateLimitStats.EvictedTotal)
 	writePrometheusHelp(w, "stacyvm_rate_limit_active_buckets", "Current number of active rate-limit buckets.")
 	fmt.Fprintf(w, "stacyvm_rate_limit_active_buckets %d\n", metrics.rateLimitStats.ActiveBuckets)
 

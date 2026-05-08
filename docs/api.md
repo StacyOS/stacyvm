@@ -54,6 +54,8 @@ rate_limit:
   requests_per_minute: 120
   burst: 60
   key_by: owner # owner, api_key, or ip
+  bucket_ttl: 15m
+  cleanup_interval: 1m
 ```
 
 The default `owner` mode uses `X-User-ID` when present, then falls back to `X-API-Key`, then client IP. Limited requests return `429 Too Many Requests` with `Retry-After`, `X-RateLimit-Limit`, and `X-RateLimit-Remaining` headers.
@@ -694,7 +696,10 @@ GET /api/v1/diagnostics
     "key_by": "owner",
     "active_buckets": 14,
     "allowed_total": 9132,
-    "limited_total": 27
+    "limited_total": 27,
+    "evicted_total": 4,
+    "bucket_ttl": "15m0s",
+    "cleanup_interval": "1m0s"
   },
   "providers": [
     {
@@ -773,7 +778,10 @@ GET /api/v1/metrics
     "key_by": "owner",
     "active_buckets": 14,
     "allowed_total": 9132,
-    "limited_total": 27
+    "limited_total": 27,
+    "evicted_total": 4,
+    "bucket_ttl": "15m0s",
+    "cleanup_interval": "1m0s"
   },
   "operations": [
     {

@@ -521,6 +521,8 @@ rate_limit:
   requests_per_minute: 120
   burst: 60
   key_by: "owner"        # owner, api_key, or ip
+  bucket_ttl: "15m"
+  cleanup_interval: "1m"
 
 database:
   path: "stacyvm.db"
