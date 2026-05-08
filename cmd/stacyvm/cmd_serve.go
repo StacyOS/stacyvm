@@ -58,6 +58,11 @@ func runServe() error {
 
 	// Provider registry
 	registry := providers.NewRegistry()
+	if cfg.Providers.Mock.Enabled {
+		mock := providers.NewMockProvider()
+		registry.Register(mock)
+		logger.Info().Msg("mock provider registered")
+	}
 	if cfg.Providers.Firecracker.Enabled {
 		fc := providers.NewFirecrackerProvider(providers.FirecrackerProviderConfig{
 			FirecrackerPath: cfg.Providers.Firecracker.FirecrackerPath,

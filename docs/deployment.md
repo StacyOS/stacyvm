@@ -25,6 +25,12 @@ Use these endpoints for load balancers and monitors:
 
 Authenticated deployments should send `X-API-Key: <api-key>` to protected API endpoints. Keep health probes scoped to your private network if they bypass auth at an upstream proxy.
 
+After a deploy, run the smoke script:
+
+```bash
+STACYVM_SMOKE_URL=https://stacyvm.example.com STACYVM_API_KEY=sk-live scripts/smoke-deployment.sh
+```
+
 ## Docker Compose
 
 The files in `deploy/` provide a production-oriented Compose starting point:
@@ -115,3 +121,5 @@ Docker is the safest default for broad deployment compatibility. For stronger is
 Firecracker requires Linux/KVM, a kernel image, rootfs images, networking setup, and the `stacyvm-agent` binary available to the runtime. Keep Firecracker disabled in shared templates until a host conformance check passes.
 
 PRoot requires a real rootfs with the binaries your sandboxes need. Use it for restricted environments where Docker and KVM are unavailable, and validate memory/disk limits against the host because PRoot enforcement is not equivalent to VM isolation.
+
+Use [runtime-conformance.md](runtime-conformance.md) as the signoff checklist for Docker, gVisor, Kata, Firecracker, PRoot, E2B, and custom providers.

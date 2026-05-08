@@ -14,6 +14,8 @@ This checkpoint adds the first production deployment and verification surface fo
 - Release workflow for GitHub releases and GHCR container image publishing.
 - Release runbook documenting tags, manual dispatch, binary artifacts, image tags, and preflight checks.
 - `.dockerignore` for smaller and safer Docker build contexts.
+- Deployment smoke script for live, health, readiness, and Prometheus probes.
+- Runtime conformance matrix for Docker, gVisor, Kata, Firecracker, PRoot, E2B, and custom providers.
 - Phase 4 release notes under `docs/releases/phase-4-production-deployment.md`.
 
 ### Changed
@@ -22,6 +24,7 @@ This checkpoint adds the first production deployment and verification surface fo
 - CI opts into Node 24-based JavaScript actions to address the GitHub Actions Node 20 deprecation warning.
 - Docker image builds now accept an explicit `VERSION` build argument and BuildKit target platform args.
 - Release artifacts now build into `dist/` with checksums instead of the repository root.
+- `stacyvm serve` now registers the mock provider when `providers.mock.enabled` is true.
 - README navigation now links to the production deployment guide.
 
 ### Verified

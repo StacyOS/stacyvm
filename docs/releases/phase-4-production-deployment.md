@@ -59,6 +59,9 @@ The goal of this phase is to make StacyVM easier to validate, release, and run o
   - upgrade procedure.
   - Docker, Firecracker, and PRoot provider notes.
 - Linked the deployment guide from the README.
+- Added `scripts/smoke-deployment.sh` for liveness, health, readiness, and Prometheus deployment probes.
+- Added `docs/runtime-conformance.md` with host requirements and signoff checks for Docker, gVisor, Kata, Firecracker, PRoot, E2B, and custom providers.
+- Registered the mock provider in `stacyvm serve` when `providers.mock.enabled` is set, giving operators and CI a no-Docker smoke path.
 
 ## Code Changes By Area
 
@@ -71,6 +74,8 @@ The goal of this phase is to make StacyVM easier to validate, release, and run o
   - Adds binary and container image release automation.
 - `scripts/check-swagger.sh`
   - Downloads modules before generating docs in a temporary workspace.
+- `cmd/stacyvm/cmd_serve.go`
+  - Registers the mock provider when enabled in config.
 
 ### Deployment
 
@@ -88,6 +93,8 @@ The goal of this phase is to make StacyVM easier to validate, release, and run o
   - Moves release artifacts into `dist/` and keeps checksums with the artifacts.
 - `.dockerignore`
   - Excludes build outputs, local dependency directories, and local state files from Docker build contexts.
+- `scripts/smoke-deployment.sh`
+  - Adds a portable post-deploy smoke test for live, health, readiness, and Prometheus metrics endpoints.
 
 ### Docs
 
@@ -95,6 +102,8 @@ The goal of this phase is to make StacyVM easier to validate, release, and run o
   - Adds the deployment guide and operator runbook.
 - `docs/releasing.md`
   - Adds release workflow and GHCR publishing instructions.
+- `docs/runtime-conformance.md`
+  - Adds provider/runtime production signoff expectations.
 - `README.md`
   - Links the deployment guide from navigation and configuration docs.
 - `CHANGELOG.md`
@@ -112,6 +121,7 @@ go test ./...
 cd web && npm run build
 scripts/check-swagger.sh
 make release-build-all VERSION=phase-4-test
+scripts/smoke-deployment.sh http://127.0.0.1:7423
 ```
 
 GitHub Actions has also passed for the initial Phase 4 CI workflow after the Swagger drift check stabilization.
