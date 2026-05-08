@@ -5,7 +5,7 @@ Branch: `phase-6-security-governance`
 
 ## Summary
 
-Phase 6 starts the security and governance layer above the Phase 5 admin control plane. The first slice keeps current API-key deployments compatible while adding typed request identity metadata that future RBAC, SSO/OIDC, and policy enforcement can build on.
+Phase 6 adds the first security and governance layer above the Phase 5 admin control plane. This phase keeps current API-key deployments compatible while adding typed request identity metadata, route-level scope enforcement, safer audit attribution, configurable admin fallback policy, and production governance guidance for future RBAC and OIDC/SSO work.
 
 ## What Changed
 
@@ -59,6 +59,15 @@ go test ./...
 npm run build
 ```
 
-## Next Phase 6 Direction
+GitHub CI passed on `phase-6-security-governance` for:
 
-The next slice should run final Phase 6 cleanup, confirm CI, and publish the Phase 6 GitHub release.
+- Go tests and CLI build
+- Swagger drift check
+- Python SDK import check
+- TypeScript SDK build
+- Deployment smoke test
+- Web build
+
+## Release Status
+
+Phase 6 implementation is complete. The branch is ready for the Phase 6 GitHub release.
