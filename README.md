@@ -575,7 +575,7 @@ STACYVM_LOGGING_LEVEL=debug
 
 Use [docs/deployment.md](docs/deployment.md) for production setup guidance, including Docker Compose and systemd templates, auth and rate-limit defaults, health/readiness probes, Prometheus scraping, backup steps, and provider-specific rollout notes. Runtime signoff expectations live in [docs/runtime-conformance.md](docs/runtime-conformance.md), and release-candidate gates live in [docs/production-readiness.md](docs/production-readiness.md). The reusable templates live under [`deploy/`](deploy/).
 
-Run `stacyvm doctor --production` on a target host before treating it as production-ready.
+Run `stacyvm doctor --production` on a target host before treating it as production-ready. Runtime host certification checks live in [docs/runtime-certification.md](docs/runtime-certification.md).
 
 Release automation and GHCR publishing are documented in [docs/releasing.md](docs/releasing.md).
 

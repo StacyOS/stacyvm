@@ -209,6 +209,47 @@ func TestAdminAuditLogs(t *testing.T) {
 	}
 }
 
+func TestOperationAuditLogs(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	if err := s.CreateOperationAudit(ctx, &OperationAuditRecord{
+		Actor:     "owner-a",
+		Action:    "file.write",
+		SandboxID: "sb-00000003",
+		Resource:  "/workspace/app.py",
+		Provider:  "mock",
+		Status:    "success",
+		Detail:    "mode=0644",
+		CreatedAt: now,
+	}); err != nil {
+		t.Fatalf("create operation audit: %v", err)
+	}
+	if err := s.CreateOperationAudit(ctx, &OperationAuditRecord{
+		Actor:     "owner-b",
+		Action:    "exec",
+		SandboxID: "sb-00000004",
+		Provider:  "mock",
+		Status:    "failure",
+		Detail:    "exit=1",
+		CreatedAt: now.Add(time.Second),
+	}); err != nil {
+		t.Fatalf("create second operation audit: %v", err)
+	}
+
+	records, err := s.ListOperationAudit(ctx, OperationAuditQuery{Limit: 10, Action: "file.write", SandboxID: "sb-00000003"})
+	if err != nil {
+		t.Fatalf("list operation audit: %v", err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("expected 1 operation audit record, got %d", len(records))
+	}
+	if records[0].Actor != "owner-a" || records[0].Resource != "/workspace/app.py" {
+		t.Fatalf("unexpected operation audit record: %+v", records[0])
+	}
+}
+
 func TestProviderConfigs(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()

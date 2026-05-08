@@ -134,6 +134,27 @@ type AdminAuditQuery struct {
 	PathLike string
 }
 
+type OperationAuditRecord struct {
+	ID        int64     `json:"id"`
+	Actor     string    `json:"actor"`
+	Action    string    `json:"action"`
+	SandboxID string    `json:"sandbox_id"`
+	Resource  string    `json:"resource"`
+	Provider  string    `json:"provider"`
+	Status    string    `json:"status"`
+	Detail    string    `json:"detail"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type OperationAuditQuery struct {
+	Limit     int
+	Actor     string
+	Action    string
+	SandboxID string
+	Resource  string
+	Status    string
+}
+
 // Store defines the persistence interface.
 type Store interface {
 	// Sandbox CRUD
@@ -157,6 +178,10 @@ type Store interface {
 	CreateAdminAudit(ctx context.Context, rec *AdminAuditRecord) error
 	ListAdminAudit(ctx context.Context, query AdminAuditQuery) ([]*AdminAuditRecord, error)
 	DeleteAdminAuditBefore(ctx context.Context, before time.Time) (int64, error)
+
+	// Operation audit
+	CreateOperationAudit(ctx context.Context, rec *OperationAuditRecord) error
+	ListOperationAudit(ctx context.Context, query OperationAuditQuery) ([]*OperationAuditRecord, error)
 
 	// Exec logs
 	CreateExecLog(ctx context.Context, log *ExecLogRecord) error

@@ -997,6 +997,88 @@ func TestManager_WriteAndReadFile(t *testing.T) {
 	}
 }
 
+func TestManager_PooledScopedPathRejectsTraversal(t *testing.T) {
+	m := setupManager(t)
+	sb := &Sandbox{ID: "sb-pool", VMID: "vm-shared"}
+
+	for _, path := range []string{
+		"../../etc/passwd",
+		"../sb-other/secret.txt",
+		"/../../../root/.ssh/id_rsa",
+		"/workspace/../../../etc/shadow",
+	} {
+		if got, err := m.scopedPathForOperation(sb, path); err == nil {
+			t.Fatalf("scopedPathForOperation(%q) = %q, want traversal error", path, got)
+		}
+	}
+}
+
+func TestManager_FileOperationsRejectPooledTraversal(t *testing.T) {
+	m := setupManager(t)
+	ctx := context.Background()
+	sb := &Sandbox{ID: "sb-pool", VMID: "vm-shared", Provider: "mock", OwnerID: "owner-a"}
+
+	m.mu.Lock()
+	m.sandboxes[sb.ID] = sb
+	m.mu.Unlock()
+
+	cases := []struct {
+		name string
+		run  func() error
+	}{
+		{"write", func() error { return m.WriteFile(ctx, sb.ID, FileWriteRequest{Path: "../../escape.txt", Content: "x"}) }},
+		{"read", func() error { _, err := m.ReadFile(ctx, sb.ID, "../../escape.txt"); return err }},
+		{"list", func() error { _, err := m.ListFiles(ctx, sb.ID, "../../"); return err }},
+		{"delete", func() error { return m.DeleteFile(ctx, sb.ID, FileDeleteRequest{Path: "../../escape.txt"}) }},
+		{"move_old", func() error {
+			return m.MoveFile(ctx, sb.ID, FileMoveRequest{OldPath: "../../escape.txt", NewPath: "ok.txt"})
+		}},
+		{"move_new", func() error {
+			return m.MoveFile(ctx, sb.ID, FileMoveRequest{OldPath: "ok.txt", NewPath: "../../escape.txt"})
+		}},
+		{"chmod", func() error { return m.ChmodFile(ctx, sb.ID, FileChmodRequest{Path: "../../escape.txt", Mode: "0644"}) }},
+		{"stat", func() error { _, err := m.StatFile(ctx, sb.ID, "../../escape.txt"); return err }},
+		{"glob", func() error { _, err := m.GlobFiles(ctx, sb.ID, "../../*"); return err }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := tc.run(); !errors.Is(err, ErrInvalidInput) {
+				t.Fatalf("expected ErrInvalidInput, got %v", err)
+			}
+		})
+	}
+}
+
+func TestManager_OperationAuditForExecAndFile(t *testing.T) {
+	m := setupManager(t)
+	ctx := context.Background()
+
+	sb, _ := m.Spawn(ctx, SpawnRequest{Image: "alpine:latest", OwnerID: "owner-a"})
+	if _, err := m.Exec(ctx, sb.ID, ExecRequest{Command: "echo audit"}); err != nil {
+		t.Fatalf("exec: %v", err)
+	}
+	if err := m.WriteFile(ctx, sb.ID, FileWriteRequest{Path: "/workspace/audit.txt", Content: "ok"}); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	records, err := m.store.ListOperationAudit(ctx, store.OperationAuditQuery{SandboxID: sb.ID, Limit: 20})
+	if err != nil {
+		t.Fatalf("list operation audit: %v", err)
+	}
+	seen := map[string]bool{}
+	for _, rec := range records {
+		seen[rec.Action] = true
+		if rec.Actor != "owner-a" {
+			t.Fatalf("actor = %q, want owner-a in record %+v", rec.Actor, rec)
+		}
+	}
+	for _, action := range []string{"sandbox.spawn", "exec", "file.write"} {
+		if !seen[action] {
+			t.Fatalf("missing audit action %s in %+v", action, records)
+		}
+	}
+}
+
 func TestManager_Destroy(t *testing.T) {
 	m := setupManager(t)
 	ctx := context.Background()

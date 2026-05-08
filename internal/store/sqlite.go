@@ -345,6 +345,75 @@ func (s *SQLiteStore) DeleteAdminAuditBefore(ctx context.Context, before time.Ti
 	return res.RowsAffected()
 }
 
+func (s *SQLiteStore) CreateOperationAudit(ctx context.Context, rec *OperationAuditRecord) error {
+	if rec.CreatedAt.IsZero() {
+		rec.CreatedAt = time.Now().UTC()
+	}
+	res, err := s.db.ExecContext(ctx, `
+		INSERT INTO operation_audit_logs (actor, action, sandbox_id, resource, provider, status, detail, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		rec.Actor, rec.Action, rec.SandboxID, rec.Resource, rec.Provider, rec.Status, rec.Detail, rec.CreatedAt.UTC(),
+	)
+	if err != nil {
+		return err
+	}
+	rec.ID, _ = res.LastInsertId()
+	return nil
+}
+
+func (s *SQLiteStore) ListOperationAudit(ctx context.Context, query OperationAuditQuery) ([]*OperationAuditRecord, error) {
+	if query.Limit <= 0 {
+		query.Limit = 100
+	}
+	if query.Limit > 500 {
+		query.Limit = 500
+	}
+
+	clauses := []string{"1=1"}
+	args := make([]interface{}, 0, 7)
+	if query.Actor != "" {
+		clauses = append(clauses, "actor = ?")
+		args = append(args, query.Actor)
+	}
+	if query.Action != "" {
+		clauses = append(clauses, "action = ?")
+		args = append(args, query.Action)
+	}
+	if query.SandboxID != "" {
+		clauses = append(clauses, "sandbox_id = ?")
+		args = append(args, query.SandboxID)
+	}
+	if query.Resource != "" {
+		clauses = append(clauses, "resource = ?")
+		args = append(args, query.Resource)
+	}
+	if query.Status != "" {
+		clauses = append(clauses, "status = ?")
+		args = append(args, query.Status)
+	}
+	args = append(args, query.Limit)
+
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, actor, action, sandbox_id, resource, provider, status, detail, created_at
+		FROM operation_audit_logs WHERE `+strings.Join(clauses, " AND ")+`
+		ORDER BY created_at DESC, id DESC LIMIT ?`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var records []*OperationAuditRecord
+	for rows.Next() {
+		rec := &OperationAuditRecord{}
+		if err := rows.Scan(&rec.ID, &rec.Actor, &rec.Action, &rec.SandboxID, &rec.Resource,
+			&rec.Provider, &rec.Status, &rec.Detail, &rec.CreatedAt); err != nil {
+			return nil, err
+		}
+		records = append(records, rec)
+	}
+	return records, rows.Err()
+}
+
 // --- Exec Logs ---
 
 func (s *SQLiteStore) CreateExecLog(ctx context.Context, log *ExecLogRecord) error {

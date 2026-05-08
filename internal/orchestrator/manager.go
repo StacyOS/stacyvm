@@ -452,6 +452,7 @@ func (m *Manager) Spawn(ctx context.Context, req SpawnRequest) (*Sandbox, error)
 		Type:      EventSandboxRunning,
 		SandboxID: id,
 	})
+	m.auditOperation(ctx, "sandbox.spawn", sb, sb.ID, sb.Image, "success", "state=running")
 
 	m.logger.Info().Str("sandbox", id).Str("provider", prov.Name()).Str("image", image).Msg("sandbox spawned")
 	return sb, nil
@@ -526,6 +527,7 @@ func (m *Manager) spawnPooled(ctx context.Context, prov providers.Provider, req 
 
 	m.events.Publish(Event{Type: EventSandboxCreated, SandboxID: sandboxID})
 	m.events.Publish(Event{Type: EventSandboxRunning, SandboxID: sandboxID})
+	m.auditOperation(ctx, "sandbox.spawn", sb, sb.ID, sb.Image, "success", "state=running pooled=true")
 
 	m.logger.Info().
 		Str("sandbox", sandboxID).
@@ -593,10 +595,12 @@ func (m *Manager) Exec(ctx context.Context, sandboxID string, req ExecRequest) (
 		if execCtx.Err() == context.DeadlineExceeded {
 			metricsErr = providers.ExecTimeoutError(sandboxID)
 			m.publishOperationFailure(EventExecTimeout, sandboxID, OperationExec, metricsProvider, metricsErr)
+			m.auditOperation(ctx, "exec", sb, sandboxID, req.Command, "failure", metricsErr.Error())
 			return nil, metricsErr
 		}
 		metricsErr = err
 		m.publishOperationFailure(EventExecFailed, sandboxID, OperationExec, metricsProvider, err)
+		m.auditOperation(ctx, "exec", sb, sandboxID, req.Command, "failure", err.Error())
 		return nil, fmt.Errorf("exec: %w", err)
 	}
 	duration := time.Since(execStart)
@@ -623,6 +627,7 @@ func (m *Manager) Exec(ctx context.Context, sandboxID string, req ExecRequest) (
 		Type:      EventExecCompleted,
 		SandboxID: sandboxID,
 	})
+	m.auditOperation(ctx, "exec", sb, sandboxID, req.Command, "success", fmt.Sprintf("exit=%d duration=%s mode=%s", result.ExitCode, duration.String(), req.Mode))
 
 	return execResult, nil
 }
@@ -763,10 +768,17 @@ func (m *Manager) WriteFile(ctx context.Context, sandboxID string, req FileWrite
 		mode = "0644"
 	}
 
-	path := m.scopedPath(sb, req.Path)
+	path, err := m.scopedPathForOperation(sb, req.Path)
+	if err != nil {
+		metricsErr = err
+		m.publishOperationFailure(EventOperationFailed, sandboxID, OperationFileWrite, metricsProvider, err)
+		m.auditOperation(ctx, "file.write", sb, sandboxID, req.Path, "failure", err.Error())
+		return err
+	}
 	if err := prov.WriteFile(ctx, m.resolveVMID(sb), path, strings.NewReader(req.Content), mode); err != nil {
 		metricsErr = err
 		m.publishOperationFailure(EventOperationFailed, sandboxID, OperationFileWrite, metricsProvider, err)
+		m.auditOperation(ctx, "file.write", sb, sandboxID, req.Path, "failure", err.Error())
 		return fmt.Errorf("writing file: %w", err)
 	}
 
@@ -774,6 +786,7 @@ func (m *Manager) WriteFile(ctx context.Context, sandboxID string, req FileWrite
 		Type:      EventFileWritten,
 		SandboxID: sandboxID,
 	})
+	m.auditOperation(ctx, "file.write", sb, sandboxID, req.Path, "success", "mode="+mode)
 	return nil
 }
 
@@ -793,10 +806,18 @@ func (m *Manager) ReadFile(ctx context.Context, sandboxID string, path string) (
 	}
 	metricsProvider = sb.Provider
 
-	rc, err := prov.ReadFile(ctx, m.resolveVMID(sb), m.scopedPath(sb, path))
+	scopedPath, err := m.scopedPathForOperation(sb, path)
 	if err != nil {
 		metricsErr = err
 		m.publishOperationFailure(EventOperationFailed, sandboxID, OperationFileRead, metricsProvider, err)
+		m.auditOperation(ctx, "file.read", sb, sandboxID, path, "failure", err.Error())
+		return nil, err
+	}
+	rc, err := prov.ReadFile(ctx, m.resolveVMID(sb), scopedPath)
+	if err != nil {
+		metricsErr = err
+		m.publishOperationFailure(EventOperationFailed, sandboxID, OperationFileRead, metricsProvider, err)
+		m.auditOperation(ctx, "file.read", sb, sandboxID, path, "failure", err.Error())
 		return nil, fmt.Errorf("reading file: %w", err)
 	}
 	defer rc.Close()
@@ -812,6 +833,7 @@ func (m *Manager) ReadFile(ctx context.Context, sandboxID string, path string) (
 		Type:      EventFileRead,
 		SandboxID: sandboxID,
 	})
+	m.auditOperation(ctx, "file.read", sb, sandboxID, path, "success", fmt.Sprintf("bytes=%d", len(buf)))
 	return buf, nil
 }
 
@@ -831,10 +853,18 @@ func (m *Manager) ListFiles(ctx context.Context, sandboxID string, path string) 
 	}
 	metricsProvider = sb.Provider
 
-	pFiles, err := prov.ListFiles(ctx, m.resolveVMID(sb), m.scopedPath(sb, path))
+	scopedPath, err := m.scopedPathForOperation(sb, path)
 	if err != nil {
 		metricsErr = err
 		m.publishOperationFailure(EventOperationFailed, sandboxID, OperationFileList, metricsProvider, err)
+		m.auditOperation(ctx, "file.list", sb, sandboxID, path, "failure", err.Error())
+		return nil, err
+	}
+	pFiles, err := prov.ListFiles(ctx, m.resolveVMID(sb), scopedPath)
+	if err != nil {
+		metricsErr = err
+		m.publishOperationFailure(EventOperationFailed, sandboxID, OperationFileList, metricsProvider, err)
+		m.auditOperation(ctx, "file.list", sb, sandboxID, path, "failure", err.Error())
 		return nil, err
 	}
 
@@ -848,6 +878,7 @@ func (m *Manager) ListFiles(ctx context.Context, sandboxID string, path string) 
 			ModTime: f.ModTime,
 		}
 	}
+	m.auditOperation(ctx, "file.list", sb, sandboxID, path, "success", fmt.Sprintf("count=%d", len(files)))
 	return files, nil
 }
 
@@ -867,12 +898,21 @@ func (m *Manager) DeleteFile(ctx context.Context, sandboxID string, req FileDele
 	}
 	metricsProvider = sb.Provider
 
-	path := m.scopedPath(sb, req.Path)
+	path, err := m.scopedPathForOperation(sb, req.Path)
+	if err != nil {
+		metricsErr = err
+		m.publishOperationFailure(EventOperationFailed, sandboxID, OperationFileDelete, metricsProvider, err)
+		m.auditOperation(ctx, "file.delete", sb, sandboxID, req.Path, "failure", err.Error())
+		return err
+	}
 	metricsErr = prov.DeleteFile(ctx, m.resolveVMID(sb), path, req.Recursive)
 	if metricsErr != nil {
 		m.publishOperationFailure(EventOperationFailed, sandboxID, OperationFileDelete, metricsProvider, metricsErr)
+		m.auditOperation(ctx, "file.delete", sb, sandboxID, req.Path, "failure", metricsErr.Error())
+		return metricsErr
 	}
-	return metricsErr
+	m.auditOperation(ctx, "file.delete", sb, sandboxID, req.Path, "success", fmt.Sprintf("recursive=%t", req.Recursive))
+	return nil
 }
 
 func (m *Manager) MoveFile(ctx context.Context, sandboxID string, req FileMoveRequest) error {
@@ -891,13 +931,28 @@ func (m *Manager) MoveFile(ctx context.Context, sandboxID string, req FileMoveRe
 	}
 	metricsProvider = sb.Provider
 
-	oldPath := m.scopedPath(sb, req.OldPath)
-	newPath := m.scopedPath(sb, req.NewPath)
+	oldPath, err := m.scopedPathForOperation(sb, req.OldPath)
+	if err != nil {
+		metricsErr = err
+		m.publishOperationFailure(EventOperationFailed, sandboxID, OperationFileMove, metricsProvider, err)
+		m.auditOperation(ctx, "file.move", sb, sandboxID, req.OldPath, "failure", err.Error())
+		return err
+	}
+	newPath, err := m.scopedPathForOperation(sb, req.NewPath)
+	if err != nil {
+		metricsErr = err
+		m.publishOperationFailure(EventOperationFailed, sandboxID, OperationFileMove, metricsProvider, err)
+		m.auditOperation(ctx, "file.move", sb, sandboxID, req.NewPath, "failure", err.Error())
+		return err
+	}
 	metricsErr = prov.MoveFile(ctx, m.resolveVMID(sb), oldPath, newPath)
 	if metricsErr != nil {
 		m.publishOperationFailure(EventOperationFailed, sandboxID, OperationFileMove, metricsProvider, metricsErr)
+		m.auditOperation(ctx, "file.move", sb, sandboxID, req.OldPath+" -> "+req.NewPath, "failure", metricsErr.Error())
+		return metricsErr
 	}
-	return metricsErr
+	m.auditOperation(ctx, "file.move", sb, sandboxID, req.OldPath+" -> "+req.NewPath, "success", "")
+	return nil
 }
 
 func (m *Manager) ChmodFile(ctx context.Context, sandboxID string, req FileChmodRequest) error {
@@ -916,12 +971,21 @@ func (m *Manager) ChmodFile(ctx context.Context, sandboxID string, req FileChmod
 	}
 	metricsProvider = sb.Provider
 
-	path := m.scopedPath(sb, req.Path)
+	path, err := m.scopedPathForOperation(sb, req.Path)
+	if err != nil {
+		metricsErr = err
+		m.publishOperationFailure(EventOperationFailed, sandboxID, OperationFileChmod, metricsProvider, err)
+		m.auditOperation(ctx, "file.chmod", sb, sandboxID, req.Path, "failure", err.Error())
+		return err
+	}
 	metricsErr = prov.ChmodFile(ctx, m.resolveVMID(sb), path, req.Mode)
 	if metricsErr != nil {
 		m.publishOperationFailure(EventOperationFailed, sandboxID, OperationFileChmod, metricsProvider, metricsErr)
+		m.auditOperation(ctx, "file.chmod", sb, sandboxID, req.Path, "failure", metricsErr.Error())
+		return metricsErr
 	}
-	return metricsErr
+	m.auditOperation(ctx, "file.chmod", sb, sandboxID, req.Path, "success", "mode="+req.Mode)
+	return nil
 }
 
 func (m *Manager) StatFile(ctx context.Context, sandboxID string, path string) (*FileInfo, error) {
@@ -940,13 +1004,21 @@ func (m *Manager) StatFile(ctx context.Context, sandboxID string, path string) (
 	}
 	metricsProvider = sb.Provider
 
-	scopedPath := m.scopedPath(sb, path)
+	scopedPath, err := m.scopedPathForOperation(sb, path)
+	if err != nil {
+		metricsErr = err
+		m.publishOperationFailure(EventOperationFailed, sandboxID, OperationFileStat, metricsProvider, err)
+		m.auditOperation(ctx, "file.stat", sb, sandboxID, path, "failure", err.Error())
+		return nil, err
+	}
 	fi, err := prov.StatFile(ctx, m.resolveVMID(sb), scopedPath)
 	if err != nil {
 		metricsErr = err
 		m.publishOperationFailure(EventOperationFailed, sandboxID, OperationFileStat, metricsProvider, err)
+		m.auditOperation(ctx, "file.stat", sb, sandboxID, path, "failure", err.Error())
 		return nil, err
 	}
+	m.auditOperation(ctx, "file.stat", sb, sandboxID, path, "success", "")
 	return &FileInfo{
 		Path:    fi.Path,
 		Size:    fi.Size,
@@ -972,12 +1044,21 @@ func (m *Manager) GlobFiles(ctx context.Context, sandboxID string, pattern strin
 	}
 	metricsProvider = sb.Provider
 
-	scopedPattern := m.scopedPath(sb, pattern)
+	scopedPattern, err := m.scopedPathForOperation(sb, pattern)
+	if err != nil {
+		metricsErr = err
+		m.publishOperationFailure(EventOperationFailed, sandboxID, OperationFileGlob, metricsProvider, err)
+		m.auditOperation(ctx, "file.glob", sb, sandboxID, pattern, "failure", err.Error())
+		return nil, err
+	}
 	matches, err := prov.GlobFiles(ctx, m.resolveVMID(sb), scopedPattern)
 	metricsErr = err
 	if err != nil {
 		m.publishOperationFailure(EventOperationFailed, sandboxID, OperationFileGlob, metricsProvider, err)
+		m.auditOperation(ctx, "file.glob", sb, sandboxID, pattern, "failure", err.Error())
+		return matches, err
 	}
+	m.auditOperation(ctx, "file.glob", sb, sandboxID, pattern, "success", fmt.Sprintf("count=%d", len(matches)))
 	return matches, err
 }
 
@@ -992,6 +1073,50 @@ func (m *Manager) scopedPath(sb *Sandbox, path string) string {
 		return base
 	}
 	return cleaned
+}
+
+func (m *Manager) scopedPathForOperation(sb *Sandbox, path string) (string, error) {
+	if strings.TrimSpace(path) == "" {
+		return "", InvalidInputError("path is required")
+	}
+	if sb.VMID == "" {
+		return path, nil
+	}
+	base := "/workspace/" + sb.ID
+	cleaned := filepath.Clean(filepath.Join(base, path))
+	if !strings.HasPrefix(cleaned, base+"/") && cleaned != base {
+		return "", InvalidInputError(fmt.Sprintf("path %q escapes sandbox workspace", path))
+	}
+	return cleaned, nil
+}
+
+func (m *Manager) auditOperation(ctx context.Context, action string, sb *Sandbox, sandboxID, resource, status, detail string) {
+	rec := &store.OperationAuditRecord{
+		Action:    action,
+		SandboxID: sandboxID,
+		Resource:  resource,
+		Status:    status,
+		Detail:    truncateAuditDetail(detail),
+		CreatedAt: time.Now().UTC(),
+	}
+	if sb != nil {
+		rec.Actor = sb.OwnerID
+		rec.Provider = sb.Provider
+		if rec.SandboxID == "" {
+			rec.SandboxID = sb.ID
+		}
+	}
+	if err := m.store.CreateOperationAudit(ctx, rec); err != nil {
+		m.logger.Debug().Err(err).Str("action", action).Str("sandbox", sandboxID).Msg("operation audit write failed")
+	}
+}
+
+func truncateAuditDetail(detail string) string {
+	const maxAuditDetailLen = 2048
+	if len(detail) <= maxAuditDetailLen {
+		return detail
+	}
+	return detail[:maxAuditDetailLen]
 }
 
 // resolveVMID returns the VM sandbox ID for provider calls.
@@ -1726,8 +1851,11 @@ func (m *Manager) Destroy(ctx context.Context, id string) error {
 		metricsErr = m.destroyPooled(ctx, id, sb)
 		if metricsErr != nil {
 			m.publishOperationFailure(EventOperationFailed, id, OperationDestroy, metricsProvider, metricsErr)
+			m.auditOperation(ctx, "sandbox.destroy", sb, id, "", "failure", metricsErr.Error())
+			return metricsErr
 		}
-		return metricsErr
+		m.auditOperation(ctx, "sandbox.destroy", sb, id, "", "success", "pooled=true")
+		return nil
 	}
 
 	prov, err := m.getProvider(id)
@@ -1738,6 +1866,7 @@ func (m *Manager) Destroy(ctx context.Context, id string) error {
 		delete(m.sandboxes, id)
 		m.mu.Unlock()
 		m.notifySpawnCapacity()
+		m.auditOperation(ctx, "sandbox.destroy", sb, id, "", "success", "provider_unavailable=true")
 		return nil
 	}
 	if sb != nil {
@@ -1764,6 +1893,7 @@ func (m *Manager) Destroy(ctx context.Context, id string) error {
 	})
 	m.notifySpawnCapacity()
 
+	m.auditOperation(ctx, "sandbox.destroy", sb, id, "", "success", "")
 	m.logger.Info().Str("sandbox", id).Msg("sandbox destroyed")
 	return nil
 }

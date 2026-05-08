@@ -14,6 +14,10 @@ This checkpoint starts the Phase 7 release-candidate hardening track.
 ### Changed
 
 - Made exec command mode explicit with backwards-compatible `shell` mode and safer `argv` mode.
+- Added operation audit persistence for sandbox lifecycle, exec, and file operations.
+- Tightened pooled file path traversal handling and expanded traversal tests across file operations.
+- Added runtime host certification script and documentation.
+- Added remediation guidance to `stacyvm doctor` output.
 
 ## Phase 6 Security Governance - 2026-05-08
 

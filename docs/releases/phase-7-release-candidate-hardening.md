@@ -43,6 +43,14 @@ Phase 7 starts the release-candidate hardening track. The goal is to move StacyV
 - Made `stacyvm exec` use argv mode by default, with `--shell` available for shell expressions.
 - Added tests that verify argv payloads are treated literally.
 
+### Final Hardening
+
+- Added persisted operation audit records for sandbox lifecycle, exec, and file operations.
+- Tightened pooled file path traversal behavior to reject workspace escapes instead of silently clamping paths.
+- Expanded traversal tests across write, read, list, delete, move, chmod, stat, and glob operations.
+- Added `scripts/certify-runtime.sh` and [runtime-certification.md](../runtime-certification.md) for Docker, gVisor/Kata, Firecracker, and PRoot host checks.
+- Added remediation guidance to failing and warning `stacyvm doctor` checks.
+
 ## Verification
 
 ```sh
@@ -50,8 +58,9 @@ go test ./cmd/stacyvm
 go test ./internal/providers
 go test ./...
 npm run build
+scripts/check-swagger.sh
 ```
 
-## Next Phase 7 Direction
+## Phase 7 Completion Status
 
-The next slices should expand file path traversal coverage and add persisted audit coverage for sandbox lifecycle and file/exec operations.
+Phase 7 is complete from a codebase and CI perspective. Remaining production signoff is host-gated: run `stacyvm doctor --production`, `scripts/certify-runtime.sh`, and live provider conformance on the actual Linux/Docker/KVM/PRoot hosts selected for release.

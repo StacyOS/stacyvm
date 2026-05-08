@@ -28,11 +28,11 @@ This threat model is the Phase 7 baseline. It focuses on StacyVM as a self-hoste
 |---|---|---|
 | Regular API key accesses admin routes | Admin key separation and `admin:*` scope enforcement | Add OIDC/RBAC and per-route policy tests |
 | Missing operator attribution | `X-User-ID` and admin fallback attribution | OIDC actor claims |
-| Sandbox file path traversal | Docker/PRoot tests and provider path normalization | Expand tests across all file APIs/providers |
+| Sandbox file path traversal | Manager pool scoping rejects traversal; Docker/PRoot/provider tests cover traversal cases | Continue platform conformance on live runtimes |
 | Shell command injection | Explicit shell/argv execution modes; argv mode avoids shell interpolation | Expand SDK examples and conformance tests for every provider |
 | Docker container escape | Dropped caps/seccomp/resource config supported | Harden defaults and certify gVisor/Kata |
 | Stale runtime after restart | Startup reconciliation | Distributed leases for multi-worker |
-| Audit gaps | Admin audit persisted | Persist sandbox lifecycle, exec, file, env, and registry audit events |
+| Audit gaps | Admin audit and operation audit persisted for sandbox lifecycle, exec, and file operations | Extend operation audit to every env/registry mutation route |
 | Live preview exposure | Traefik label routing and docs | Host allowlist and preview auth options |
 | Secret leakage in diagnostics | Redaction in diagnostics | Support bundle redaction tests |
 | Single-node database loss | SQLite backup docs | Backup/restore test automation |
@@ -41,9 +41,9 @@ This threat model is the Phase 7 baseline. It focuses on StacyVM as a self-hoste
 
 - Make production misconfiguration visible through `stacyvm doctor --production`.
 - Remove ambiguous command execution semantics before recommending public workloads.
-- Increase file API path traversal coverage.
-- Extend persisted audit beyond admin routes.
-- Convert runtime conformance docs into repeatable host checks.
+- Increase file API path traversal coverage. Done for manager scoping and provider boundaries.
+- Extend persisted audit beyond admin routes. Done for sandbox lifecycle, exec, and file operations.
+- Convert runtime conformance docs into repeatable host checks. Done with `scripts/certify-runtime.sh`.
 
 ## Non-Goals For Phase 7
 

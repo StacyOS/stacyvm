@@ -15,9 +15,9 @@ This checklist tracks the Phase 7 release-candidate hardening work needed before
 
 - `stacyvm doctor` reports actionable local and production diagnostics.
 - Docker command execution has explicit shell and argv semantics. Done in Phase 7 slice 2.
-- File APIs have path traversal tests across supported providers.
-- Sensitive operations are covered by persisted audit records.
-- Runtime certification scripts exist for Docker, gVisor, Kata, Firecracker, and PRoot host checks.
+- File APIs have path traversal tests across manager scoping and provider boundaries. Done in Phase 7 final cleanup.
+- Sensitive operations are covered by persisted operation audit records. Done in Phase 7 final cleanup.
+- Runtime certification scripts exist for Docker, gVisor, Kata, Firecracker, and PRoot host checks. Done in Phase 7 final cleanup.
 - Threat model is documented for runtime, API, admin, live-preview, pool, and registry surfaces.
 - Release notes describe verified CI and known platform caveats.
 
@@ -29,8 +29,8 @@ This checklist tracks the Phase 7 release-candidate hardening work needed before
 | Web build | Passing | CI runs `npm run build`. |
 | SDK checks | Partial | TypeScript builds and Python imports; full SDK behavioral parity tests still need expansion. |
 | Deployment smoke | Passing | Mock-provider smoke is in CI. Docker live host certification remains external. |
-| Runtime conformance | Partial | Harness exists; Firecracker/PRoot are platform-gated. |
-| Security posture | Partial | Admin governance and explicit exec modes are implemented; OIDC/JWT implementation remains. |
+| Runtime conformance | Partial | Harness and host certification script exist; Firecracker/PRoot remain platform-gated. |
+| Security posture | Partial | Admin governance, operation audit, path traversal checks, and explicit exec modes are implemented; OIDC/JWT implementation remains. |
 | Release automation | Present | GHCR and binary workflows exist; signed artifacts are not yet implemented. |
 
 ## Required Before Single-Node Production
