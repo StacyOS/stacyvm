@@ -695,7 +695,17 @@ GET /api/v1/diagnostics
     "spawn_queue_depth": 3,
     "max_spawn_queue": 100,
     "spawn_queue_timeout": "30s",
-    "admission_control": "single_node"
+    "admission_control": "single_node",
+    "spawn_queued_total": 18,
+    "spawn_dequeued_total": 16,
+    "spawn_queue_timeouts": 2,
+    "spawn_queue_wait_count": 18,
+    "spawn_queue_wait_total": "1m42s",
+    "spawn_queue_wait_max": "12s",
+    "spawn_queue_wait_avg": "5.666s",
+    "spawn_queue_wait_total_ms": 102000,
+    "spawn_queue_wait_max_ms": 12000,
+    "spawn_queue_wait_avg_ms": 5666
   },
   "quotas": {
     "total": 8,
@@ -783,7 +793,17 @@ GET /api/v1/metrics
     "spawn_queue_depth": 3,
     "max_spawn_queue": 100,
     "spawn_queue_timeout": "30s",
-    "admission_control": "single_node"
+    "admission_control": "single_node",
+    "spawn_queued_total": 18,
+    "spawn_dequeued_total": 16,
+    "spawn_queue_timeouts": 2,
+    "spawn_queue_wait_count": 18,
+    "spawn_queue_wait_total": "1m42s",
+    "spawn_queue_wait_max": "12s",
+    "spawn_queue_wait_avg": "5.666s",
+    "spawn_queue_wait_total_ms": 102000,
+    "spawn_queue_wait_max_ms": 12000,
+    "spawn_queue_wait_avg_ms": 5666
   },
   "quotas": {
     "total": 8,
@@ -834,6 +854,7 @@ stacyvm_uptime_seconds 7980
 # TYPE stacyvm_provider_healthy gauge
 stacyvm_provider_healthy{provider="docker",default="true"} 1
 stacyvm_spawn_queue_depth 3
+stacyvm_spawn_queue_wait_milliseconds_count 18
 stacyvm_owner_quotas_total 8
 stacyvm_rate_limit_blocked_total 27
 stacyvm_operation_success_total{operation="exec",provider="docker"} 482

@@ -677,6 +677,13 @@ func TestManager_SpawnQueueWaitsForCapacity(t *testing.T) {
 	events := m.events.History(20)
 	assertEventType(t, events, EventSpawnQueued)
 	assertEventType(t, events, EventSpawnDequeued)
+	status := m.SchedulerStatus()
+	if status.SpawnQueuedTotal != 1 || status.SpawnDequeuedTotal != 1 || status.SpawnQueueWaitCount != 1 {
+		t.Fatalf("unexpected queue status: %+v", status)
+	}
+	if status.SpawnQueueWaitTotalMS <= 0 || status.SpawnQueueWaitMaxMS <= 0 || status.SpawnQueueWaitAvgMS <= 0 {
+		t.Fatalf("expected positive queue wait metrics: %+v", status)
+	}
 }
 
 func TestManager_SpawnQueueTimesOut(t *testing.T) {
@@ -702,6 +709,10 @@ func TestManager_SpawnQueueTimesOut(t *testing.T) {
 		t.Fatalf("expected queue timeout resource limit, got %v", err)
 	}
 	assertEventType(t, m.events.History(20), EventSpawnQueueTimeout)
+	status := m.SchedulerStatus()
+	if status.SpawnQueuedTotal != 1 || status.SpawnQueueTimeouts != 1 || status.SpawnQueueWaitCount != 1 {
+		t.Fatalf("unexpected timeout queue status: %+v", status)
+	}
 }
 
 func TestManager_SchedulerStatus(t *testing.T) {
@@ -723,6 +734,9 @@ func TestManager_SchedulerStatus(t *testing.T) {
 	}
 	if status.SpawnQueueDepth != 0 {
 		t.Fatalf("queue depth = %d, want 0", status.SpawnQueueDepth)
+	}
+	if status.SpawnQueuedTotal != 0 || status.SpawnQueueWaitTotal != "0s" || status.SpawnQueueWaitAvg != "0s" {
+		t.Fatalf("unexpected empty queue metrics: %+v", status)
 	}
 }
 

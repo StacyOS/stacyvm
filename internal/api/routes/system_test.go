@@ -232,6 +232,8 @@ func TestSystemRoutes_PrometheusMetrics(t *testing.T) {
 		"stacyvm_provider_healthy",
 		"stacyvm_provider_health_latency_milliseconds",
 		"stacyvm_spawn_queue_depth",
+		"stacyvm_spawn_queue_enqueued_total",
+		"stacyvm_spawn_queue_wait_milliseconds_count",
 		"stacyvm_owner_quotas_total",
 		`type="max_sandboxes"`,
 		"stacyvm_rate_limit_allowed_total",

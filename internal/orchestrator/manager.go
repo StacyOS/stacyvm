@@ -31,6 +31,7 @@ type Manager struct {
 	queueMu      sync.Mutex
 	queueWaiters int
 	capacityCh   chan struct{}
+	queueStats   spawnQueueStats
 
 	defaultTTL    time.Duration
 	defaultImage  string
@@ -45,6 +46,15 @@ type Manager struct {
 
 	ctx    context.Context
 	cancel context.CancelFunc
+}
+
+type spawnQueueStats struct {
+	queuedTotal   uint64
+	dequeuedTotal uint64
+	timeoutTotal  uint64
+	waitCount     uint64
+	waitTotal     time.Duration
+	waitMax       time.Duration
 }
 
 type ManagerConfig struct {
@@ -991,12 +1001,26 @@ func (m *Manager) Limits() OperationalLimitsInfo {
 func (m *Manager) SchedulerStatus() SchedulerStatus {
 	m.queueMu.Lock()
 	defer m.queueMu.Unlock()
+	waitAvg := time.Duration(0)
+	if m.queueStats.waitCount > 0 {
+		waitAvg = time.Duration(int64(m.queueStats.waitTotal) / int64(m.queueStats.waitCount))
+	}
 	return SchedulerStatus{
-		SpawnOverflow:     m.limits.SpawnOverflow,
-		SpawnQueueDepth:   m.queueWaiters,
-		MaxSpawnQueue:     m.limits.MaxSpawnQueue,
-		SpawnQueueTimeout: m.limits.SpawnQueueTimeout.String(),
-		AdmissionControl:  "single_node",
+		SpawnOverflow:         m.limits.SpawnOverflow,
+		SpawnQueueDepth:       m.queueWaiters,
+		MaxSpawnQueue:         m.limits.MaxSpawnQueue,
+		SpawnQueueTimeout:     m.limits.SpawnQueueTimeout.String(),
+		AdmissionControl:      "single_node",
+		SpawnQueuedTotal:      m.queueStats.queuedTotal,
+		SpawnDequeuedTotal:    m.queueStats.dequeuedTotal,
+		SpawnQueueTimeouts:    m.queueStats.timeoutTotal,
+		SpawnQueueWaitCount:   m.queueStats.waitCount,
+		SpawnQueueWaitTotal:   m.queueStats.waitTotal.String(),
+		SpawnQueueWaitMax:     m.queueStats.waitMax.String(),
+		SpawnQueueWaitAvg:     waitAvg.String(),
+		SpawnQueueWaitTotalMS: m.queueStats.waitTotal.Milliseconds(),
+		SpawnQueueWaitMaxMS:   m.queueStats.waitMax.Milliseconds(),
+		SpawnQueueWaitAvgMS:   waitAvg.Milliseconds(),
 	}
 }
 
@@ -1211,9 +1235,11 @@ func (m *Manager) waitForSpawnCapacity(ctx context.Context, ownerID string, ttl 
 		return providers.ResourceLimitError(fmt.Sprintf("spawn queue full (%d)", m.limits.MaxSpawnQueue))
 	}
 	m.queueWaiters++
+	m.queueStats.queuedTotal++
 	depth := m.queueWaiters
 	capacityCh := m.capacityCh
 	m.queueMu.Unlock()
+	queuedAt := time.Now()
 
 	m.publishOperationalEvent(EventSpawnQueued, "", map[string]interface{}{
 		"operation": OperationSpawn,
@@ -1239,11 +1265,14 @@ func (m *Manager) waitForSpawnCapacity(ctx context.Context, ownerID string, ttl 
 		case <-waitCtx.Done():
 			if errors.Is(waitCtx.Err(), context.DeadlineExceeded) {
 				err := providers.ResourceLimitError(fmt.Sprintf("spawn queue timeout after %s", m.limits.SpawnQueueTimeout))
+				waitDuration := time.Since(queuedAt)
+				m.recordSpawnQueueTimeout(waitDuration)
 				m.publishOperationalEvent(EventSpawnQueueTimeout, "", map[string]interface{}{
 					"operation": OperationSpawn,
 					"provider":  provider,
 					"owner_id":  ownerID,
 					"error":     err.Error(),
+					"wait_ms":   waitDuration.Milliseconds(),
 				})
 				return err
 			}
@@ -1254,10 +1283,13 @@ func (m *Manager) waitForSpawnCapacity(ctx context.Context, ownerID string, ttl 
 				return err
 			}
 			if decision.Allowed {
+				waitDuration := time.Since(queuedAt)
+				m.recordSpawnDequeued(waitDuration)
 				m.publishOperationalEvent(EventSpawnDequeued, "", map[string]interface{}{
 					"operation": OperationSpawn,
 					"provider":  provider,
 					"owner_id":  ownerID,
+					"wait_ms":   waitDuration.Milliseconds(),
 				})
 				return nil
 			}
@@ -1268,6 +1300,28 @@ func (m *Manager) waitForSpawnCapacity(ctx context.Context, ownerID string, ttl 
 			capacityCh = m.capacityCh
 			m.queueMu.Unlock()
 		}
+	}
+}
+
+func (m *Manager) recordSpawnDequeued(waitDuration time.Duration) {
+	m.queueMu.Lock()
+	defer m.queueMu.Unlock()
+	m.queueStats.dequeuedTotal++
+	m.queueStats.waitCount++
+	m.queueStats.waitTotal += waitDuration
+	if waitDuration > m.queueStats.waitMax {
+		m.queueStats.waitMax = waitDuration
+	}
+}
+
+func (m *Manager) recordSpawnQueueTimeout(waitDuration time.Duration) {
+	m.queueMu.Lock()
+	defer m.queueMu.Unlock()
+	m.queueStats.timeoutTotal++
+	m.queueStats.waitCount++
+	m.queueStats.waitTotal += waitDuration
+	if waitDuration > m.queueStats.waitMax {
+		m.queueStats.waitMax = waitDuration
 	}
 }
 

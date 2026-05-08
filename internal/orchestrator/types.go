@@ -121,11 +121,21 @@ type OperationalLimitsInfo struct {
 }
 
 type SchedulerStatus struct {
-	SpawnOverflow     string `json:"spawn_overflow"`
-	SpawnQueueDepth   int    `json:"spawn_queue_depth"`
-	MaxSpawnQueue     int    `json:"max_spawn_queue"`
-	SpawnQueueTimeout string `json:"spawn_queue_timeout"`
-	AdmissionControl  string `json:"admission_control"`
+	SpawnOverflow         string `json:"spawn_overflow"`
+	SpawnQueueDepth       int    `json:"spawn_queue_depth"`
+	MaxSpawnQueue         int    `json:"max_spawn_queue"`
+	SpawnQueueTimeout     string `json:"spawn_queue_timeout"`
+	AdmissionControl      string `json:"admission_control"`
+	SpawnQueuedTotal      uint64 `json:"spawn_queued_total"`
+	SpawnDequeuedTotal    uint64 `json:"spawn_dequeued_total"`
+	SpawnQueueTimeouts    uint64 `json:"spawn_queue_timeouts"`
+	SpawnQueueWaitCount   uint64 `json:"spawn_queue_wait_count"`
+	SpawnQueueWaitTotal   string `json:"spawn_queue_wait_total"`
+	SpawnQueueWaitMax     string `json:"spawn_queue_wait_max"`
+	SpawnQueueWaitAvg     string `json:"spawn_queue_wait_avg"`
+	SpawnQueueWaitTotalMS int64  `json:"spawn_queue_wait_total_ms"`
+	SpawnQueueWaitMaxMS   int64  `json:"spawn_queue_wait_max_ms"`
+	SpawnQueueWaitAvgMS   int64  `json:"spawn_queue_wait_avg_ms"`
 }
 
 type SpawnAdmissionDecision struct {
