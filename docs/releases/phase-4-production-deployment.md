@@ -142,6 +142,13 @@ GitHub Actions has also passed for the initial Phase 4 CI workflow after the Swa
 - Firecracker remains Linux/KVM-gated and should be rolled out only after host conformance checks pass.
 - PRoot remains gated on a real `proot` binary and a rootfs with the expected sandbox tooling.
 
-## Next Phase 4 Direction
+## Phase 4 Closeout
 
-Remaining Phase 4 work should focus on release automation, container publishing, deployment smoke tests, and a clearer production conformance matrix for Docker, gVisor/Kata, Firecracker, and PRoot hosts.
+Phase 4 implementation is complete. Release automation, container publishing workflow, deployment smoke testing, production deployment templates, CI coverage, and runtime conformance documentation are in place.
+
+The remaining work is external release/platform operation:
+
+- Trigger a real versioned release run when the project is ready to publish binaries and the GHCR image.
+- Collect real-host runtime signoffs for optional host-gated runtimes such as gVisor, Kata, Firecracker, and PRoot.
+
+Phase 5 can proceed from this branch without more Phase 4 code work.
