@@ -69,6 +69,22 @@ jobs:
       - name: Run mock-provider deployment smoke
         run: scripts/ci-smoke-deployment.sh
 
+  upgrade-migration:
+    name: Upgrade and migration checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run upgrade and migration checks
+        run: scripts/ci-upgrade-migration.sh
+
   web:
     name: Web build
     runs-on: ubuntu-latest

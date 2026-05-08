@@ -2,11 +2,14 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	_ "modernc.org/sqlite"
 )
 
 func testStore(t *testing.T) *SQLiteStore {
@@ -42,6 +45,106 @@ func TestMigrations(t *testing.T) {
 	if _, err := os.Stat(dbPath); os.IsNotExist(err) {
 		t.Fatal("database file not created")
 	}
+}
+
+func TestSQLiteStoreMigratesLegacyDatabase(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "legacy.db")
+
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("open legacy db: %v", err)
+	}
+	if _, err := db.Exec(migrations[0].sql); err != nil {
+		t.Fatalf("create v1 schema: %v", err)
+	}
+	if _, err := db.Exec("INSERT INTO schema_migrations (version) VALUES (1)"); err != nil {
+		t.Fatalf("record v1 migration: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("close legacy db: %v", err)
+	}
+
+	s, err := NewSQLiteStore(dbPath)
+	if err != nil {
+		t.Fatalf("migrate legacy db: %v", err)
+	}
+
+	var migrated int
+	if err := s.db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&migrated); err != nil {
+		t.Fatalf("count migrations: %v", err)
+	}
+	if migrated != len(migrations) {
+		t.Fatalf("migration count = %d, want %d", migrated, len(migrations))
+	}
+
+	for _, col := range []string{"template", "owner_id", "vm_id"} {
+		if !sqliteColumnExists(t, s.db, "sandboxes", col) {
+			t.Fatalf("sandboxes missing migrated column %s", col)
+		}
+	}
+
+	for _, table := range []string{
+		"templates",
+		"environment_specs",
+		"environment_builds",
+		"environment_artifacts",
+		"registry_connections",
+		"owner_quotas",
+		"admin_audit_logs",
+		"operation_audit_logs",
+	} {
+		if !sqliteTableExists(t, s.db, table) {
+			t.Fatalf("missing migrated table %s", table)
+		}
+	}
+
+	if err := s.Close(); err != nil {
+		t.Fatalf("close migrated db: %v", err)
+	}
+	s, err = NewSQLiteStore(dbPath)
+	if err != nil {
+		t.Fatalf("reopen migrated db: %v", err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatalf("close reopened db: %v", err)
+	}
+}
+
+func sqliteColumnExists(t *testing.T, db *sql.DB, table, column string) bool {
+	t.Helper()
+	rows, err := db.Query("PRAGMA table_info(" + table + ")")
+	if err != nil {
+		t.Fatalf("pragma table_info(%s): %v", table, err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var cid int
+		var name, typ string
+		var notNull int
+		var defaultValue interface{}
+		var pk int
+		if err := rows.Scan(&cid, &name, &typ, &notNull, &defaultValue, &pk); err != nil {
+			t.Fatalf("scan column info: %v", err)
+		}
+		if name == column {
+			return true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate columns: %v", err)
+	}
+	return false
+}
+
+func sqliteTableExists(t *testing.T, db *sql.DB, table string) bool {
+	t.Helper()
+	var count int
+	if err := db.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?", table).Scan(&count); err != nil {
+		t.Fatalf("check table %s: %v", table, err)
+	}
+	return count == 1
 }
 
 func TestSandboxCRUD(t *testing.T) {

@@ -59,6 +59,7 @@ type DiagnosticsResponse struct {
 	Scheduler   orchestrator.SchedulerStatus       `json:"scheduler"`
 	Quotas      orchestrator.QuotaSummary          `json:"quotas"`
 	RateLimit   middleware.RateLimitStats          `json:"rate_limit"`
+	Remediation map[string]string                  `json:"remediation"`
 	Redactions  []string                           `json:"redactions"`
 }
 

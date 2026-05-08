@@ -2253,6 +2253,12 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
+                "remediation": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
                 "sandboxes": {
                     "type": "object",
                     "additionalProperties": true

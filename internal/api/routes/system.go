@@ -189,6 +189,18 @@ func (s *SystemRoutes) Diagnostics(w http.ResponseWriter, r *http.Request) {
 		"sandboxes":  metrics.sandboxSummary(),
 		"events":     metrics.eventStats,
 		"operations": metrics.operationMetrics,
+		"remediation": map[string]string{
+			"admin_control_plane":   "docs/admin-control-plane.md",
+			"deployment":            "docs/deployment.md",
+			"production_readiness":  "docs/production-readiness.md",
+			"public_support_matrix": "docs/public-support-matrix.md",
+			"release_verification":  "docs/releasing.md",
+			"runtime_certification": "docs/runtime-certification.md",
+			"runtime_conformance":   "docs/runtime-conformance.md",
+			"security_governance":   "docs/security-governance.md",
+			"support_bundle":        "docs/deployment.md#support-bundles",
+			"upgrade_and_rollback":  "docs/deployment.md#upgrade-rehearsal-and-rollback",
+		},
 		"redactions": []string{
 			"provider secrets",
 			"registry credentials",

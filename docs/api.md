@@ -831,11 +831,23 @@ GET /api/v1/diagnostics
     "events_total": 2401
   },
   "operations": [],
+  "remediation": {
+    "admin_control_plane": "docs/admin-control-plane.md",
+    "deployment": "docs/deployment.md",
+    "production_readiness": "docs/production-readiness.md",
+    "public_support_matrix": "docs/public-support-matrix.md",
+    "release_verification": "docs/releasing.md",
+    "runtime_certification": "docs/runtime-certification.md",
+    "runtime_conformance": "docs/runtime-conformance.md",
+    "security_governance": "docs/security-governance.md",
+    "support_bundle": "docs/deployment.md#support-bundles",
+    "upgrade_and_rollback": "docs/deployment.md#upgrade-rehearsal-and-rollback"
+  },
   "redactions": ["provider secrets", "registry credentials", "environment secrets", "API keys"]
 }
 ```
 
-Diagnostics are read-only and intentionally redacted. Use this endpoint for support bundles, incident debugging, and deployment sanity checks.
+Diagnostics are read-only and intentionally redacted. Use this endpoint for support bundles, incident debugging, and deployment sanity checks. The `remediation` object points operators to the first public document to use when a diagnostics area needs follow-up.
 
 ### Metrics
 

@@ -131,10 +131,17 @@ func TestSystemRoutes_Diagnostics(t *testing.T) {
 	}
 	var body map[string]interface{}
 	decodeSystemResponse(t, w, &body)
-	for _, field := range []string{"generated_at", "build", "process", "store", "limits", "scheduler", "quotas", "rate_limit", "providers", "sandboxes", "events", "operations", "redactions"} {
+	for _, field := range []string{"generated_at", "build", "process", "store", "limits", "scheduler", "quotas", "rate_limit", "providers", "sandboxes", "events", "operations", "remediation", "redactions"} {
 		if _, ok := body[field]; !ok {
 			t.Fatalf("diagnostics missing %s: %#v", field, body)
 		}
+	}
+	remediation := body["remediation"].(map[string]interface{})
+	if remediation["runtime_certification"] != "docs/runtime-certification.md" {
+		t.Fatalf("unexpected runtime certification remediation: %#v", remediation)
+	}
+	if remediation["public_support_matrix"] != "docs/public-support-matrix.md" {
+		t.Fatalf("unexpected public support matrix remediation: %#v", remediation)
 	}
 	quotas := body["quotas"].(map[string]interface{})
 	if quotas["total"].(float64) != 1 || quotas["with_max_sandboxes"].(float64) != 1 {

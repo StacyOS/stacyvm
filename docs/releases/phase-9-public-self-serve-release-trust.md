@@ -34,16 +34,30 @@ Phase 9 starts the public self-serve readiness track. This first slice focuses o
 - Added release verification instructions to the README.
 - Expanded release documentation with binary, checksum, and container image verification commands.
 - Added Phase 9 acceptance criteria to the production readiness checklist.
+- Added a public self-serve support and limitations matrix.
+
+### Upgrade And Migration CI
+
+- Added `scripts/ci-upgrade-migration.sh`.
+- Added a CI job that runs focused config, upgrade rehearsal, and SQLite migration checks.
+- Added coverage for migrating a legacy v1 SQLite database through the current schema.
+
+### Diagnostics Remediation
+
+- Added remediation links to `/api/v1/diagnostics`.
+- Diagnostics now point operators to production readiness, deployment, runtime certification, runtime conformance, release verification, support bundle, and security governance docs.
 
 ## Verification
 
 ```sh
 bash -n scripts/install.sh
 bash -n scripts/verify-release.sh
+bash -n scripts/ci-upgrade-migration.sh
+scripts/ci-upgrade-migration.sh
 git diff --check
 go test ./...
 ```
 
-## Next Phase 9 Direction
+## Remaining Phase 9 Direction
 
-The next Phase 9 slices should add upgrade/config migration tests in CI, remediation links for diagnostics, and a public limitations page that clearly separates supported self-serve modes from host-gated runtime certification.
+The remaining Phase 9 work should focus on broadening public install validation across real release artifacts, expanding SDK parity checks, and keeping release notes synchronized with each public self-serve hardening slice.

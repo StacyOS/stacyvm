@@ -30,12 +30,12 @@ This checklist tracks the Phase 7 release-candidate hardening work needed before
 
 ## Phase 9 Acceptance Criteria
 
-- Release binaries and checksums are signed through the GitHub Actions release workflow.
-- Published container image digests are signed through the GitHub Actions release workflow.
-- A public verification script exists for release signatures and checksums.
-- Installer supports Sigstore verification and a fail-closed mode.
-- Upgrade and config migration tests run in CI.
-- Public docs expose known limitations and exact remediation paths.
+- Release binaries and checksums are signed through the GitHub Actions release workflow. Done in Phase 9 slice 1.
+- Published container image digests are signed through the GitHub Actions release workflow. Done in Phase 9 slice 1.
+- A public verification script exists for release signatures and checksums. Done in Phase 9 slice 1.
+- Installer supports Sigstore verification and a fail-closed mode. Done in Phase 9 slice 1.
+- Upgrade and config migration tests run in CI. Done in Phase 9 slice 2.
+- Public docs expose known limitations and exact remediation paths. Done in Phase 9 slice 2.
 
 ## Current Release-Candidate Gates
 
@@ -47,7 +47,7 @@ This checklist tracks the Phase 7 release-candidate hardening work needed before
 | Deployment smoke | Passing | Mock-provider smoke is in CI. Docker live host certification remains external. |
 | Runtime conformance | Partial | Harness and host certification script exist; Firecracker/PRoot remain platform-gated. |
 | Security posture | Partial | Admin governance, operation audit, path traversal checks, and explicit exec modes are implemented; OIDC/JWT implementation remains. |
-| Release automation | Partial | GHCR and binary workflows exist; Phase 9 adds Sigstore signing and verification. |
+| Release automation | Passing | Release workflow signs binaries, checksums, and GHCR image digests; public verifier and installer verification exist. |
 
 ## Required Before Single-Node Production
 
@@ -71,6 +71,7 @@ This checklist tracks the Phase 7 release-candidate hardening work needed before
 - Support bundle export exists and redacts secrets.
 - Threat model is reviewed for each release candidate.
 - Known limitations are visible in README, docs, and release notes.
+- Public support expectations are documented in [public-support-matrix.md](public-support-matrix.md).
 
 ## Required Before Enterprise/Multi-Worker
 

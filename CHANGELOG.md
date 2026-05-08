@@ -12,10 +12,14 @@ This checkpoint starts the Phase 9 public self-serve production readiness track.
 - Installer Sigstore verification when `cosign` is available.
 - `STACYVM_REQUIRE_SIGNATURES=true` installer mode for fail-closed public installs.
 - Phase 9 acceptance criteria in the production readiness checklist.
+- Upgrade and SQLite migration checks in CI through `scripts/ci-upgrade-migration.sh`.
+- Diagnostics remediation links for production readiness, runtime certification, release verification, support bundles, and upgrade rollback.
+- Public self-serve limitations and support matrix under `docs/public-support-matrix.md`.
 
 ### Changed
 
 - Release documentation now explains binary, checksum, and container signature verification.
+- Production readiness documentation now marks Phase 9 upgrade/migration CI and public limitation docs as complete.
 
 ## Phase 8 Single-Node Production - 2026-05-08
 
