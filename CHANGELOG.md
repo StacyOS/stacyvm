@@ -13,6 +13,7 @@ This checkpoint starts the Phase 5 operator control plane by separating admin ac
 - Dashboard settings for separate regular and admin API keys.
 - Operations dashboard page for admin quota controls and diagnostics.
 - Persisted admin audit log storage and `/api/v1/admin/audit`.
+- Admin control-plane operator guide under `docs/admin-control-plane.md`.
 
 ### Changed
 

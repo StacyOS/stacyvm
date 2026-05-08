@@ -52,6 +52,14 @@ function formatUnknown(value: unknown): string {
   return String(value);
 }
 
+function adminErrorMessage(err: unknown, fallback: string): string {
+  const message = err instanceof Error ? err.message : fallback;
+  if (message.includes('401') || message.includes('403')) {
+    return `${message}. Check Settings and make sure the Admin API Key is configured.`;
+  }
+  return message;
+}
+
 function toQuotaForm(quota: OwnerQuota): QuotaForm {
   return {
     owner_id: quota.owner_id,
@@ -145,7 +153,7 @@ function QuotaPanel() {
       setSummary(quotaSummary);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load quotas');
+      setError(adminErrorMessage(err, 'Failed to load quotas'));
     } finally {
       setLoading(false);
     }
@@ -418,7 +426,7 @@ function DiagnosticsPanel() {
       setDiagnostics(result);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load diagnostics');
+      setError(adminErrorMessage(err, 'Failed to load diagnostics'));
     } finally {
       setLoading(false);
     }
@@ -512,6 +520,9 @@ function AuditPanel() {
     status: filters.status ? Number(filters.status) : undefined,
     path: filters.path.trim() || undefined,
   });
+  const hasActiveFilters = Boolean(
+    filters.actor.trim() || filters.method || filters.status || filters.path.trim(),
+  );
 
   const refresh = async () => {
     setLoading(true);
@@ -520,7 +531,7 @@ function AuditPanel() {
       setRecords(result);
       setError(null);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load audit logs');
+      setError(adminErrorMessage(err, 'Failed to load audit logs'));
     } finally {
       setLoading(false);
     }
@@ -543,8 +554,28 @@ function AuditPanel() {
       addToast({
         type: 'error',
         title: 'Audit export failed',
-        message: err instanceof Error ? err.message : 'Unknown error',
+        message: adminErrorMessage(err, 'Unknown error'),
       });
+    }
+  };
+
+  const clearFilters = async () => {
+    setFilters({
+      limit: '100',
+      actor: '',
+      method: '',
+      status: '',
+      path: '',
+    });
+    setLoading(true);
+    try {
+      const result = await listAdminAudit({ limit: 100 });
+      setRecords(result);
+      setError(null);
+    } catch (err) {
+      setError(adminErrorMessage(err, 'Failed to load audit logs'));
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -603,6 +634,13 @@ function AuditPanel() {
             <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
             Apply
           </button>
+          <button
+            onClick={clearFilters}
+            disabled={!hasActiveFilters}
+            className="btn-ghost text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            Clear
+          </button>
           <button onClick={exportAudit} className="btn-secondary text-sm">
             Export CSV
           </button>
@@ -621,7 +659,14 @@ function AuditPanel() {
       ) : records.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-16 text-gray-500">
           <Shield className="w-8 h-8 mb-3 opacity-40" />
-          <p className="text-sm font-medium">No admin audit records yet</p>
+          <p className="text-sm font-medium">
+            {hasActiveFilters ? 'No audit records match these filters' : 'No admin audit records yet'}
+          </p>
+          {hasActiveFilters && (
+            <button onClick={clearFilters} className="btn-secondary text-sm mt-4">
+              Clear Filters
+            </button>
+          )}
         </div>
       ) : (
         <div className="overflow-x-auto">

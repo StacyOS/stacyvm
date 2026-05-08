@@ -30,6 +30,7 @@ Phase 5 starts the operator/admin control-plane work for StacyVM. This phase bui
 ### Deployment And Docs
 
 - Added admin key examples to production config, Compose env, systemd env, README, deployment docs, and API docs.
+- Added an admin control-plane operator guide covering dashboard setup, quotas, diagnostics, audit export, and storage notes.
 
 ### Dashboard Admin Workflows
 
@@ -58,4 +59,4 @@ npm run build
 
 ## Next Phase 5 Direction
 
-The next slice should add stronger dashboard empty/error-state coverage and operator-facing docs for the admin control plane.
+The next slice should add final dashboard QA polish and then prepare the Phase 5 GitHub release.

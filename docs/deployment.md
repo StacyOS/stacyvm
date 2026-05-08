@@ -42,6 +42,8 @@ The files in `deploy/` provide a production-oriented Compose starting point:
 
 Use separate values for `STACYVM_API_KEY` and `STACYVM_ADMIN_API_KEY` in production. Admin routes live under `/api/v1/admin/*` and should be restricted to operator networks where possible.
 
+See [admin-control-plane.md](admin-control-plane.md) for admin dashboard setup, quota operations, diagnostics, audit export, and audit storage notes.
+
 ```bash
 cd deploy
 cp .env.example .env

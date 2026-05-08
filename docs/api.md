@@ -113,6 +113,8 @@ auth:
 
 Use `X-Admin-API-Key` for admin requests. `X-API-Key` is still accepted when it matches the admin key. If `auth.admin_api_key` is empty, admin routes fall back to `auth.api_key` for backwards compatibility.
 
+For dashboard setup, quota workflows, diagnostics, audit history, CSV export, and storage notes, see [admin-control-plane.md](admin-control-plane.md).
+
 Admin route aliases:
 
 | Method | Path | Purpose |
@@ -129,6 +131,7 @@ Admin route aliases:
 | `GET` | `/api/v1/admin/diagnostics` | Redacted operational diagnostics |
 | `GET` | `/api/v1/admin/metrics` | Structured JSON metrics |
 | `GET` | `/api/v1/admin/metrics/prometheus` | Prometheus metrics |
+| `GET` | `/api/v1/admin/audit` | Filterable admin audit history, with optional `format=csv` |
 
 The existing non-admin paths remain available for compatibility in this phase.
 
