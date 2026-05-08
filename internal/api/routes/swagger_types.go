@@ -56,6 +56,7 @@ type DiagnosticsResponse struct {
 	Events      orchestrator.EventBusStats         `json:"events"`
 	Operations  []orchestrator.OperationMetrics    `json:"operations"`
 	Scheduler   orchestrator.SchedulerStatus       `json:"scheduler"`
+	Quotas      orchestrator.QuotaSummary          `json:"quotas"`
 	RateLimit   middleware.RateLimitStats          `json:"rate_limit"`
 	Redactions  []string                           `json:"redactions"`
 }

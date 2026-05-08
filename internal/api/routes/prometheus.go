@@ -61,6 +61,13 @@ func writePrometheusMetrics(w io.Writer, metrics systemMetricsSnapshot) {
 	writePrometheusHelp(w, "stacyvm_spawn_queue_capacity", "Configured maximum number of queued spawn requests.")
 	fmt.Fprintf(w, "stacyvm_spawn_queue_capacity %d\n", metrics.schedulerStatus.MaxSpawnQueue)
 
+	writePrometheusHelp(w, "stacyvm_owner_quotas_total", "Total configured owner quota policies.")
+	fmt.Fprintf(w, "stacyvm_owner_quotas_total %d\n", metrics.quotaSummary.Total)
+	writePrometheusHelp(w, "stacyvm_owner_quota_overrides_total", "Total configured owner quota overrides by override type.")
+	fmt.Fprintf(w, "stacyvm_owner_quota_overrides_total{type=%q} %d\n", "max_sandboxes", metrics.quotaSummary.WithMaxSandboxes)
+	fmt.Fprintf(w, "stacyvm_owner_quota_overrides_total{type=%q} %d\n", "max_ttl", metrics.quotaSummary.WithMaxTTL)
+	fmt.Fprintf(w, "stacyvm_owner_quota_overrides_total{type=%q} %d\n", "max_exec_timeout", metrics.quotaSummary.WithMaxExecTimeout)
+
 	writePrometheusHelp(w, "stacyvm_rate_limit_allowed_total", "Total API requests allowed by the in-process rate limiter.")
 	fmt.Fprintf(w, "stacyvm_rate_limit_allowed_total %d\n", metrics.rateLimitStats.AllowedTotal)
 	writePrometheusHelp(w, "stacyvm_rate_limit_blocked_total", "Total API requests blocked by the in-process rate limiter.")

@@ -183,6 +183,7 @@ func (s *SystemRoutes) Diagnostics(w http.ResponseWriter, r *http.Request) {
 		"store":      storeStatus,
 		"limits":     s.manager.Limits(),
 		"scheduler":  s.manager.SchedulerStatus(),
+		"quotas":     metrics.quotaSummary,
 		"rate_limit": s.rateLimitStats(),
 		"providers":  metrics.providerHealth,
 		"sandboxes":  metrics.sandboxSummary(),
@@ -255,6 +256,7 @@ type systemMetricsSnapshot struct {
 	eventStats          orchestrator.EventBusStats
 	operationMetrics    []orchestrator.OperationMetrics
 	schedulerStatus     orchestrator.SchedulerStatus
+	quotaSummary        orchestrator.QuotaSummary
 	rateLimitStats      middleware.RateLimitStats
 }
 
@@ -282,6 +284,10 @@ func (s *SystemRoutes) collectMetrics(ctx context.Context) (systemMetricsSnapsho
 		}
 	}
 	eventStats := s.events.Stats()
+	quotaSummary, err := s.manager.QuotaSummary(ctx)
+	if err != nil {
+		return systemMetricsSnapshot{}, err
+	}
 
 	return systemMetricsSnapshot{
 		uptime:              time.Since(s.startTime),
@@ -299,6 +305,7 @@ func (s *SystemRoutes) collectMetrics(ctx context.Context) (systemMetricsSnapsho
 		eventStats:          eventStats,
 		operationMetrics:    s.manager.OperationMetrics(),
 		schedulerStatus:     s.manager.SchedulerStatus(),
+		quotaSummary:        quotaSummary,
 		rateLimitStats:      s.rateLimitStats(),
 	}, nil
 }
@@ -320,6 +327,7 @@ func (m systemMetricsSnapshot) toResponse() map[string]interface{} {
 		"events":     m.eventStats,
 		"operations": m.operationMetrics,
 		"scheduler":  m.schedulerStatus,
+		"quotas":     m.quotaSummary,
 		"rate_limit": m.rateLimitStats,
 	}
 }

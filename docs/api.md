@@ -693,6 +693,12 @@ GET /api/v1/diagnostics
     "spawn_queue_timeout": "30s",
     "admission_control": "single_node"
   },
+  "quotas": {
+    "total": 8,
+    "with_max_sandboxes": 6,
+    "with_max_ttl": 4,
+    "with_max_exec_timeout": 3
+  },
   "rate_limit": {
     "enabled": true,
     "requests_per_minute": 120,
@@ -775,6 +781,12 @@ GET /api/v1/metrics
     "spawn_queue_timeout": "30s",
     "admission_control": "single_node"
   },
+  "quotas": {
+    "total": 8,
+    "with_max_sandboxes": 6,
+    "with_max_ttl": 4,
+    "with_max_exec_timeout": 3
+  },
   "rate_limit": {
     "enabled": true,
     "requests_per_minute": 120,
@@ -818,6 +830,7 @@ stacyvm_uptime_seconds 7980
 # TYPE stacyvm_provider_healthy gauge
 stacyvm_provider_healthy{provider="docker",default="true"} 1
 stacyvm_spawn_queue_depth 3
+stacyvm_owner_quotas_total 8
 stacyvm_rate_limit_blocked_total 27
 stacyvm_operation_success_total{operation="exec",provider="docker"} 482
 stacyvm_operation_failure_total{operation="exec",provider="docker"} 7

@@ -156,3 +156,10 @@ type OwnerUsage struct {
 	MaxExecTimeout  string `json:"max_exec_timeout"`
 	QuotaConfigured bool   `json:"quota_configured"`
 }
+
+type QuotaSummary struct {
+	Total              int `json:"total"`
+	WithMaxSandboxes   int `json:"with_max_sandboxes"`
+	WithMaxTTL         int `json:"with_max_ttl"`
+	WithMaxExecTimeout int `json:"with_max_exec_timeout"`
+}

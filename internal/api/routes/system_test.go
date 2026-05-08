@@ -109,6 +109,14 @@ func TestSystemRoutes_ReadyNoProviders(t *testing.T) {
 
 func TestSystemRoutes_Diagnostics(t *testing.T) {
 	routes, manager := setupSystemRoutes(t, true)
+	if _, err := manager.SaveOwnerQuota(context.Background(), orchestrator.OwnerQuota{
+		OwnerID:        "team-a",
+		MaxSandboxes:   3,
+		MaxTTL:         "30m",
+		MaxExecTimeout: "10s",
+	}); err != nil {
+		t.Fatalf("save quota: %v", err)
+	}
 	if _, err := manager.Spawn(context.Background(), orchestrator.SpawnRequest{Image: "alpine:latest"}); err != nil {
 		t.Fatalf("spawn: %v", err)
 	}
@@ -123,10 +131,14 @@ func TestSystemRoutes_Diagnostics(t *testing.T) {
 	}
 	var body map[string]interface{}
 	decodeSystemResponse(t, w, &body)
-	for _, field := range []string{"generated_at", "build", "process", "store", "limits", "scheduler", "rate_limit", "providers", "sandboxes", "events", "operations", "redactions"} {
+	for _, field := range []string{"generated_at", "build", "process", "store", "limits", "scheduler", "quotas", "rate_limit", "providers", "sandboxes", "events", "operations", "redactions"} {
 		if _, ok := body[field]; !ok {
 			t.Fatalf("diagnostics missing %s: %#v", field, body)
 		}
+	}
+	quotas := body["quotas"].(map[string]interface{})
+	if quotas["total"].(float64) != 1 || quotas["with_max_sandboxes"].(float64) != 1 {
+		t.Fatalf("unexpected quota summary: %#v", quotas)
 	}
 	storeBody := body["store"].(map[string]interface{})
 	if storeBody["healthy"] != true {
@@ -139,6 +151,12 @@ func TestSystemRoutes_Diagnostics(t *testing.T) {
 
 func TestSystemRoutes_MetricsIncludesOperationalBreakdown(t *testing.T) {
 	routes, manager := setupSystemRoutes(t, true)
+	if _, err := manager.SaveOwnerQuota(context.Background(), orchestrator.OwnerQuota{
+		OwnerID:      "team-a",
+		MaxSandboxes: 2,
+	}); err != nil {
+		t.Fatalf("save quota: %v", err)
+	}
 	if _, err := manager.Spawn(context.Background(), orchestrator.SpawnRequest{Image: "alpine:latest"}); err != nil {
 		t.Fatalf("spawn: %v", err)
 	}
@@ -168,6 +186,10 @@ func TestSystemRoutes_MetricsIncludesOperationalBreakdown(t *testing.T) {
 	if _, ok := body["scheduler"].(map[string]interface{}); !ok {
 		t.Fatal("expected scheduler metrics")
 	}
+	quotas := body["quotas"].(map[string]interface{})
+	if quotas["total"].(float64) != 1 {
+		t.Fatalf("unexpected quota metrics: %#v", quotas)
+	}
 	if _, ok := body["rate_limit"].(map[string]interface{}); !ok {
 		t.Fatal("expected rate limit metrics")
 	}
@@ -179,6 +201,12 @@ func TestSystemRoutes_MetricsIncludesOperationalBreakdown(t *testing.T) {
 
 func TestSystemRoutes_PrometheusMetrics(t *testing.T) {
 	routes, manager := setupSystemRoutes(t, true)
+	if _, err := manager.SaveOwnerQuota(context.Background(), orchestrator.OwnerQuota{
+		OwnerID:      "team-a",
+		MaxSandboxes: 2,
+	}); err != nil {
+		t.Fatalf("save quota: %v", err)
+	}
 	sb, err := manager.Spawn(context.Background(), orchestrator.SpawnRequest{Image: "alpine:latest"})
 	if err != nil {
 		t.Fatalf("spawn: %v", err)
@@ -204,6 +232,8 @@ func TestSystemRoutes_PrometheusMetrics(t *testing.T) {
 		"stacyvm_provider_healthy",
 		"stacyvm_provider_health_latency_milliseconds",
 		"stacyvm_spawn_queue_depth",
+		"stacyvm_owner_quotas_total",
+		`type="max_sandboxes"`,
 		"stacyvm_rate_limit_allowed_total",
 		"stacyvm_operation_success_total",
 		`operation="spawn"`,

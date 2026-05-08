@@ -374,6 +374,32 @@ func TestManager_OwnerQuotaDeletePublishesEvent(t *testing.T) {
 	assertEventType(t, m.events.History(20), EventQuotaDeleted)
 }
 
+func TestManager_QuotaSummary(t *testing.T) {
+	m := setupManager(t)
+
+	if _, err := m.SaveOwnerQuota(context.Background(), OwnerQuota{
+		OwnerID:      "owner-a",
+		MaxSandboxes: 2,
+		MaxTTL:       "30s",
+	}); err != nil {
+		t.Fatalf("save owner-a quota: %v", err)
+	}
+	if _, err := m.SaveOwnerQuota(context.Background(), OwnerQuota{
+		OwnerID:        "owner-b",
+		MaxExecTimeout: "5s",
+	}); err != nil {
+		t.Fatalf("save owner-b quota: %v", err)
+	}
+
+	summary, err := m.QuotaSummary(context.Background())
+	if err != nil {
+		t.Fatalf("quota summary: %v", err)
+	}
+	if summary.Total != 2 || summary.WithMaxSandboxes != 1 || summary.WithMaxTTL != 1 || summary.WithMaxExecTimeout != 1 {
+		t.Fatalf("unexpected quota summary: %+v", summary)
+	}
+}
+
 func TestManager_PersistentOwnerQuotaTTLLimit(t *testing.T) {
 	m := setupManager(t)
 	if _, err := m.SaveOwnerQuota(context.Background(), OwnerQuota{OwnerID: "owner-ttl", MaxTTL: "5m"}); err != nil {

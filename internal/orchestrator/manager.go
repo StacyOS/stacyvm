@@ -1017,6 +1017,26 @@ func (m *Manager) ListOwnerQuotas(ctx context.Context) ([]*OwnerQuota, error) {
 	return quotas, nil
 }
 
+func (m *Manager) QuotaSummary(ctx context.Context) (QuotaSummary, error) {
+	records, err := m.store.ListOwnerQuotas(ctx)
+	if err != nil {
+		return QuotaSummary{}, err
+	}
+	summary := QuotaSummary{Total: len(records)}
+	for _, quota := range records {
+		if quota.MaxSandboxes > 0 {
+			summary.WithMaxSandboxes++
+		}
+		if quota.MaxTTLSeconds > 0 {
+			summary.WithMaxTTL++
+		}
+		if quota.MaxExecTimeoutSeconds > 0 {
+			summary.WithMaxExecTimeout++
+		}
+	}
+	return summary, nil
+}
+
 func (m *Manager) SaveOwnerQuota(ctx context.Context, quota OwnerQuota) (*OwnerQuota, error) {
 	ownerID, err := normalizeOwnerID(quota.OwnerID)
 	if err != nil {
