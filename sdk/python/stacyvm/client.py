@@ -7,6 +7,7 @@ import httpx
 from stacyvm.exceptions import ConnectionError, handle_response
 from stacyvm.models import QuotaSummary, SandboxInfo, SpawnAdmissionDecision
 from stacyvm.sandbox import Sandbox
+from stacyvm.templates import TemplateManager
 
 
 class Client:
@@ -38,6 +39,7 @@ class Client:
             headers=headers,
             timeout=timeout,
         )
+        self.templates = TemplateManager(self._http)
 
     def spawn(
         self,
@@ -166,6 +168,12 @@ class Client:
     def health(self) -> dict:
         """Check server health."""
         resp = self._http.get("/api/v1/health")
+        handle_response(resp)
+        return resp.json()
+
+    def providers(self) -> list[dict]:
+        """List registered providers and their health status."""
+        resp = self._http.get("/api/v1/providers")
         handle_response(resp)
         return resp.json()
 

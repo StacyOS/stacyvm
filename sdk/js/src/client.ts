@@ -179,6 +179,7 @@ export class Client {
     if (opts?.vcpus !== undefined) body["vcpus"] = opts.vcpus;
     if (opts?.ttl) body["ttl"] = opts.ttl;
     if (opts?.owner_id) body["owner_id"] = opts.owner_id;
+    if (opts?.template) body["template"] = opts.template;
     if (opts?.metadata) body["metadata"] = opts.metadata;
 
     const response = await this._fetch("/api/v1/sandboxes", {

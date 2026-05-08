@@ -59,6 +59,8 @@ export interface SpawnOptions {
   ttl?: string;
   /** Owner ID used for per-owner quotas when no X-User-ID header is set. */
   owner_id?: string;
+  /** Template name to apply when spawning this sandbox. */
+  template?: string;
   /** Arbitrary key-value metadata. */
   metadata?: Record<string, string>;
 }

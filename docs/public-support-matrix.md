@@ -36,6 +36,8 @@ Before treating a self-serve install as supported, operators should capture:
 - `stacyvm support bundle --output support.json` when opening a support issue.
 - Runtime certification output for gVisor, Kata, Firecracker, or PRoot hosts.
 
+GitHub bug and production support issue templates ask for this same evidence. Reports without the relevant artifacts may need an extra triage round before maintainers can reproduce or classify the issue.
+
 ## Known Public Limitations
 
 - SQLite is the supported single-node store. Postgres and distributed leases are planned for multi-worker production.
@@ -56,3 +58,14 @@ Before treating a self-serve install as supported, operators should capture:
 | Runtime behavior differs across providers | [runtime-conformance.md](runtime-conformance.md) |
 | Admin or auth hardening question | [security-governance.md](security-governance.md) |
 | Operator diagnostics needed | [deployment.md#support-bundles](deployment.md#support-bundles) |
+
+## Post-Tag Release Verification
+
+CI builds release binaries and validates checksums before code is merged into a release branch. After a real version tag is published, maintainers should run the public verifier against the GitHub release assets:
+
+```bash
+scripts/verify-release.sh <version> amd64
+scripts/verify-release.sh <version> arm64
+```
+
+Run the installer once on a clean Linux host with default checksum verification and once with `STACYVM_REQUIRE_SIGNATURES=true` plus `cosign` installed.

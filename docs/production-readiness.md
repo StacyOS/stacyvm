@@ -36,6 +36,9 @@ This checklist tracks the Phase 7 release-candidate hardening work needed before
 - Installer supports Sigstore verification and a fail-closed mode. Done in Phase 9 slice 1.
 - Upgrade and config migration tests run in CI. Done in Phase 9 slice 2.
 - Public docs expose known limitations and exact remediation paths. Done in Phase 9 slice 2.
+- Public release sanity builds and checksum verification run in CI. Done in Phase 9 final polish.
+- SDK parity smoke tests run in CI without requiring a live runtime. Done in Phase 9 final polish.
+- GitHub issue templates request support bundle, config lint, upgrade rehearsal, runtime certification, and release verification evidence. Done in Phase 9 final polish.
 
 ## Current Release-Candidate Gates
 
@@ -43,7 +46,7 @@ This checklist tracks the Phase 7 release-candidate hardening work needed before
 |---|---|---|
 | Full Go test suite | Passing | CI runs `make test`. |
 | Web build | Passing | CI runs `npm run build`. |
-| SDK checks | Partial | TypeScript builds and Python imports; full SDK behavioral parity tests still need expansion. |
+| SDK checks | Passing | TypeScript builds, Python imports, and mock-based SDK parity smoke tests run in CI. |
 | Deployment smoke | Passing | Mock-provider smoke is in CI. Docker live host certification remains external. |
 | Runtime conformance | Partial | Harness and host certification script exist; Firecracker/PRoot remain platform-gated. |
 | Security posture | Partial | Admin governance, operation audit, path traversal checks, and explicit exec modes are implemented; OIDC/JWT implementation remains. |
@@ -72,6 +75,8 @@ This checklist tracks the Phase 7 release-candidate hardening work needed before
 - Threat model is reviewed for each release candidate.
 - Known limitations are visible in README, docs, and release notes.
 - Public support expectations are documented in [public-support-matrix.md](public-support-matrix.md).
+- Bug and production support issue templates ask for the same evidence required by the public support matrix.
+- Public release sanity CI builds release binaries and validates checksums; real GitHub release asset verification must be repeated after each version tag is published.
 
 ## Required Before Enterprise/Multi-Worker
 

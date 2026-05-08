@@ -168,6 +168,12 @@ class AsyncClient:
         handle_response(resp)
         return resp.json()
 
+    async def providers(self) -> list[dict]:
+        """List registered providers and their health status."""
+        resp = await self._http.get("/api/v1/providers")
+        handle_response(resp)
+        return resp.json()
+
     async def close(self) -> None:
         """Close the HTTP client."""
         await self._http.aclose()

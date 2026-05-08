@@ -43,10 +43,28 @@ Phase 9 starts the public self-serve readiness track. This first slice focuses o
 - Added coverage for migrating a legacy v1 SQLite database through the current schema.
 - Made Docker integration tests opt-in with `STACYVM_DOCKER_INTEGRATION=1` so default CI is not coupled to Docker Hub availability or runner daemon state.
 
+### Public Release Sanity
+
+- Added `scripts/ci-public-release-sanity.sh`.
+- CI now syntax-checks public install and verification scripts.
+- CI builds release binaries for supported architectures and verifies `checksums.txt`.
+- Real GitHub release asset verification remains a required post-tag drill for each published version.
+
 ### Diagnostics Remediation
 
 - Added remediation links to `/api/v1/diagnostics`.
 - Diagnostics now point operators to production readiness, deployment, runtime certification, runtime conformance, release verification, support bundle, and security governance docs.
+
+### SDK Parity
+
+- Added mock-based TypeScript and Python SDK parity smoke tests.
+- TypeScript spawn options now include `template`, matching Python spawn behavior.
+- Python SDK now exposes `templates` and `providers()` helpers for closer TypeScript parity.
+
+### Support Intake
+
+- Added GitHub issue forms for bug reports and production support requests.
+- Issue templates ask for support bundle, config lint, upgrade rehearsal, runtime certification, release verification, environment, and logs.
 
 ## Verification
 
@@ -55,10 +73,13 @@ bash -n scripts/install.sh
 bash -n scripts/verify-release.sh
 bash -n scripts/ci-upgrade-migration.sh
 scripts/ci-upgrade-migration.sh
+scripts/ci-public-release-sanity.sh
+bun test
+python -m unittest sdk/python/tests/test_client_parity.py
 git diff --check
 go test ./...
 ```
 
 ## Remaining Phase 9 Direction
 
-The remaining Phase 9 work should focus on broadening public install validation across real release artifacts, expanding SDK parity checks, and keeping release notes synchronized with each public self-serve hardening slice.
+Phase 9 is now complete from a branch-readiness perspective. The only release-time follow-up is to run `scripts/verify-release.sh` and the installer against the actual GitHub assets after the next real version tag is published.
