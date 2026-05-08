@@ -41,6 +41,7 @@ Phase 9 starts the public self-serve readiness track. This first slice focuses o
 - Added `scripts/ci-upgrade-migration.sh`.
 - Added a CI job that runs focused config, upgrade rehearsal, and SQLite migration checks.
 - Added coverage for migrating a legacy v1 SQLite database through the current schema.
+- Made Docker integration tests opt-in with `STACYVM_DOCKER_INTEGRATION=1` so default CI is not coupled to Docker Hub availability or runner daemon state.
 
 ### Diagnostics Remediation
 

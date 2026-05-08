@@ -128,6 +128,9 @@ func TestDockerHealthy_NoDocker(t *testing.T) {
 
 func skipIfNoDocker(t *testing.T) {
 	t.Helper()
+	if os.Getenv("STACYVM_DOCKER_INTEGRATION") != "1" {
+		t.Skip("set STACYVM_DOCKER_INTEGRATION=1 to run Docker integration tests")
+	}
 	if _, err := exec.LookPath("docker"); err != nil {
 		t.Skip("docker not available in PATH")
 	}

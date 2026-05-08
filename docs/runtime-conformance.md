@@ -45,7 +45,7 @@ Recommended validation:
 ```bash
 docker info
 docker network inspect stacyvm-network
-STACYVM_PROVIDERS_DEFAULT=docker make test
+STACYVM_DOCKER_INTEGRATION=1 STACYVM_PROVIDERS_DEFAULT=docker make test
 ```
 
 Runtime behavior to verify:

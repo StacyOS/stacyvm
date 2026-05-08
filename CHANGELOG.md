@@ -20,6 +20,7 @@ This checkpoint starts the Phase 9 public self-serve production readiness track.
 
 - Release documentation now explains binary, checksum, and container signature verification.
 - Production readiness documentation now marks Phase 9 upgrade/migration CI and public limitation docs as complete.
+- Docker integration tests are opt-in with `STACYVM_DOCKER_INTEGRATION=1` so default CI remains independent of Docker Hub and host daemon state.
 
 ## Phase 8 Single-Node Production - 2026-05-08
 

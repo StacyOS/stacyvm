@@ -46,6 +46,7 @@ STACYVM_PROOT_WORKSPACE_BASE=/var/lib/stacyvm/workspaces \
 | PRoot | `proot` binary, optional rootfs/workspace paths | Pass with configured rootfs and workspace base |
 
 `stacyvm doctor --production` remains the operator-facing readiness command.
+Docker provider integration tests are opt-in to keep default CI independent of Docker Hub and host daemon state. Run them on a certified Docker host with `STACYVM_DOCKER_INTEGRATION=1 make test`.
 The certification script is the lower-level host check for runtime dependencies
 that may not exist in CI or on developer laptops.
 
