@@ -88,6 +88,39 @@ func TestQuotaRoutes_SaveGetUsageDelete(t *testing.T) {
 	}
 }
 
+func TestQuotaRoutes_Summary(t *testing.T) {
+	r, _ := setupQuotaRouter(t)
+
+	quotas := map[string]string{
+		"owner-a": `{"max_sandboxes":1,"max_ttl":"30s"}`,
+		"owner-b": `{"max_exec_timeout":"10s"}`,
+	}
+	for ownerID, body := range quotas {
+		req := httptest.NewRequest(http.MethodPut, "/api/v1/quotas/"+ownerID, bytes.NewBufferString(body))
+		req.Header.Set("Content-Type", "application/json")
+		w := httptest.NewRecorder()
+		r.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Fatalf("save %s status = %d: %s", ownerID, w.Code, w.Body.String())
+		}
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/quotas/summary", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("summary status = %d: %s", w.Code, w.Body.String())
+	}
+
+	var summary orchestrator.QuotaSummary
+	if err := json.NewDecoder(w.Body).Decode(&summary); err != nil {
+		t.Fatalf("decode summary: %v", err)
+	}
+	if summary.Total != 2 || summary.WithMaxSandboxes != 1 || summary.WithMaxTTL != 1 || summary.WithMaxExecTimeout != 1 {
+		t.Fatalf("unexpected summary: %+v", summary)
+	}
+}
+
 func TestQuotaRoutes_InvalidQuotaReturnsBadRequest(t *testing.T) {
 	r, _ := setupQuotaRouter(t)
 

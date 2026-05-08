@@ -416,6 +416,7 @@ Auth: pass `X-API-Key: <your-key>` if `auth.enabled: true`. For pool mode, also 
 | `GET` | `/providers/{name}` | Provider details + sandbox count |
 | `POST` | `/providers/test` | Health-check all providers |
 | `GET` | `/quotas` | List owner quota overrides |
+| `GET` | `/quotas/summary` | Redacted owner quota policy counts |
 | `PUT` | `/quotas/{ownerID}` | Create or update owner quota |
 | `GET` | `/quotas/{ownerID}/usage` | Owner usage against effective quota |
 | `GET` | `/pool/status` | Pool VM and user counts |

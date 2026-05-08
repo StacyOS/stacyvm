@@ -430,6 +430,24 @@ GET /api/v1/quotas
 ]
 ```
 
+### Get quota summary
+
+```
+GET /api/v1/quotas/summary
+```
+
+Returns redacted policy coverage counts without exposing owner IDs.
+
+**Response** `200 OK`:
+```json
+{
+  "total": 2,
+  "with_max_sandboxes": 1,
+  "with_max_ttl": 1,
+  "with_max_exec_timeout": 1
+}
+```
+
 ### Save owner quota
 
 ```

@@ -12,6 +12,7 @@ import (
 
 type quotaManager interface {
 	ListOwnerQuotas(ctx context.Context) ([]*orchestrator.OwnerQuota, error)
+	QuotaSummary(ctx context.Context) (orchestrator.QuotaSummary, error)
 	GetOwnerQuota(ctx context.Context, ownerID string) (*orchestrator.OwnerQuota, error)
 	SaveOwnerQuota(ctx context.Context, quota orchestrator.OwnerQuota) (*orchestrator.OwnerQuota, error)
 	DeleteOwnerQuota(ctx context.Context, ownerID string) error
@@ -29,6 +30,7 @@ func NewQuotaRoutes(manager quotaManager) *QuotaRoutes {
 func (q *QuotaRoutes) Routes() chi.Router {
 	r := chi.NewRouter()
 	r.Get("/", q.List)
+	r.Get("/summary", q.Summary)
 	r.Route("/{ownerID}", func(r chi.Router) {
 		r.Get("/", q.Get)
 		r.Put("/", q.Save)
@@ -57,6 +59,24 @@ func (q *QuotaRoutes) List(w http.ResponseWriter, r *http.Request) {
 		quotas = []*orchestrator.OwnerQuota{}
 	}
 	httputil.WriteJSON(w, http.StatusOK, quotas)
+}
+
+// Summary returns redacted quota coverage counts.
+//
+//	@Summary		Get quota summary
+//	@Description	Return non-identifying counts for persisted owner quota overrides
+//	@Tags			quotas
+//	@Produce		json
+//	@Success		200	{object}	orchestrator.QuotaSummary
+//	@Security		ApiKeyAuth
+//	@Router			/quotas/summary [get]
+func (q *QuotaRoutes) Summary(w http.ResponseWriter, r *http.Request) {
+	summary, err := q.manager.QuotaSummary(r.Context())
+	if err != nil {
+		writeRouteError(w, err)
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, summary)
 }
 
 // Get returns one configured owner quota.

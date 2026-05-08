@@ -67,6 +67,9 @@ type OwnerQuotaResponse = orchestrator.OwnerQuota
 // OwnerUsageResponse is the response for owner quota usage.
 type OwnerUsageResponse = orchestrator.OwnerUsage
 
+// QuotaSummaryResponse is the response for redacted quota coverage counts.
+type QuotaSummaryResponse = orchestrator.QuotaSummary
+
 // MetricsResponse is the response from the metrics endpoint.
 type MetricsResponse struct {
 	SandboxesActive int    `json:"sandboxes_active" example:"5"`
