@@ -5,7 +5,7 @@ Branch: `phase-5-admin-control-plane`
 
 ## Summary
 
-Phase 5 starts the operator/admin control-plane work for StacyVM. This phase builds on Phase 3 quotas and Phase 4 production deployment by separating admin access from regular API usage and preparing the API surface for safer dashboard-driven operations.
+Phase 5 delivers the first operator/admin control plane for StacyVM. This phase builds on Phase 3 quotas and Phase 4 production deployment by separating admin access from regular API usage and preparing the API surface for safer dashboard-driven operations.
 
 ## What Changed
 
@@ -55,10 +55,19 @@ Phase 5 starts the operator/admin control-plane work for StacyVM. This phase bui
 ## Verification
 
 ```sh
-go test ./internal/api/middleware ./internal/config ./cmd/stacyvm
+go test ./...
 npm run build
 ```
 
-## Next Phase 5 Direction
+GitHub CI passed on `phase-5-admin-control-plane` for:
 
-The next slice should run final Phase 5 QA and prepare the Phase 5 GitHub release.
+- Go tests and CLI build
+- Swagger drift check
+- Python SDK import check
+- TypeScript SDK build
+- Deployment smoke test
+- Web build
+
+## Release Status
+
+Phase 5 is complete and published as the `phase-5-admin-control-plane` GitHub release.
