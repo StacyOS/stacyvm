@@ -371,6 +371,77 @@ func TestManager_SpawnMaxTTLLimit(t *testing.T) {
 	}
 }
 
+func TestManager_EvaluateSpawnAdmissionAllowsWhenUnderLimits(t *testing.T) {
+	m := setupManagerWithConfig(t, ManagerConfig{
+		DefaultTTL:    5 * time.Minute,
+		DefaultImage:  "alpine:latest",
+		DefaultMemory: 512,
+		DefaultVCPUs:  1,
+		Limits: OperationalLimits{
+			MaxSandboxes:         2,
+			MaxSandboxesPerOwner: 2,
+			MaxTTL:               time.Hour,
+		},
+	})
+
+	decision, err := m.EvaluateSpawnAdmission(context.Background(), "owner-a", 30*time.Minute)
+	if err != nil {
+		t.Fatalf("evaluate admission: %v", err)
+	}
+	if !decision.Allowed || decision.Queueable || decision.Reason != "" {
+		t.Fatalf("unexpected admission decision: %+v", decision)
+	}
+	if decision.MaxSandboxes != 2 || decision.MaxOwnerSandboxes != 2 || decision.MaxTTL != "1h0m0s" {
+		t.Fatalf("unexpected admission limits: %+v", decision)
+	}
+}
+
+func TestManager_EvaluateSpawnAdmissionDeniesQueueableCapacity(t *testing.T) {
+	m := setupManagerWithConfig(t, ManagerConfig{
+		DefaultTTL:    5 * time.Minute,
+		DefaultImage:  "alpine:latest",
+		DefaultMemory: 512,
+		DefaultVCPUs:  1,
+		Limits: OperationalLimits{
+			MaxSandboxes: 1,
+		},
+	})
+
+	if _, err := m.Spawn(context.Background(), SpawnRequest{OwnerID: "owner-a"}); err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	decision, err := m.EvaluateSpawnAdmission(context.Background(), "owner-b", 5*time.Minute)
+	if err != nil {
+		t.Fatalf("evaluate admission: %v", err)
+	}
+	if decision.Allowed || !decision.Queueable || decision.Reason != "max_sandboxes" {
+		t.Fatalf("unexpected admission decision: %+v", decision)
+	}
+	if decision.ActiveSandboxes != 1 || decision.MaxSandboxes != 1 {
+		t.Fatalf("unexpected admission counts: %+v", decision)
+	}
+}
+
+func TestManager_EvaluateSpawnAdmissionDeniesNonQueueableTTL(t *testing.T) {
+	m := setupManagerWithConfig(t, ManagerConfig{
+		DefaultTTL:    5 * time.Minute,
+		DefaultImage:  "alpine:latest",
+		DefaultMemory: 512,
+		DefaultVCPUs:  1,
+		Limits: OperationalLimits{
+			MaxTTL: time.Hour,
+		},
+	})
+
+	decision, err := m.EvaluateSpawnAdmission(context.Background(), "owner-a", 2*time.Hour)
+	if err != nil {
+		t.Fatalf("evaluate admission: %v", err)
+	}
+	if decision.Allowed || decision.Queueable || decision.Reason != "max_ttl" {
+		t.Fatalf("unexpected admission decision: %+v", decision)
+	}
+}
+
 func TestManager_SpawnQueueWaitsForCapacity(t *testing.T) {
 	m := setupManagerWithConfig(t, ManagerConfig{
 		DefaultTTL:    5 * time.Minute,
@@ -467,7 +538,7 @@ func TestManager_SchedulerStatus(t *testing.T) {
 	})
 
 	status := m.SchedulerStatus()
-	if status.SpawnOverflow != "queue" || status.MaxSpawnQueue != 7 || status.SpawnQueueTimeout != "10s" {
+	if status.SpawnOverflow != "queue" || status.MaxSpawnQueue != 7 || status.SpawnQueueTimeout != "10s" || status.AdmissionControl != "single_node" {
 		t.Fatalf("unexpected scheduler status: %+v", status)
 	}
 	if status.SpawnQueueDepth != 0 {

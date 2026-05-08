@@ -125,6 +125,18 @@ type SchedulerStatus struct {
 	SpawnQueueDepth   int    `json:"spawn_queue_depth"`
 	MaxSpawnQueue     int    `json:"max_spawn_queue"`
 	SpawnQueueTimeout string `json:"spawn_queue_timeout"`
+	AdmissionControl  string `json:"admission_control"`
+}
+
+type SpawnAdmissionDecision struct {
+	Allowed              bool   `json:"allowed"`
+	Queueable            bool   `json:"queueable"`
+	Reason               string `json:"reason,omitempty"`
+	ActiveSandboxes      int    `json:"active_sandboxes"`
+	MaxSandboxes         int    `json:"max_sandboxes"`
+	ActiveOwnerSandboxes int    `json:"active_owner_sandboxes,omitempty"`
+	MaxOwnerSandboxes    int    `json:"max_owner_sandboxes,omitempty"`
+	MaxTTL               string `json:"max_ttl,omitempty"`
 }
 
 type OwnerQuota struct {

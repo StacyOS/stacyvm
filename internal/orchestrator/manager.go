@@ -987,6 +987,7 @@ func (m *Manager) SchedulerStatus() SchedulerStatus {
 		SpawnQueueDepth:   m.queueWaiters,
 		MaxSpawnQueue:     m.limits.MaxSpawnQueue,
 		SpawnQueueTimeout: m.limits.SpawnQueueTimeout.String(),
+		AdmissionControl:  "single_node",
 	}
 }
 
@@ -1111,12 +1112,15 @@ func (m *Manager) publishOperationalEvent(eventType EventType, sandboxID string,
 }
 
 func (m *Manager) waitForSpawnCapacity(ctx context.Context, ownerID string, ttl time.Duration, provider string) error {
-	queueable, err := m.checkSpawnLimits(ctx, ownerID, ttl)
-	if err == nil {
+	decision, err := m.EvaluateSpawnAdmission(ctx, ownerID, ttl)
+	if err != nil {
+		return err
+	}
+	if decision.Allowed {
 		return nil
 	}
-	if !queueable || !strings.EqualFold(m.limits.SpawnOverflow, "queue") {
-		return err
+	if !decision.Queueable || !strings.EqualFold(m.limits.SpawnOverflow, "queue") {
+		return spawnAdmissionError(decision)
 	}
 
 	m.queueMu.Lock()
@@ -1163,8 +1167,11 @@ func (m *Manager) waitForSpawnCapacity(ctx context.Context, ownerID string, ttl 
 			}
 			return waitCtx.Err()
 		case <-capacityCh:
-			queueable, err = m.checkSpawnLimits(ctx, ownerID, ttl)
-			if err == nil {
+			decision, err = m.EvaluateSpawnAdmission(ctx, ownerID, ttl)
+			if err != nil {
+				return err
+			}
+			if decision.Allowed {
 				m.publishOperationalEvent(EventSpawnDequeued, "", map[string]interface{}{
 					"operation": OperationSpawn,
 					"provider":  provider,
@@ -1172,8 +1179,8 @@ func (m *Manager) waitForSpawnCapacity(ctx context.Context, ownerID string, ttl 
 				})
 				return nil
 			}
-			if !queueable {
-				return err
+			if !decision.Queueable {
+				return spawnAdmissionError(decision)
 			}
 			m.queueMu.Lock()
 			capacityCh = m.capacityCh
@@ -1189,19 +1196,29 @@ func (m *Manager) notifySpawnCapacity() {
 	m.queueMu.Unlock()
 }
 
-func (m *Manager) checkSpawnLimits(ctx context.Context, ownerID string, ttl time.Duration) (bool, error) {
+func (m *Manager) EvaluateSpawnAdmission(ctx context.Context, ownerID string, ttl time.Duration) (SpawnAdmissionDecision, error) {
 	maxTTL, maxPerOwner := m.ownerLimitOverrides(ctx, ownerID)
+	decision := SpawnAdmissionDecision{
+		Allowed:           true,
+		MaxSandboxes:      m.limits.MaxSandboxes,
+		MaxOwnerSandboxes: maxPerOwner,
+	}
+	if maxTTL > 0 {
+		decision.MaxTTL = maxTTL.String()
+	}
 	if maxTTL > 0 && ttl > maxTTL {
-		return false, providers.ResourceLimitError(fmt.Sprintf("ttl %s exceeds max ttl %s", ttl, maxTTL))
+		decision.Allowed = false
+		decision.Reason = "max_ttl"
+		return decision, nil
 	}
 
 	if m.limits.MaxSandboxes <= 0 && (ownerID == "" || maxPerOwner <= 0) {
-		return false, nil
+		return decision, nil
 	}
 
 	records, err := m.store.ListSandboxes(ctx)
 	if err != nil {
-		return false, fmt.Errorf("checking sandbox limits: %w", err)
+		return SpawnAdmissionDecision{}, fmt.Errorf("checking sandbox limits: %w", err)
 	}
 	total := 0
 	ownerTotal := 0
@@ -1214,13 +1231,34 @@ func (m *Manager) checkSpawnLimits(ctx context.Context, ownerID string, ttl time
 			ownerTotal++
 		}
 	}
+	decision.ActiveSandboxes = total
+	decision.ActiveOwnerSandboxes = ownerTotal
 	if m.limits.MaxSandboxes > 0 && total >= m.limits.MaxSandboxes {
-		return true, providers.ResourceLimitError(fmt.Sprintf("max sandboxes reached (%d)", m.limits.MaxSandboxes))
+		decision.Allowed = false
+		decision.Queueable = true
+		decision.Reason = "max_sandboxes"
+		return decision, nil
 	}
 	if ownerID != "" && maxPerOwner > 0 && ownerTotal >= maxPerOwner {
-		return true, providers.ResourceLimitError(fmt.Sprintf("max sandboxes per owner reached (%d)", maxPerOwner))
+		decision.Allowed = false
+		decision.Queueable = true
+		decision.Reason = "max_sandboxes_per_owner"
+		return decision, nil
 	}
-	return false, nil
+	return decision, nil
+}
+
+func spawnAdmissionError(decision SpawnAdmissionDecision) error {
+	switch decision.Reason {
+	case "max_ttl":
+		return providers.ResourceLimitError(fmt.Sprintf("ttl exceeds max ttl %s", decision.MaxTTL))
+	case "max_sandboxes":
+		return providers.ResourceLimitError(fmt.Sprintf("max sandboxes reached (%d)", decision.MaxSandboxes))
+	case "max_sandboxes_per_owner":
+		return providers.ResourceLimitError(fmt.Sprintf("max sandboxes per owner reached (%d)", decision.MaxOwnerSandboxes))
+	default:
+		return providers.ResourceLimitError("spawn admission denied")
+	}
 }
 
 func (m *Manager) resolveExecTimeout(raw string, ownerID string) (time.Duration, error) {

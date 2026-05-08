@@ -684,7 +684,8 @@ GET /api/v1/diagnostics
     "spawn_overflow": "queue",
     "spawn_queue_depth": 3,
     "max_spawn_queue": 100,
-    "spawn_queue_timeout": "30s"
+    "spawn_queue_timeout": "30s",
+    "admission_control": "single_node"
   },
   "rate_limit": {
     "enabled": true,
@@ -762,7 +763,8 @@ GET /api/v1/metrics
     "spawn_overflow": "queue",
     "spawn_queue_depth": 3,
     "max_spawn_queue": 100,
-    "spawn_queue_timeout": "30s"
+    "spawn_queue_timeout": "30s",
+    "admission_control": "single_node"
   },
   "rate_limit": {
     "enabled": true,
