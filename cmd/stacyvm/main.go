@@ -36,6 +36,8 @@ func main() {
 		newDoctorCmd(),
 		newConfigCmd(),
 		newDBCmd(),
+		newUpgradeCmd(),
+		newSupportCmd(),
 	)
 
 	if err := root.Execute(); err != nil {

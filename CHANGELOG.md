@@ -9,11 +9,14 @@ This checkpoint starts the Phase 8 single-node production readiness track.
 - `stacyvm db backup` for consistent SQLite backups with integrity validation.
 - `stacyvm db restore` with explicit confirmation, backup validation, pre-restore safety copy, and stale WAL/SHM cleanup.
 - `stacyvm config lint --production` for deterministic single-node production config validation.
+- `stacyvm upgrade rehearse` for pre-upgrade config, database, backup path, live-check, and rollback guidance.
+- `stacyvm support bundle` for redacted operator diagnostics.
 - Phase 8 release notes under `docs/releases/phase-8-single-node-production.md`.
 
 ### Changed
 
 - Deployment and release docs now include production config linting before upgrades and release tags.
+- Deployment docs now cover upgrade rehearsal, rollback, and support bundle generation.
 
 ## Phase 7 Release Candidate Hardening - 2026-05-08
 

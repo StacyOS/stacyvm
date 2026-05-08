@@ -150,12 +150,39 @@ If you run with Docker Compose, stop the service or snapshot the backing volume 
 
 ## Upgrades
 
+Before changing binaries or images, rehearse the upgrade with the exact config and database path the service uses:
+
+```bash
+stacyvm upgrade rehearse \
+  --config /etc/stacyvm/stacyvm.yaml \
+  --database /var/lib/stacyvm/stacyvm.db \
+  --backup-output /backup/stacyvm-pre-upgrade.db
+```
+
+Use `--include-doctor` on the target host when you also want live provider checks before the upgrade.
+
+Upgrade flow:
+
 1. Check the release notes for config or API changes.
-2. Back up `/var/lib/stacyvm/stacyvm.db` with `stacyvm db backup`.
-3. Run `stacyvm config lint --production --file /etc/stacyvm/stacyvm.yaml` with the service environment loaded.
+2. Run `stacyvm upgrade rehearse` and resolve any failing checks.
+3. Back up `/var/lib/stacyvm/stacyvm.db` with `stacyvm db backup`.
 4. Replace the binary or update `STACYVM_IMAGE`.
 5. Restart the service.
 6. Confirm `GET /api/v1/ready` succeeds before routing traffic.
+7. If the upgrade fails, stop StacyVM and restore the pre-upgrade backup with `stacyvm db restore --yes`.
+
+## Support Bundles
+
+For support requests, generate a redacted bundle instead of sharing raw config, logs, or environment output:
+
+```bash
+stacyvm support bundle /tmp/stacyvm-support.json \
+  --config /etc/stacyvm/stacyvm.yaml \
+  --include-doctor \
+  --include-server
+```
+
+The bundle includes version/runtime data, redacted config shape, production config lint results, optional doctor checks, and optional `/api/v1/diagnostics` output. Secret-shaped keys, API keys, bearer tokens, and URLs with embedded credentials are redacted before the file is written.
 
 ## Provider Notes
 

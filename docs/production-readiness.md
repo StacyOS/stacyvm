@@ -25,8 +25,8 @@ This checklist tracks the Phase 7 release-candidate hardening work needed before
 
 - SQLite backup and restore are available through the CLI with integrity checks and restore safety copies. Done in Phase 8 slice 1.
 - Production config linting is available through `stacyvm config lint --production` and can run against explicit config files without requiring Docker/KVM host access. Done in Phase 8 slice 2.
-- Upgrade rehearsal checks document backup, config lint, service restart, and readiness validation.
-- Support bundle export exists and redacts secrets before sharing with maintainers.
+- Upgrade rehearsal checks document backup, config lint, service restart, readiness validation, and rollback. Done in Phase 8 slice 3.
+- Support bundle export exists and redacts secrets before sharing with maintainers. Done in Phase 8 slice 3.
 
 ## Current Release-Candidate Gates
 
@@ -49,6 +49,8 @@ This checklist tracks the Phase 7 release-candidate hardening work needed before
 - Firecracker hosts pass Linux/KVM conformance before being marked production.
 - Backup and restore are tested against the SQLite database.
 - `stacyvm config lint --production` passes with the same config and environment variables the service will use.
+- `stacyvm upgrade rehearse` passes before binary/image replacement.
+- Operators can generate `stacyvm support bundle` output without exposing API keys or provider secrets.
 - Operators run `stacyvm doctor --production` before go-live.
 
 ## Required Before Public Self-Serve

@@ -453,6 +453,8 @@ stacyvm kill sb-a1b2c3d4                        # destroy
 stacyvm build-image python:3.12                 # pre-build rootfs (Firecracker)
 stacyvm config lint --production                # production config lint gate
 stacyvm db backup /backup/stacyvm.db            # consistent SQLite backup
+stacyvm upgrade rehearse --database stacyvm.db  # rehearse single-node upgrade
+stacyvm support bundle support.json             # redacted support diagnostics
 stacyvm tui                                     # interactive dashboard
 stacyvm version                                 # version info
 ```

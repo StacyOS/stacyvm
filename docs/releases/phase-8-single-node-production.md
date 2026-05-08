@@ -5,7 +5,7 @@ Branch: `phase-8-single-node-production`
 
 ## Summary
 
-Phase 8 moves StacyVM from release-candidate hardening toward technical self-hosted production on a single node. The first slices focus on safe SQLite backup/restore workflows and deterministic production config linting because single-node operators need a reliable rollback point and a clear preflight gate before upgrades, config changes, and provider certification.
+Phase 8 moves StacyVM from release-candidate hardening toward technical self-hosted production on a single node. The phase focuses on safe SQLite backup/restore workflows, deterministic production config linting, upgrade rehearsal, and redacted support bundles because single-node operators need reliable rollback points and clear support artifacts before upgrades, config changes, and provider certification.
 
 ## What Changed
 
@@ -27,18 +27,35 @@ Phase 8 moves StacyVM from release-candidate hardening toward technical self-hos
 - Linting checks authentication posture, placeholder secrets, admin key separation, admin fallback, audit retention, rate limiting, database durability, runtime caps, exec timeouts, JSON logging, and Docker hardening.
 - Added deterministic lint tests that do not require Docker, KVM, or a running StacyVM server.
 
+### Upgrade Rehearsal
+
+- Added `stacyvm upgrade rehearse`.
+- Rehearsal runs production config lint checks and SQLite integrity checks.
+- Rehearsal validates the intended backup directory and refuses an already-existing backup output path.
+- Rehearsal prints the recommended upgrade and rollback flow for single-node operators.
+- Added `--include-doctor` for live host checks when running on the target host.
+
+### Redacted Support Bundle
+
+- Added `stacyvm support bundle <output-path>`.
+- Bundle includes version/runtime data, redacted config shape, production config lint output, optional doctor checks, and optional `/api/v1/diagnostics` output.
+- Redaction covers secret-like keys, API keys, bearer tokens, token/password/secret assignments, and URLs with embedded credentials.
+- Added tests to ensure final support JSON does not leak representative secrets.
+
 ### Documentation
 
 - Updated deployment backup and upgrade guidance to prefer `stacyvm db backup`.
 - Updated deployment and release guidance to run `stacyvm config lint --production` before staging, upgrades, and release tags.
-- Added CLI backup command to the README command list.
+- Added backup, config lint, upgrade rehearsal, and support bundle commands to the README command list.
 
 ## Verification
 
 ```sh
 go test ./cmd/stacyvm
+go test ./...
+stacyvm config lint --production --file deploy/stacyvm.production.yaml
 ```
 
 ## Next Phase 8 Direction
 
-The next Phase 8 slices should add upgrade rehearsal checks and a single-node support bundle with redaction so technical users can operate and debug StacyVM without handholding.
+Phase 8 is now functionally complete for single-node technical production readiness. Remaining signoff is final cleanup: run the full build/test sweep, confirm GitHub CI, and keep platform-gated Docker/gVisor/Kata/Firecracker/PRoot conformance results attached to host-specific certification.
