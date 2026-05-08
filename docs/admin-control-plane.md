@@ -24,6 +24,8 @@ STACYVM_AUTH_ADMIN_AUDIT_RETENTION=2160h
 
 Use `X-Admin-API-Key` for `/api/v1/admin/*` requests. If `auth.admin_api_key` is configured, the regular `auth.api_key` cannot access admin routes. If no admin key is configured, admin routes fall back to `auth.api_key` for compatibility.
 
+Authenticated requests now carry a request-scoped identity with either the `api` or `admin` role. Admin identities receive both `api:*` and `admin:*` scopes; regular API identities receive `api:*`. This keeps the current API-key behavior stable while creating a typed authorization boundary for later RBAC and identity-provider integrations.
+
 ## Dashboard Setup
 
 Open Settings, enable API key sending, and set:

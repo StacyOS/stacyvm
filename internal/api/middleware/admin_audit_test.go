@@ -56,3 +56,23 @@ func TestAdminAuditPrunesWithRetention(t *testing.T) {
 		t.Fatalf("unexpected audit records after prune: %+v", st.records)
 	}
 }
+
+func TestAdminAuditUsesAuthenticatedRoleWhenActorHeaderMissing(t *testing.T) {
+	st := &memoryAuditStore{}
+	handler := AdminAudit(st, zerolog.Nop(), 0)(okHandler())
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/quotas", nil)
+	req = req.WithContext(WithAuthIdentity(req.Context(), AuthIdentity{Role: AuthRoleAdmin}))
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+	if len(st.records) != 1 {
+		t.Fatalf("records = %d, want 1", len(st.records))
+	}
+	if st.records[0].Actor != "admin" {
+		t.Fatalf("actor = %q, want admin", st.records[0].Actor)
+	}
+}

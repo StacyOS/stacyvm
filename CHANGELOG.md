@@ -1,5 +1,16 @@
 # Changelog
 
+## Phase 6 Security Governance - 2026-05-08
+
+This checkpoint starts the Phase 6 security and governance work on top of the Phase 5 admin control plane.
+
+### Added
+
+- Request-scoped authentication identities with `api` and `admin` roles.
+- Initial scope metadata for authenticated requests: `api:*` and `admin:*`.
+- Admin audit fallback attribution now uses the authenticated role when no explicit actor header is supplied.
+- Phase 6 release notes under `docs/releases/phase-6-security-governance.md`.
+
 ## Phase 5 Admin Control Plane - 2026-05-08
 
 This checkpoint starts the Phase 5 operator control plane by separating admin access from regular API usage.

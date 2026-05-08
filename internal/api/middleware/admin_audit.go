@@ -70,6 +70,9 @@ func actorFromRequest(r *http.Request) string {
 	if actor := strings.TrimSpace(r.Header.Get("X-User-ID")); actor != "" {
 		return actor
 	}
+	if identity := AuthIdentityFromContext(r.Context()); identity.Role != AuthRoleAnonymous {
+		return string(identity.Role)
+	}
 	return "admin"
 }
 
