@@ -6,6 +6,7 @@ import {
   FileCode2,
   Server,
   FlaskConical,
+  Gauge,
   Settings as SettingsIcon,
   Menu,
   X,
@@ -17,6 +18,7 @@ import Templates from './pages/Templates';
 import Providers from './pages/Providers';
 import Settings from './pages/Settings';
 import Environments from './pages/Environments';
+import Operations from './pages/Operations';
 import { ToastProvider } from './hooks/useToast';
 import ToastContainer from './components/Toast';
 
@@ -26,6 +28,7 @@ const navItems = [
   { to: '/templates', label: 'Templates', icon: FileCode2 },
   { to: '/environments', label: 'Environments', icon: FlaskConical },
   { to: '/providers', label: 'Providers', icon: Server },
+  { to: '/operations', label: 'Operations', icon: Gauge },
   { to: '/settings', label: 'Settings', icon: SettingsIcon },
 ];
 
@@ -156,6 +159,7 @@ export default function App() {
             <Route path="/templates" element={<Templates />} />
             <Route path="/environments" element={<Environments />} />
             <Route path="/providers" element={<Providers />} />
+            <Route path="/operations" element={<Operations />} />
             <Route path="/settings" element={<Settings />} />
           </Routes>
         </main>

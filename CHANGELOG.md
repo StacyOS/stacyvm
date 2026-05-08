@@ -11,6 +11,7 @@ This checkpoint starts the Phase 5 operator control plane by separating admin ac
 - `/api/v1/admin/*` route aliases for providers, quotas, diagnostics, JSON metrics, and Prometheus metrics.
 - Admin key examples in deployment templates and docs.
 - Dashboard settings for separate regular and admin API keys.
+- Operations dashboard page for admin quota controls and diagnostics.
 
 ### Changed
 
@@ -18,6 +19,7 @@ This checkpoint starts the Phase 5 operator control plane by separating admin ac
 - Admin routes require the admin key when configured, with fallback to the regular API key only when no admin key is set.
 - Dashboard provider and metrics calls now use the admin namespace.
 - Provider health checks in the dashboard now call `/api/v1/admin/providers/test`.
+- Owner quota list, save, delete, summary, usage, and diagnostics workflows are available from the dashboard.
 
 ### Verified
 

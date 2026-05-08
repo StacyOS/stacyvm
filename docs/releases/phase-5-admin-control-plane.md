@@ -37,6 +37,8 @@ Phase 5 starts the operator/admin control-plane work for StacyVM. This phase bui
 - The shared web API client now sends `X-API-Key` and `X-Admin-API-Key` from browser settings.
 - Provider list, provider detail, provider health tests, and JSON metrics now call `/api/v1/admin/*`.
 - Provider cards now understand the backend `default`, latency, runtime count, capability, and error fields.
+- Added an Operations dashboard page for owner quota management and diagnostics.
+- Added dashboard workflows for quota list, save, delete, summary, owner usage checks, and redacted diagnostics.
 
 ## Verification
 
@@ -47,4 +49,4 @@ npm run build
 
 ## Next Phase 5 Direction
 
-The next slice should add dedicated dashboard views for quota management, diagnostics, and persisted admin audit history.
+The next slice should add persisted admin audit history and expose it in the Operations dashboard.

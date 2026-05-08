@@ -111,6 +111,56 @@ export interface MetricsResponse {
   };
 }
 
+export interface OwnerQuota {
+  owner_id: string;
+  max_sandboxes: number;
+  max_ttl: string;
+  max_exec_timeout: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface OwnerUsage {
+  owner_id: string;
+  active_sandboxes: number;
+  max_sandboxes: number;
+  max_ttl: string;
+  max_exec_timeout: string;
+  quota_configured: boolean;
+}
+
+export interface QuotaSummary {
+  total: number;
+  with_max_sandboxes: number;
+  with_max_ttl: number;
+  with_max_exec_timeout: number;
+}
+
+export interface DiagnosticsResponse {
+  generated_at: string;
+  build: Record<string, unknown>;
+  process: Record<string, unknown>;
+  store: {
+    healthy?: boolean;
+    latency_ms?: number;
+    error?: string;
+  };
+  limits: Record<string, unknown>;
+  scheduler: Record<string, unknown>;
+  quotas: QuotaSummary;
+  rate_limit: Record<string, unknown>;
+  providers: Provider[];
+  sandboxes: {
+    total: number;
+    active: number;
+    by_state: Record<string, number>;
+    by_provider: Record<string, number>;
+  };
+  events: Record<string, unknown>;
+  operations: Array<Record<string, unknown>>;
+  redactions: string[];
+}
+
 export interface SSEEvent {
   type: string;
   data: string;
@@ -694,6 +744,44 @@ export async function getMetrics(): Promise<MetricsResponse> {
     active_sandboxes: metrics.active_sandboxes ?? metrics.sandboxes?.active ?? 0,
     total_sandboxes: metrics.total_sandboxes ?? metrics.sandboxes?.total ?? 0,
   };
+}
+
+export async function getDiagnostics(): Promise<DiagnosticsResponse> {
+  return request<DiagnosticsResponse>('/admin/diagnostics', { admin: true });
+}
+
+export async function listOwnerQuotas(): Promise<OwnerQuota[]> {
+  const result = await request<OwnerQuota[] | null>('/admin/quotas', { admin: true });
+  return result ?? [];
+}
+
+export async function getQuotaSummary(): Promise<QuotaSummary> {
+  return request<QuotaSummary>('/admin/quotas/summary', { admin: true });
+}
+
+export async function saveOwnerQuota(quota: OwnerQuota): Promise<OwnerQuota> {
+  return request<OwnerQuota>(
+    `/admin/quotas/${encodeURIComponent(quota.owner_id)}`,
+    {
+      method: 'PUT',
+      body: JSON.stringify(quota),
+      admin: true,
+    },
+  );
+}
+
+export async function deleteOwnerQuota(ownerId: string): Promise<void> {
+  await request<void>(`/admin/quotas/${encodeURIComponent(ownerId)}`, {
+    method: 'DELETE',
+    admin: true,
+  });
+}
+
+export async function getOwnerUsage(ownerId: string): Promise<OwnerUsage> {
+  return request<OwnerUsage>(
+    `/admin/quotas/${encodeURIComponent(ownerId)}/usage`,
+    { admin: true },
+  );
 }
 
 // ---------------------------------------------------------------------------
