@@ -666,6 +666,26 @@ paths:
         in: query
         name: limit
         type: integer
+      - description: Actor exact match
+        in: query
+        name: actor
+        type: string
+      - description: HTTP method exact match
+        in: query
+        name: method
+        type: string
+      - description: HTTP status exact match
+        in: query
+        name: status
+        type: integer
+      - description: Path substring match
+        in: query
+        name: path
+        type: string
+      - description: 'Response format: json or csv'
+        in: query
+        name: format
+        type: string
       produces:
       - application/json
       responses:

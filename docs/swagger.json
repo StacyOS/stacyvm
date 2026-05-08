@@ -30,6 +30,36 @@
                         "description": "Maximum number of records, capped at 500",
                         "name": "limit",
                         "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Actor exact match",
+                        "name": "actor",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "HTTP method exact match",
+                        "name": "method",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "HTTP status exact match",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Path substring match",
+                        "name": "path",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Response format: json or csv",
+                        "name": "format",
+                        "in": "query"
                     }
                 ],
                 "responses": {

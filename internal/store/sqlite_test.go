@@ -174,7 +174,7 @@ func TestAdminAuditLogs(t *testing.T) {
 		t.Fatalf("create second admin audit: %v", err)
 	}
 
-	records, err := s.ListAdminAudit(ctx, 1)
+	records, err := s.ListAdminAudit(ctx, AdminAuditQuery{Limit: 1})
 	if err != nil {
 		t.Fatalf("list admin audit: %v", err)
 	}
@@ -183,6 +183,14 @@ func TestAdminAuditLogs(t *testing.T) {
 	}
 	if records[0].Actor != "operator-b" || records[0].Path != "/api/v1/admin/diagnostics" {
 		t.Fatalf("unexpected latest audit record: %+v", records[0])
+	}
+
+	records, err = s.ListAdminAudit(ctx, AdminAuditQuery{Actor: "operator-a", Method: "PUT", Status: 200, PathLike: "quotas"})
+	if err != nil {
+		t.Fatalf("filter admin audit: %v", err)
+	}
+	if len(records) != 1 || records[0].Actor != "operator-a" {
+		t.Fatalf("unexpected filtered audit records: %+v", records)
 	}
 }
 

@@ -46,6 +46,8 @@ Phase 5 starts the operator/admin control-plane work for StacyVM. This phase bui
 - Added `/api/v1/admin/audit` to list recent redacted admin audit records.
 - Records include actor, method, path, status, duration, request ID, client address, user agent, and timestamp.
 - Added an Audit tab to the Operations dashboard.
+- Added audit filters for actor, HTTP method, status, and path substring.
+- Added CSV export for filtered audit history.
 
 ## Verification
 
@@ -56,4 +58,4 @@ npm run build
 
 ## Next Phase 5 Direction
 
-The next slice should harden admin audit filtering/export and add stronger dashboard empty/error-state coverage.
+The next slice should add stronger dashboard empty/error-state coverage and operator-facing docs for the admin control plane.

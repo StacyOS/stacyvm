@@ -22,6 +22,7 @@ This checkpoint starts the Phase 5 operator control plane by separating admin ac
 - Provider health checks in the dashboard now call `/api/v1/admin/providers/test`.
 - Owner quota list, save, delete, summary, usage, and diagnostics workflows are available from the dashboard.
 - Admin route access is recorded with redacted request metadata and shown in the Operations dashboard.
+- Admin audit history can be filtered by actor, method, status, and path, then exported as CSV.
 
 ### Verified
 

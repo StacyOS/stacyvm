@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -154,5 +155,19 @@ func TestAdminRoutesWriteAuditLog(t *testing.T) {
 	}
 	if !found {
 		t.Fatalf("diagnostics audit record not found: %+v", records)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/admin/audit?actor=operator-a&method=GET&status=200&path=diagnostics&format=csv", nil)
+	req.Header.Set("X-Admin-API-Key", "admin-key")
+	w = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("csv audit status = %d, want %d: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if got := w.Header().Get("Content-Type"); got != "text/csv; charset=utf-8" {
+		t.Fatalf("csv content type = %q", got)
+	}
+	if body := w.Body.String(); !strings.Contains(body, "/api/v1/admin/diagnostics") || !strings.Contains(body, "operator-a") {
+		t.Fatalf("csv body missing filtered audit record: %s", body)
 	}
 }

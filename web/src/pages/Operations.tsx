@@ -14,11 +14,13 @@ import {
 } from 'lucide-react';
 import {
   type AdminAuditRecord,
+  type AdminAuditQuery,
   type DiagnosticsResponse,
   type OwnerQuota,
   type OwnerUsage,
   type QuotaSummary,
   deleteOwnerQuota,
+  exportAdminAuditCsv,
   getDiagnostics,
   getOwnerUsage,
   getQuotaSummary,
@@ -491,14 +493,30 @@ function DiagnosticsPanel() {
 }
 
 function AuditPanel() {
+  const { addToast } = useToast();
   const [records, setRecords] = useState<AdminAuditRecord[]>([]);
+  const [filters, setFilters] = useState({
+    limit: '100',
+    actor: '',
+    method: '',
+    status: '',
+    path: '',
+  });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  const currentQuery = (): AdminAuditQuery => ({
+    limit: Math.max(1, Number(filters.limit) || 100),
+    actor: filters.actor.trim() || undefined,
+    method: filters.method || undefined,
+    status: filters.status ? Number(filters.status) : undefined,
+    path: filters.path.trim() || undefined,
+  });
 
   const refresh = async () => {
     setLoading(true);
     try {
-      const result = await listAdminAudit(100);
+      const result = await listAdminAudit(currentQuery());
       setRecords(result);
       setError(null);
     } catch (err) {
@@ -512,19 +530,83 @@ function AuditPanel() {
     refresh();
   }, []);
 
+  const exportAudit = async () => {
+    try {
+      const csv = await exportAdminAuditCsv(currentQuery());
+      const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'stacyvm-admin-audit.csv';
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      addToast({
+        type: 'error',
+        title: 'Audit export failed',
+        message: err instanceof Error ? err.message : 'Unknown error',
+      });
+    }
+  };
+
   return (
     <div className="card !p-0 overflow-hidden">
-      <div className="flex items-center justify-between px-5 py-4 border-b border-navy-700">
+      <div className="flex flex-col xl:flex-row xl:items-center justify-between gap-4 px-5 py-4 border-b border-navy-700">
         <div>
           <h3 className="text-base font-bold text-gray-100">Admin Audit</h3>
           <p className="text-xs text-gray-500 mt-0.5">
             Recent redacted admin route access records
           </p>
         </div>
-        <button onClick={refresh} disabled={loading} className="btn-ghost text-sm">
-          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            className="input w-28"
+            type="number"
+            min={1}
+            max={500}
+            value={filters.limit}
+            onChange={(e) => setFilters((prev) => ({ ...prev, limit: e.target.value }))}
+            title="Limit"
+          />
+          <input
+            className="input w-36"
+            value={filters.actor}
+            onChange={(e) => setFilters((prev) => ({ ...prev, actor: e.target.value }))}
+            placeholder="actor"
+          />
+          <select
+            className="input w-32"
+            value={filters.method}
+            onChange={(e) => setFilters((prev) => ({ ...prev, method: e.target.value }))}
+          >
+            <option value="">method</option>
+            <option value="GET">GET</option>
+            <option value="POST">POST</option>
+            <option value="PUT">PUT</option>
+            <option value="DELETE">DELETE</option>
+          </select>
+          <input
+            className="input w-28"
+            type="number"
+            min={100}
+            max={599}
+            value={filters.status}
+            onChange={(e) => setFilters((prev) => ({ ...prev, status: e.target.value }))}
+            placeholder="status"
+          />
+          <input
+            className="input w-44"
+            value={filters.path}
+            onChange={(e) => setFilters((prev) => ({ ...prev, path: e.target.value }))}
+            placeholder="path contains"
+          />
+          <button onClick={refresh} disabled={loading} className="btn-ghost text-sm">
+            <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+            Apply
+          </button>
+          <button onClick={exportAudit} className="btn-secondary text-sm">
+            Export CSV
+          </button>
+        </div>
       </div>
 
       {loading ? (

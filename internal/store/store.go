@@ -126,6 +126,14 @@ type AdminAuditRecord struct {
 	CreatedAt  time.Time `json:"created_at" example:"2026-05-08T10:30:00Z"`
 }
 
+type AdminAuditQuery struct {
+	Limit    int
+	Actor    string
+	Method   string
+	Status   int
+	PathLike string
+}
+
 // Store defines the persistence interface.
 type Store interface {
 	// Sandbox CRUD
@@ -147,7 +155,7 @@ type Store interface {
 
 	// Admin audit
 	CreateAdminAudit(ctx context.Context, rec *AdminAuditRecord) error
-	ListAdminAudit(ctx context.Context, limit int) ([]*AdminAuditRecord, error)
+	ListAdminAudit(ctx context.Context, query AdminAuditQuery) ([]*AdminAuditRecord, error)
 
 	// Exec logs
 	CreateExecLog(ctx context.Context, log *ExecLogRecord) error

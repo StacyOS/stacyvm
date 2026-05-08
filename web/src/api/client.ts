@@ -174,6 +174,14 @@ export interface AdminAuditRecord {
   created_at: string;
 }
 
+export interface AdminAuditQuery {
+  limit?: number;
+  actor?: string;
+  method?: string;
+  status?: number;
+  path?: string;
+}
+
 export interface SSEEvent {
   type: string;
   data: string;
@@ -797,12 +805,28 @@ export async function getOwnerUsage(ownerId: string): Promise<OwnerUsage> {
   );
 }
 
-export async function listAdminAudit(limit = 100): Promise<AdminAuditRecord[]> {
+function auditQueryParams(query: AdminAuditQuery): string {
+  const params = new URLSearchParams();
+  params.set('limit', String(query.limit ?? 100));
+  if (query.actor) params.set('actor', query.actor);
+  if (query.method) params.set('method', query.method);
+  if (query.status) params.set('status', String(query.status));
+  if (query.path) params.set('path', query.path);
+  return params.toString();
+}
+
+export async function listAdminAudit(query: AdminAuditQuery = {}): Promise<AdminAuditRecord[]> {
   const result = await request<AdminAuditRecord[] | null>(
-    `/admin/audit?limit=${encodeURIComponent(String(limit))}`,
+    `/admin/audit?${auditQueryParams(query)}`,
     { admin: true },
   );
   return result ?? [];
+}
+
+export async function exportAdminAuditCsv(query: AdminAuditQuery = {}): Promise<string> {
+  const params = new URLSearchParams(auditQueryParams(query));
+  params.set('format', 'csv');
+  return request<string>(`/admin/audit?${params.toString()}`, { admin: true });
 }
 
 // ---------------------------------------------------------------------------

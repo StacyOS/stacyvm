@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -287,16 +288,38 @@ func (s *SQLiteStore) CreateAdminAudit(ctx context.Context, rec *AdminAuditRecor
 	return nil
 }
 
-func (s *SQLiteStore) ListAdminAudit(ctx context.Context, limit int) ([]*AdminAuditRecord, error) {
-	if limit <= 0 {
-		limit = 100
+func (s *SQLiteStore) ListAdminAudit(ctx context.Context, query AdminAuditQuery) ([]*AdminAuditRecord, error) {
+	if query.Limit <= 0 {
+		query.Limit = 100
 	}
-	if limit > 500 {
-		limit = 500
+	if query.Limit > 500 {
+		query.Limit = 500
 	}
+
+	clauses := []string{"1=1"}
+	args := make([]interface{}, 0, 5)
+	if query.Actor != "" {
+		clauses = append(clauses, "actor = ?")
+		args = append(args, query.Actor)
+	}
+	if query.Method != "" {
+		clauses = append(clauses, "method = ?")
+		args = append(args, query.Method)
+	}
+	if query.Status > 0 {
+		clauses = append(clauses, "status = ?")
+		args = append(args, query.Status)
+	}
+	if query.PathLike != "" {
+		clauses = append(clauses, "path LIKE ?")
+		args = append(args, "%"+query.PathLike+"%")
+	}
+	args = append(args, query.Limit)
+
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT id, actor, method, path, status, duration_ms, request_id, remote_addr, user_agent, created_at
-		FROM admin_audit_logs ORDER BY created_at DESC, id DESC LIMIT ?`, limit)
+		FROM admin_audit_logs WHERE `+strings.Join(clauses, " AND ")+`
+		ORDER BY created_at DESC, id DESC LIMIT ?`, args...)
 	if err != nil {
 		return nil, err
 	}
