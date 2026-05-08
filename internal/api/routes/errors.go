@@ -11,6 +11,8 @@ import (
 
 func writeRouteError(w http.ResponseWriter, err error) {
 	switch {
+	case errors.Is(err, orchestrator.ErrInvalidInput):
+		httputil.WriteError(w, http.StatusBadRequest, httputil.CodeBadRequest, err.Error())
 	case errors.Is(err, orchestrator.ErrSandboxNotFound),
 		errors.Is(err, orchestrator.ErrSandboxDestroyed),
 		errors.Is(err, orchestrator.ErrProviderNotFound),

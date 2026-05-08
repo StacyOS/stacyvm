@@ -994,6 +994,10 @@ func (m *Manager) SchedulerStatus() SchedulerStatus {
 }
 
 func (m *Manager) GetOwnerQuota(ctx context.Context, ownerID string) (*OwnerQuota, error) {
+	ownerID, err := normalizeOwnerID(ownerID)
+	if err != nil {
+		return nil, err
+	}
 	rec, err := m.store.GetOwnerQuota(ctx, ownerID)
 	if err != nil {
 		return nil, err
@@ -1014,19 +1018,21 @@ func (m *Manager) ListOwnerQuotas(ctx context.Context) ([]*OwnerQuota, error) {
 }
 
 func (m *Manager) SaveOwnerQuota(ctx context.Context, quota OwnerQuota) (*OwnerQuota, error) {
-	if quota.OwnerID == "" {
-		return nil, fmt.Errorf("owner_id is required")
+	ownerID, err := normalizeOwnerID(quota.OwnerID)
+	if err != nil {
+		return nil, err
 	}
+	quota.OwnerID = ownerID
 	maxTTL, err := parseOptionalDurationSeconds(quota.MaxTTL)
 	if err != nil {
-		return nil, fmt.Errorf("parsing max_ttl: %w", err)
+		return nil, InvalidInputError(fmt.Sprintf("parsing max_ttl: %v", err))
 	}
 	maxExecTimeout, err := parseOptionalDurationSeconds(quota.MaxExecTimeout)
 	if err != nil {
-		return nil, fmt.Errorf("parsing max_exec_timeout: %w", err)
+		return nil, InvalidInputError(fmt.Sprintf("parsing max_exec_timeout: %v", err))
 	}
 	if quota.MaxSandboxes < 0 {
-		return nil, providers.ResourceLimitError("max_sandboxes cannot be negative")
+		return nil, InvalidInputError("max_sandboxes cannot be negative")
 	}
 	rec := &store.OwnerQuotaRecord{
 		OwnerID:               quota.OwnerID,
@@ -1041,10 +1047,18 @@ func (m *Manager) SaveOwnerQuota(ctx context.Context, quota OwnerQuota) (*OwnerQ
 }
 
 func (m *Manager) DeleteOwnerQuota(ctx context.Context, ownerID string) error {
+	ownerID, err := normalizeOwnerID(ownerID)
+	if err != nil {
+		return err
+	}
 	return m.store.DeleteOwnerQuota(ctx, ownerID)
 }
 
 func (m *Manager) OwnerUsage(ctx context.Context, ownerID string) (*OwnerUsage, error) {
+	ownerID, err := normalizeOwnerID(ownerID)
+	if err != nil {
+		return nil, err
+	}
 	records, err := m.store.ListSandboxesByOwner(ctx, ownerID)
 	if err != nil {
 		return nil, err
@@ -1351,6 +1365,7 @@ func ownerQuotaFromRecord(rec *store.OwnerQuotaRecord) *OwnerQuota {
 }
 
 func parseOptionalDurationSeconds(raw string) (int64, error) {
+	raw = strings.TrimSpace(raw)
 	if raw == "" || raw == "0" || raw == "0s" {
 		return 0, nil
 	}
@@ -1359,9 +1374,34 @@ func parseOptionalDurationSeconds(raw string) (int64, error) {
 		return 0, err
 	}
 	if d < 0 {
-		return 0, providers.ResourceLimitError("duration cannot be negative")
+		return 0, fmt.Errorf("duration cannot be negative")
+	}
+	if d > 0 && d < time.Second {
+		return 0, fmt.Errorf("duration must be at least 1s")
+	}
+	if d%time.Second != 0 {
+		return 0, fmt.Errorf("duration must use whole seconds")
 	}
 	return int64(d.Seconds()), nil
+}
+
+func normalizeOwnerID(ownerID string) (string, error) {
+	ownerID = strings.TrimSpace(ownerID)
+	if ownerID == "" {
+		return "", InvalidInputError("owner_id is required")
+	}
+	if len(ownerID) > 128 {
+		return "", InvalidInputError("owner_id must be 128 characters or fewer")
+	}
+	if strings.ContainsAny(ownerID, `/\`) {
+		return "", InvalidInputError("owner_id cannot contain path separators")
+	}
+	for _, r := range ownerID {
+		if r <= 31 || r == 127 || r == ' ' || r == '\t' || r == '\n' || r == '\r' {
+			return "", InvalidInputError("owner_id cannot contain whitespace or control characters")
+		}
+	}
+	return ownerID, nil
 }
 
 func optionalSecondsString(seconds int64) string {

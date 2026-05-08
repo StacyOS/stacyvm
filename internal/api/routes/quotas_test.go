@@ -87,3 +87,40 @@ func TestQuotaRoutes_SaveGetUsageDelete(t *testing.T) {
 		t.Fatalf("delete status = %d: %s", w.Code, w.Body.String())
 	}
 }
+
+func TestQuotaRoutes_InvalidQuotaReturnsBadRequest(t *testing.T) {
+	r, _ := setupQuotaRouter(t)
+
+	tests := []struct {
+		name string
+		path string
+		body string
+	}{
+		{
+			name: "bad duration",
+			path: "/api/v1/quotas/owner-a",
+			body: `{"max_ttl":"500ms"}`,
+		},
+		{
+			name: "negative sandboxes",
+			path: "/api/v1/quotas/owner-a",
+			body: `{"max_sandboxes":-1}`,
+		},
+		{
+			name: "bad owner",
+			path: "/api/v1/quotas/owner%20a",
+			body: `{"max_sandboxes":1}`,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodPut, tt.path, bytes.NewBufferString(tt.body))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
+			r.ServeHTTP(w, req)
+			if w.Code != http.StatusBadRequest {
+				t.Fatalf("status = %d, want %d: %s", w.Code, http.StatusBadRequest, w.Body.String())
+			}
+		})
+	}
+}

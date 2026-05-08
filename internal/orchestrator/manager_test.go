@@ -372,6 +372,36 @@ func TestManager_PersistentOwnerQuotaTTLLimit(t *testing.T) {
 	}
 }
 
+func TestManager_OwnerQuotaValidation(t *testing.T) {
+	m := setupManager(t)
+
+	tests := []OwnerQuota{
+		{OwnerID: "   ", MaxSandboxes: 1},
+		{OwnerID: "owner/a", MaxSandboxes: 1},
+		{OwnerID: "owner a", MaxSandboxes: 1},
+		{OwnerID: "owner-a", MaxSandboxes: -1},
+		{OwnerID: "owner-a", MaxTTL: "500ms"},
+		{OwnerID: "owner-a", MaxExecTimeout: "1.5s"},
+	}
+	for _, quota := range tests {
+		if _, err := m.SaveOwnerQuota(context.Background(), quota); !errors.Is(err, ErrInvalidInput) {
+			t.Fatalf("expected invalid input for %+v, got %v", quota, err)
+		}
+	}
+
+	saved, err := m.SaveOwnerQuota(context.Background(), OwnerQuota{
+		OwnerID:      " owner-trimmed ",
+		MaxSandboxes: 2,
+		MaxTTL:       "10s",
+	})
+	if err != nil {
+		t.Fatalf("save trimmed owner quota: %v", err)
+	}
+	if saved.OwnerID != "owner-trimmed" || saved.MaxTTL != "10s" {
+		t.Fatalf("unexpected saved quota: %+v", saved)
+	}
+}
+
 func TestManager_SpawnMaxTTLLimit(t *testing.T) {
 	m := setupManagerWithConfig(t, ManagerConfig{
 		DefaultTTL:    5 * time.Minute,

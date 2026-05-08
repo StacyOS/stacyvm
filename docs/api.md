@@ -404,6 +404,8 @@ Optional override body:
 
 Owner quotas are persisted overrides for per-owner sandbox and runtime limits. They apply when requests include an owner via `X-User-ID` or `owner_id`.
 
+Owner IDs are trimmed and must be 128 characters or fewer. They cannot contain whitespace, control characters, or path separators. Quota durations must use whole-second Go duration strings; use `0s` or omit a duration to inherit the global default.
+
 ### List owner quotas
 
 ```
@@ -440,6 +442,8 @@ PUT /api/v1/quotas/{ownerID}
 ```
 
 **Response** `200 OK`: full owner quota object.
+
+Invalid owner IDs, negative sandbox counts, malformed durations, sub-second durations, and fractional-second durations return `400 Bad Request`.
 
 ### Get owner usage
 
