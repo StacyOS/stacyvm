@@ -80,6 +80,7 @@ rate_limit:
   cleanup_interval: "2m"
 auth:
   admin_api_key: "admin-secret"
+  admin_fallback_enabled: false
   admin_audit_retention: "2160h"
 pool:
   overflow: "queue"
@@ -99,6 +100,9 @@ pool:
 	}
 	if cfg.Auth.AdminAPIKey != "admin-secret" {
 		t.Fatalf("admin api key = %q, want admin-secret", cfg.Auth.AdminAPIKey)
+	}
+	if cfg.Auth.AdminFallbackEnabled {
+		t.Fatal("admin fallback enabled = true, want false")
 	}
 	if cfg.Auth.AdminAuditRetention != "2160h" {
 		t.Fatalf("admin audit retention = %q, want 2160h", cfg.Auth.AdminAuditRetention)

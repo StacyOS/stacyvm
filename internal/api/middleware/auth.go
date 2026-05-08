@@ -63,9 +63,9 @@ func AuthAny(apiKeys ...string) func(http.Handler) http.Handler {
 	}
 }
 
-func AdminAuth(adminAPIKey, fallbackAPIKey string) func(http.Handler) http.Handler {
+func AdminAuth(adminAPIKey, fallbackAPIKey string, fallbackEnabled bool) func(http.Handler) http.Handler {
 	candidates := []authCandidate{{Key: adminAPIKey, Role: AuthRoleAdmin}}
-	if adminAPIKey == "" {
+	if adminAPIKey == "" && fallbackEnabled {
 		adminAPIKey = fallbackAPIKey
 		candidates = []authCandidate{{Key: fallbackAPIKey, Role: AuthRoleAdmin}}
 	}

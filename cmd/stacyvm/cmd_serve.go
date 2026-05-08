@@ -221,11 +221,12 @@ func runServe() error {
 	rateLimitCleanupInterval, _ := time.ParseDuration(cfg.RateLimit.CleanupInterval)
 	adminAuditRetention, _ := time.ParseDuration(cfg.Auth.AdminAuditRetention)
 	srv := api.NewServer(api.ServerConfig{
-		Addr:                cfg.Server.Addr(),
-		APIKey:              cfg.Auth.APIKey,
-		AdminAPIKey:         cfg.Auth.AdminAPIKey,
-		AdminAuditRetention: adminAuditRetention,
-		Version:             version,
+		Addr:                  cfg.Server.Addr(),
+		APIKey:                cfg.Auth.APIKey,
+		AdminAPIKey:           cfg.Auth.AdminAPIKey,
+		AdminFallbackDisabled: !cfg.Auth.AdminFallbackEnabled,
+		AdminAuditRetention:   adminAuditRetention,
+		Version:               version,
 		RateLimit: middleware.RateLimitConfig{
 			Enabled:           cfg.RateLimit.Enabled,
 			RequestsPerMinute: cfg.RateLimit.RequestsPerMinute,

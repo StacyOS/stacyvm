@@ -525,6 +525,7 @@ auth:
   enabled: false
   api_key: ""
   admin_api_key: ""       # optional separate key for /api/v1/admin/*
+  admin_fallback_enabled: true  # false requires admin_api_key for admin routes
   admin_audit_retention: "0s"  # 0s disables native audit pruning
 
 rate_limit:
@@ -560,6 +561,7 @@ STACYVM_SERVER_PORT=8080
 STACYVM_PROVIDERS_DEFAULT=firecracker
 STACYVM_AUTH_API_KEY=sk-xyz123
 STACYVM_AUTH_ADMIN_API_KEY=sk-admin-xyz123
+STACYVM_AUTH_ADMIN_FALLBACK_ENABLED=false
 STACYVM_RATE_LIMIT_ENABLED=true
 STACYVM_LOGGING_LEVEL=debug
 ```

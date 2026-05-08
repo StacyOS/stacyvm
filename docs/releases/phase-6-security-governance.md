@@ -31,11 +31,17 @@ Phase 6 starts the security and governance layer above the Phase 5 admin control
 - Fallback actors are now more specific, such as `admin:X-Admin-API-Key`.
 - Existing explicit actor behavior is preserved: `X-User-ID` still wins when supplied.
 
+### Admin Fallback Policy
+
+- Added `auth.admin_fallback_enabled`.
+- Kept the default as `true` for backwards compatibility.
+- Production templates set it to `false` so admin routes require a dedicated `auth.admin_api_key`.
+
 ## Compatibility
 
 - No deployment config changes are required.
 - Existing `X-API-Key` and `X-Admin-API-Key` behavior is preserved.
-- Admin route fallback to `auth.api_key` remains available when no separate `auth.admin_api_key` is configured.
+- Admin route fallback to `auth.api_key` remains available by default when no separate `auth.admin_api_key` is configured.
 
 ## Verification
 
@@ -48,4 +54,4 @@ npm run build
 
 ## Next Phase 6 Direction
 
-The next slices should continue the governance hardening: configurable admin compatibility modes, production security guidance, and then external identity integration planning for OIDC/SSO.
+The next slices should continue the governance hardening: production security guidance and external identity integration planning for OIDC/SSO.

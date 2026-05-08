@@ -124,6 +124,23 @@ func TestAdminRoutesFallbackToAPIKeyWhenAdminKeyUnset(t *testing.T) {
 	}
 }
 
+func TestAdminRoutesRejectAPIKeyWhenFallbackDisabled(t *testing.T) {
+	srv := setupTestServer(t, ServerConfig{
+		APIKey:                "client-key",
+		AdminFallbackDisabled: true,
+		Version:               "test",
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/diagnostics", nil)
+	req.Header.Set("X-API-Key", "client-key")
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d: %s", w.Code, http.StatusForbidden, w.Body.String())
+	}
+}
+
 func TestAdminRoutesRemainOpenWhenAuthUnset(t *testing.T) {
 	srv := setupTestServer(t, ServerConfig{
 		Version: "test",

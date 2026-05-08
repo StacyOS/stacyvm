@@ -53,7 +53,7 @@ func TestAuthAnyAcceptsPrimaryOrAdminKey(t *testing.T) {
 
 func TestAdminAuthRequiresAdminKeyWhenConfigured(t *testing.T) {
 	var got AuthIdentity
-	handler := AdminAuth("admin-key", "primary-key")(identityHandler(&got))
+	handler := AdminAuth("admin-key", "primary-key", true)(identityHandler(&got))
 
 	tests := []struct {
 		name     string
@@ -97,7 +97,7 @@ func TestAdminAuthRequiresAdminKeyWhenConfigured(t *testing.T) {
 }
 
 func TestAdminAuthFallsBackToPrimaryKey(t *testing.T) {
-	handler := AdminAuth("", "primary-key")(okHandler())
+	handler := AdminAuth("", "primary-key", true)(okHandler())
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	req.Header.Set("X-API-Key", "primary-key")
@@ -106,6 +106,19 @@ func TestAdminAuthFallsBackToPrimaryKey(t *testing.T) {
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+}
+
+func TestAdminAuthCanDisablePrimaryKeyFallback(t *testing.T) {
+	handler := AdminAuth("", "primary-key", false)(okHandler())
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("X-API-Key", "primary-key")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d when no admin key is configured: %s", w.Code, http.StatusOK, w.Body.String())
 	}
 }
 

@@ -19,12 +19,13 @@ import (
 )
 
 type ServerConfig struct {
-	Addr                string
-	APIKey              string
-	AdminAPIKey         string
-	AdminAuditRetention time.Duration
-	Version             string
-	RateLimit           middleware.RateLimitConfig
+	Addr                  string
+	APIKey                string
+	AdminAPIKey           string
+	AdminFallbackDisabled bool
+	AdminAuditRetention   time.Duration
+	Version               string
+	RateLimit             middleware.RateLimitConfig
 }
 
 type Server struct {
@@ -101,7 +102,7 @@ func NewServer(cfg ServerConfig, registry *providers.Registry, manager *orchestr
 			r.Mount("/quotas", quotaRoutes.Routes())
 			r.Get("/pool/status", sandboxRoutes.VMPoolStatus)
 			r.Route("/admin", func(r chi.Router) {
-				r.Use(middleware.AdminAuth(cfg.AdminAPIKey, cfg.APIKey))
+				r.Use(middleware.AdminAuth(cfg.AdminAPIKey, cfg.APIKey, !cfg.AdminFallbackDisabled))
 				if cfg.APIKey != "" || cfg.AdminAPIKey != "" {
 					r.Use(middleware.RequireScope(middleware.ScopeAdmin))
 				}

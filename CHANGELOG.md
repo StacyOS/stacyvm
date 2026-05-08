@@ -10,6 +10,7 @@ This checkpoint starts the Phase 6 security and governance work on top of the Ph
 - Initial scope metadata for authenticated requests: `api:*` and `admin:*`.
 - Route-level scope enforcement for authenticated admin routes.
 - Admin audit fallback attribution now includes the authenticated role and key header when no explicit actor header is supplied.
+- Configurable admin fallback through `auth.admin_fallback_enabled`.
 - Phase 6 release notes under `docs/releases/phase-6-security-governance.md`.
 
 ## Phase 5 Admin Control Plane - 2026-05-08

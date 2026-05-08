@@ -135,10 +135,11 @@ type DefaultsConfig struct {
 }
 
 type AuthConfig struct {
-	Enabled             bool   `mapstructure:"enabled"`
-	APIKey              string `mapstructure:"api_key"`
-	AdminAPIKey         string `mapstructure:"admin_api_key"`
-	AdminAuditRetention string `mapstructure:"admin_audit_retention"`
+	Enabled              bool   `mapstructure:"enabled"`
+	APIKey               string `mapstructure:"api_key"`
+	AdminAPIKey          string `mapstructure:"admin_api_key"`
+	AdminFallbackEnabled bool   `mapstructure:"admin_fallback_enabled"`
+	AdminAuditRetention  string `mapstructure:"admin_audit_retention"`
 }
 
 type RateLimitConfig struct {
@@ -228,6 +229,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("auth.enabled", false)
 	v.SetDefault("auth.api_key", "")
 	v.SetDefault("auth.admin_api_key", "")
+	v.SetDefault("auth.admin_fallback_enabled", true)
 	v.SetDefault("auth.admin_audit_retention", "0s")
 
 	v.SetDefault("rate_limit.enabled", false)

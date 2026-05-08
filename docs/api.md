@@ -109,9 +109,10 @@ StacyVM supports an optional separate admin API key:
 auth:
   api_key: "sk-client"
   admin_api_key: "sk-admin"
+  admin_fallback_enabled: false
 ```
 
-Use `X-Admin-API-Key` for admin requests. `X-API-Key` is still accepted when it matches the admin key. If `auth.admin_api_key` is empty, admin routes fall back to `auth.api_key` for backwards compatibility.
+Use `X-Admin-API-Key` for admin requests. `X-API-Key` is still accepted when it matches the admin key. If `auth.admin_api_key` is empty, admin routes fall back to `auth.api_key` for backwards compatibility unless `auth.admin_fallback_enabled` is set to `false`.
 
 For dashboard setup, quota workflows, diagnostics, audit history, CSV export, and storage notes, see [admin-control-plane.md](admin-control-plane.md).
 

@@ -11,6 +11,7 @@ auth:
   enabled: true
   api_key: "sk-client"
   admin_api_key: "sk-admin"
+  admin_fallback_enabled: false
   admin_audit_retention: "2160h"
 ```
 
@@ -19,10 +20,13 @@ The same values can be supplied with environment variables:
 ```bash
 STACYVM_AUTH_API_KEY=sk-client
 STACYVM_AUTH_ADMIN_API_KEY=sk-admin
+STACYVM_AUTH_ADMIN_FALLBACK_ENABLED=false
 STACYVM_AUTH_ADMIN_AUDIT_RETENTION=2160h
 ```
 
-Use `X-Admin-API-Key` for `/api/v1/admin/*` requests. If `auth.admin_api_key` is configured, the regular `auth.api_key` cannot access admin routes. If no admin key is configured, admin routes fall back to `auth.api_key` for compatibility.
+Use `X-Admin-API-Key` for `/api/v1/admin/*` requests. If `auth.admin_api_key` is configured, the regular `auth.api_key` cannot access admin routes. If no admin key is configured, admin routes fall back to `auth.api_key` for compatibility unless `auth.admin_fallback_enabled` is set to `false`.
+
+Production deployments should set `auth.admin_fallback_enabled: false` and configure a dedicated `auth.admin_api_key`.
 
 Authenticated requests now carry a request-scoped identity with either the `api` or `admin` role. Admin identities receive both `api:*` and `admin:*` scopes; regular API identities receive `api:*`. This keeps the current API-key behavior stable while creating a typed authorization boundary for later RBAC and identity-provider integrations.
 
