@@ -186,3 +186,15 @@ Known host caveats:
 Owner/signoff:
 Date:
 ```
+
+For an auditable host artifact, generate the signoff scaffold directly:
+
+```bash
+scripts/certify-runtime.sh docker --format markdown --output docker-certification.md
+scripts/certify-runtime.sh firecracker --format markdown --output firecracker-certification.md
+scripts/certify-runtime.sh proot --format markdown --output proot-certification.md
+```
+
+The generated report includes host metadata, dependency checks, overall status,
+and an operator signoff section. Attach provider conformance logs and smoke
+script output next to that artifact for final production approval.

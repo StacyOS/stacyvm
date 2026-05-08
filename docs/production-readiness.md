@@ -51,6 +51,7 @@ This checklist tracks the Phase 7 release-candidate hardening work needed before
 - `stacyvm config lint --production` passes with the same config and environment variables the service will use.
 - `stacyvm upgrade rehearse` passes before binary/image replacement.
 - Operators can generate `stacyvm support bundle` output without exposing API keys or provider secrets.
+- Runtime certification artifacts are generated on the actual host with `scripts/certify-runtime.sh <runtime> --format markdown --output <runtime>-certification.md`.
 - Operators run `stacyvm doctor --production` before go-live.
 
 ## Required Before Public Self-Serve

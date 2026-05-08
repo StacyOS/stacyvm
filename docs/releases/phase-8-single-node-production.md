@@ -42,11 +42,19 @@ Phase 8 moves StacyVM from release-candidate hardening toward technical self-hos
 - Redaction covers secret-like keys, API keys, bearer tokens, token/password/secret assignments, and URLs with embedded credentials.
 - Added tests to ensure final support JSON does not leak representative secrets.
 
+### Runtime Certification Artifacts
+
+- Upgraded `scripts/certify-runtime.sh` to emit host certification reports in `text`, `json`, or `markdown`.
+- Added `--output` support so Docker, gVisor, Kata, Firecracker, and PRoot host checks can be attached to deployment records.
+- Added stricter optional Firecracker and PRoot path checks through `STACYVM_FIRECRACKER_KERNEL`, `STACYVM_PROOT_ROOTFS`, and `STACYVM_PROOT_WORKSPACE_BASE`.
+- Documented required Phase 8 signoff artifacts for target infrastructure.
+
 ### Documentation
 
 - Updated deployment backup and upgrade guidance to prefer `stacyvm db backup`.
 - Updated deployment and release guidance to run `stacyvm config lint --production` before staging, upgrades, and release tags.
 - Added backup, config lint, upgrade rehearsal, and support bundle commands to the README command list.
+- Updated runtime certification and conformance docs to require host-generated certification artifacts.
 
 ## Verification
 
