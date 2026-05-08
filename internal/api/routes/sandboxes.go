@@ -233,7 +233,7 @@ func (s *SandboxRoutes) Exec(w http.ResponseWriter, r *http.Request) {
 func (s *SandboxRoutes) execStream(w http.ResponseWriter, r *http.Request, id string, req orchestrator.ExecRequest) {
 	ch, err := s.manager.ExecStream(r.Context(), id, req)
 	if err != nil {
-		httputil.WriteError(w, http.StatusInternalServerError, httputil.CodeInternal, err.Error())
+		writeRouteError(w, err)
 		return
 	}
 

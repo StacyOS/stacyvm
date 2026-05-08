@@ -2,6 +2,7 @@ package routes
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -140,6 +141,39 @@ func TestExecInSandbox_Timeout(t *testing.T) {
 
 	if w.Code != http.StatusRequestTimeout {
 		t.Fatalf("expected 408, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestExecStream_MaxTimeoutLimit(t *testing.T) {
+	r, mgr := setupTestRouter(t)
+	if _, err := mgr.SaveOwnerQuota(context.Background(), orchestrator.OwnerQuota{
+		OwnerID:        "owner-a",
+		MaxExecTimeout: "1s",
+	}); err != nil {
+		t.Fatalf("save owner quota: %v", err)
+	}
+
+	body := `{"image":"alpine:latest","owner_id":"owner-a"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sandboxes", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create status = %d: %s", w.Code, w.Body.String())
+	}
+	var sb orchestrator.Sandbox
+	if err := json.NewDecoder(w.Body).Decode(&sb); err != nil {
+		t.Fatalf("decode sandbox: %v", err)
+	}
+
+	execBody := `{"command":"echo hello","timeout":"2s","stream":true}`
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/sandboxes/"+sb.ID+"/exec", bytes.NewBufferString(execBody))
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 429, got %d: %s", w.Code, w.Body.String())
 	}
 }
 
