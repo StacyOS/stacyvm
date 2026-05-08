@@ -13,6 +13,7 @@ This document is the source of truth for the StacyVM HTTP API. The Python and Ty
 - [Authentication](#authentication)
 - [Conventions](#conventions)
 - [Errors](#errors)
+- [Admin API](#admin-api)
 - [Sandboxes](#sandboxes)
 - [Files](#files)
 - [Templates](#templates)
@@ -27,11 +28,12 @@ This document is the source of truth for the StacyVM HTTP API. The Python and Ty
 
 ## Authentication
 
-Two optional headers, both off by default:
+Optional headers:
 
 | Header | Purpose | Required when |
 |---|---|---|
 | `X-API-Key` | API key authentication | `auth.enabled: true` in `stacyvm.yaml` |
+| `X-Admin-API-Key` | Admin API key authentication | `auth.admin_api_key` is configured and calling `/api/v1/admin/*` |
 | `X-User-ID` | Multi-tenant pool mode user identifier | `pool.enabled: true` |
 
 ```bash
@@ -96,6 +98,39 @@ Errors return a JSON body with HTTP status reflecting the failure class:
 | `429` | `resource_limit` | Quota, capacity, or API rate limit exceeded |
 | `500` | `provider_error` | Provider failed (Docker, Firecracker, etc.) |
 | `503` | `unavailable` | Pool full with `overflow: reject` |
+
+---
+
+## Admin API
+
+StacyVM supports an optional separate admin API key:
+
+```yaml
+auth:
+  api_key: "sk-client"
+  admin_api_key: "sk-admin"
+```
+
+Use `X-Admin-API-Key` for admin requests. `X-API-Key` is still accepted when it matches the admin key. If `auth.admin_api_key` is empty, admin routes fall back to `auth.api_key` for backwards compatibility.
+
+Admin route aliases:
+
+| Method | Path | Purpose |
+|---|---|---|
+| `GET` | `/api/v1/admin/providers` | List providers with health details |
+| `GET` | `/api/v1/admin/providers/{name}` | Provider detail |
+| `POST` | `/api/v1/admin/providers/test` | Run provider health checks |
+| `GET` | `/api/v1/admin/quotas` | List owner quota overrides |
+| `GET` | `/api/v1/admin/quotas/summary` | Redacted quota coverage summary |
+| `GET` | `/api/v1/admin/quotas/{ownerID}` | Get owner quota |
+| `PUT` | `/api/v1/admin/quotas/{ownerID}` | Create or update owner quota |
+| `GET` | `/api/v1/admin/quotas/{ownerID}/usage` | Owner usage against effective quota |
+| `DELETE` | `/api/v1/admin/quotas/{ownerID}` | Delete owner quota |
+| `GET` | `/api/v1/admin/diagnostics` | Redacted operational diagnostics |
+| `GET` | `/api/v1/admin/metrics` | Structured JSON metrics |
+| `GET` | `/api/v1/admin/metrics/prometheus` | Prometheus metrics |
+
+The existing non-admin paths remain available for compatibility in this phase.
 
 ---
 

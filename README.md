@@ -431,6 +431,8 @@ Auth: pass `X-API-Key: <your-key>` if `auth.enabled: true`. For pool mode, also 
 | `GET` | `/metrics/prometheus` | Prometheus-compatible metrics |
 | `GET` | `/events` | Server-sent events stream |
 
+Admin aliases for providers, quotas, diagnostics, and metrics are available under `/admin/*` and can be protected with `auth.admin_api_key`.
+
 Full schemas, request/response examples, and error codes: **[docs/api.md](docs/api.md)**.
 OpenAPI spec: [docs/swagger.yaml](docs/swagger.yaml).
 
@@ -521,6 +523,7 @@ defaults:
 auth:
   enabled: false
   api_key: ""
+  admin_api_key: ""       # optional separate key for /api/v1/admin/*
 
 rate_limit:
   enabled: false
@@ -554,6 +557,7 @@ pool:
 STACYVM_SERVER_PORT=8080
 STACYVM_PROVIDERS_DEFAULT=firecracker
 STACYVM_AUTH_API_KEY=sk-xyz123
+STACYVM_AUTH_ADMIN_API_KEY=sk-admin-xyz123
 STACYVM_RATE_LIMIT_ENABLED=true
 STACYVM_LOGGING_LEVEL=debug
 ```

@@ -40,6 +40,8 @@ The files in `deploy/` provide a production-oriented Compose starting point:
 - `deploy/.env.example` lists the environment variables expected by the Compose file.
 - `deploy/stacyvm.env.example` is the systemd environment file template.
 
+Use separate values for `STACYVM_API_KEY` and `STACYVM_ADMIN_API_KEY` in production. Admin routes live under `/api/v1/admin/*` and should be restricted to operator networks where possible.
+
 ```bash
 cd deploy
 cp .env.example .env
@@ -85,7 +87,7 @@ sudo install -m 0755 bin/stacyvm-agent /usr/local/bin/stacyvm-agent
 sudo install -m 0644 deploy/stacyvm.service /etc/systemd/system/stacyvm.service
 ```
 
-Edit `/etc/stacyvm/stacyvm.env` and set a real `STACYVM_AUTH_API_KEY`. Then enable the service:
+Edit `/etc/stacyvm/stacyvm.env` and set real `STACYVM_AUTH_API_KEY` and `STACYVM_AUTH_ADMIN_API_KEY` values. Then enable the service:
 
 ```bash
 sudo systemctl daemon-reload

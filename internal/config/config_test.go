@@ -78,6 +78,8 @@ rate_limit:
   key_by: "api_key"
   bucket_ttl: "30m"
   cleanup_interval: "2m"
+auth:
+  admin_api_key: "admin-secret"
 pool:
   overflow: "queue"
 `), 0644); err != nil {
@@ -93,5 +95,8 @@ pool:
 	}
 	if !cfg.RateLimit.Enabled || cfg.RateLimit.KeyBy != "api_key" || cfg.RateLimit.BucketTTL != "30m" {
 		t.Fatalf("unexpected rate limit config: %+v", cfg.RateLimit)
+	}
+	if cfg.Auth.AdminAPIKey != "admin-secret" {
+		t.Fatalf("admin api key = %q, want admin-secret", cfg.Auth.AdminAPIKey)
 	}
 }

@@ -1,5 +1,25 @@
 # Changelog
 
+## Phase 5 Admin Control Plane - 2026-05-08
+
+This checkpoint starts the Phase 5 operator control plane by separating admin access from regular API usage.
+
+### Added
+
+- Optional `auth.admin_api_key` / `STACYVM_AUTH_ADMIN_API_KEY` configuration.
+- `X-Admin-API-Key` support for admin requests.
+- `/api/v1/admin/*` route aliases for providers, quotas, diagnostics, JSON metrics, and Prometheus metrics.
+- Admin key examples in deployment templates and docs.
+
+### Changed
+
+- Normal API and admin API keys can both authenticate regular API requests.
+- Admin routes require the admin key when configured, with fallback to the regular API key only when no admin key is set.
+
+### Verified
+
+- `go test ./internal/api/middleware ./internal/config ./cmd/stacyvm`
+
 ## Phase 4 Production Deployment - 2026-05-08
 
 This checkpoint adds the first production deployment and verification surface for Phase 4: GitHub Actions CI, deployment templates, and an operator runbook.

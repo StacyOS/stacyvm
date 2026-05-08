@@ -135,8 +135,9 @@ type DefaultsConfig struct {
 }
 
 type AuthConfig struct {
-	Enabled bool   `mapstructure:"enabled"`
-	APIKey  string `mapstructure:"api_key"`
+	Enabled     bool   `mapstructure:"enabled"`
+	APIKey      string `mapstructure:"api_key"`
+	AdminAPIKey string `mapstructure:"admin_api_key"`
 }
 
 type RateLimitConfig struct {
@@ -225,6 +226,7 @@ func setDefaults(v *viper.Viper) {
 
 	v.SetDefault("auth.enabled", false)
 	v.SetDefault("auth.api_key", "")
+	v.SetDefault("auth.admin_api_key", "")
 
 	v.SetDefault("rate_limit.enabled", false)
 	v.SetDefault("rate_limit.requests_per_minute", 120)

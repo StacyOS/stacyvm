@@ -73,6 +73,7 @@ defaults:
 auth:
   enabled: true
   api_key: "change-me-generate-at-least-32-bytes"
+  admin_api_key: "change-me-generate-a-separate-admin-key"
 
 rate_limit:
   enabled: true

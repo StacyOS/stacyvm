@@ -19,10 +19,11 @@ import (
 )
 
 type ServerConfig struct {
-	Addr      string
-	APIKey    string
-	Version   string
-	RateLimit middleware.RateLimitConfig
+	Addr        string
+	APIKey      string
+	AdminAPIKey string
+	Version     string
+	RateLimit   middleware.RateLimitConfig
 }
 
 type Server struct {
@@ -57,8 +58,8 @@ func NewServer(cfg ServerConfig, registry *providers.Registry, manager *orchestr
 
 	// API routes — with auth and CORS
 	r.Group(func(r chi.Router) {
-		if cfg.APIKey != "" {
-			r.Use(middleware.Auth(cfg.APIKey))
+		if cfg.APIKey != "" || cfg.AdminAPIKey != "" {
+			r.Use(middleware.AuthAny(cfg.APIKey, cfg.AdminAPIKey))
 		}
 
 		// CORS
@@ -66,7 +67,7 @@ func NewServer(cfg ServerConfig, registry *providers.Registry, manager *orchestr
 			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Access-Control-Allow-Origin", "*")
 				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-API-Key, X-Request-ID, X-User-ID")
+				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-API-Key, X-Admin-API-Key, X-Request-ID, X-User-ID")
 				if r.Method == "OPTIONS" {
 					w.WriteHeader(http.StatusOK)
 					return
@@ -97,6 +98,14 @@ func NewServer(cfg ServerConfig, registry *providers.Registry, manager *orchestr
 			r.Mount("/environments", environmentRoutes.Routes())
 			r.Mount("/quotas", quotaRoutes.Routes())
 			r.Get("/pool/status", sandboxRoutes.VMPoolStatus)
+			r.Route("/admin", func(r chi.Router) {
+				r.Use(middleware.AdminAuth(cfg.AdminAPIKey, cfg.APIKey))
+				r.Mount("/providers", providerRoutes.Routes())
+				r.Mount("/quotas", quotaRoutes.Routes())
+				r.Get("/diagnostics", systemRoutes.Diagnostics)
+				r.Get("/metrics", systemRoutes.Metrics)
+				r.Get("/metrics/prometheus", systemRoutes.PrometheusMetrics)
+			})
 			r.Mount("/", systemRoutes.Routes())
 		})
 	})

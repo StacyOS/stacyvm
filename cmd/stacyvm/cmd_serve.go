@@ -220,9 +220,10 @@ func runServe() error {
 	rateLimitBucketTTL, _ := time.ParseDuration(cfg.RateLimit.BucketTTL)
 	rateLimitCleanupInterval, _ := time.ParseDuration(cfg.RateLimit.CleanupInterval)
 	srv := api.NewServer(api.ServerConfig{
-		Addr:    cfg.Server.Addr(),
-		APIKey:  cfg.Auth.APIKey,
-		Version: version,
+		Addr:        cfg.Server.Addr(),
+		APIKey:      cfg.Auth.APIKey,
+		AdminAPIKey: cfg.Auth.AdminAPIKey,
+		Version:     version,
 		RateLimit: middleware.RateLimitConfig{
 			Enabled:           cfg.RateLimit.Enabled,
 			RequestsPerMinute: cfg.RateLimit.RequestsPerMinute,
