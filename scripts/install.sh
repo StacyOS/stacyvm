@@ -7,6 +7,7 @@
 # Environment variables:
 #   STACYVM_VERSION       — specific version to install (default: latest)
 #   STACYVM_INSTALL_DIR   — where to put binaries (default: /usr/local/bin)
+#   STACYVM_REQUIRE_SIGNATURES — require Sigstore verification with cosign (default: false)
 #
 set -euo pipefail
 
@@ -24,6 +25,8 @@ INSTALL_DIR="${STACYVM_INSTALL_DIR:-/usr/local/bin}"
 DATA_DIR="/var/lib/stacyvm"
 KERNEL_URL="https://s3.amazonaws.com/spec.ccfc.min/img/quickstart_guide/x86_64/kernels/vmlinux.bin"
 REPO="StacyOs/stacyvm"
+COSIGN_IDENTITY_REGEXP="${STACYVM_COSIGN_IDENTITY_REGEXP:-https://github.com/StacyOS/stacyvm/.github/workflows/release.yml@refs/tags/v.*}"
+COSIGN_ISSUER="${STACYVM_COSIGN_ISSUER:-https://token.actions.githubusercontent.com}"
 
 echo ""
 echo "  ╔═══════════════════════════════════╗"
@@ -67,6 +70,58 @@ info "Downloading stacyvm ${VERSION} (${ARCH_SUFFIX})..."
 curl -fSL -o "$TMPDIR/stacyvm" "${RELEASE_URL}/stacyvm-linux-${ARCH_SUFFIX}"
 curl -fSL -o "$TMPDIR/stacyvm-agent" "${RELEASE_URL}/stacyvm-agent-linux-${ARCH_SUFFIX}"
 curl -fSL -o "$TMPDIR/checksums.txt" "${RELEASE_URL}/checksums.txt"
+
+# ── Verify Sigstore signatures when available ───────────
+verify_signature() {
+    local file="$1"
+    local release_name="$2"
+    if ! curl -fSL -o "${file}.sig" "${RELEASE_URL}/${release_name}.sig"; then
+        return 2
+    fi
+    if ! curl -fSL -o "${file}.pem" "${RELEASE_URL}/${release_name}.pem"; then
+        return 2
+    fi
+    cosign verify-blob "$file" \
+        --signature "${file}.sig" \
+        --certificate "${file}.pem" \
+        --certificate-identity-regexp "$COSIGN_IDENTITY_REGEXP" \
+        --certificate-oidc-issuer "$COSIGN_ISSUER" >/dev/null
+}
+
+if command -v cosign >/dev/null 2>&1; then
+    info "Verifying Sigstore signatures..."
+    signatures_missing=false
+    for item in \
+        "$TMPDIR/stacyvm:stacyvm-linux-${ARCH_SUFFIX}" \
+        "$TMPDIR/stacyvm-agent:stacyvm-agent-linux-${ARCH_SUFFIX}" \
+        "$TMPDIR/checksums.txt:checksums.txt"
+    do
+        file="${item%%:*}"
+        release_name="${item#*:}"
+        set +e
+        verify_signature "$file" "$release_name"
+        verify_status=$?
+        set -e
+        if [[ "$verify_status" -eq 2 ]]; then
+            signatures_missing=true
+        elif [[ "$verify_status" -ne 0 ]]; then
+            fail "Sigstore signature verification failed for ${release_name}"
+        fi
+    done
+    if [[ "$signatures_missing" == "true" ]]; then
+        if [[ "${STACYVM_REQUIRE_SIGNATURES:-false}" == "true" ]]; then
+            fail "Sigstore signature assets are missing for this release."
+        fi
+        warn "Sigstore signature assets are missing for this release; relying on checksums only."
+    else
+        info "Signatures verified"
+    fi
+elif [[ "${STACYVM_REQUIRE_SIGNATURES:-false}" == "true" ]]; then
+    fail "cosign is required because STACYVM_REQUIRE_SIGNATURES=true. Install cosign and rerun."
+else
+    warn "cosign not found; skipping Sigstore signature verification and relying on checksums only."
+    warn "For public installs, install cosign or set STACYVM_REQUIRE_SIGNATURES=true."
+fi
 
 # ── Verify checksums ────────────────────────────────────
 info "Verifying checksums..."

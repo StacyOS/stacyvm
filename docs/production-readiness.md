@@ -28,6 +28,15 @@ This checklist tracks the Phase 7 release-candidate hardening work needed before
 - Upgrade rehearsal checks document backup, config lint, service restart, readiness validation, and rollback. Done in Phase 8 slice 3.
 - Support bundle export exists and redacts secrets before sharing with maintainers. Done in Phase 8 slice 3.
 
+## Phase 9 Acceptance Criteria
+
+- Release binaries and checksums are signed through the GitHub Actions release workflow.
+- Published container image digests are signed through the GitHub Actions release workflow.
+- A public verification script exists for release signatures and checksums.
+- Installer supports Sigstore verification and a fail-closed mode.
+- Upgrade and config migration tests run in CI.
+- Public docs expose known limitations and exact remediation paths.
+
 ## Current Release-Candidate Gates
 
 | Gate | Status | Notes |
@@ -38,7 +47,7 @@ This checklist tracks the Phase 7 release-candidate hardening work needed before
 | Deployment smoke | Passing | Mock-provider smoke is in CI. Docker live host certification remains external. |
 | Runtime conformance | Partial | Harness and host certification script exist; Firecracker/PRoot remain platform-gated. |
 | Security posture | Partial | Admin governance, operation audit, path traversal checks, and explicit exec modes are implemented; OIDC/JWT implementation remains. |
-| Release automation | Present | GHCR and binary workflows exist; signed artifacts are not yet implemented. |
+| Release automation | Partial | GHCR and binary workflows exist; Phase 9 adds Sigstore signing and verification. |
 
 ## Required Before Single-Node Production
 

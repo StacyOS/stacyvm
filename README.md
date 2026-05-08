@@ -695,6 +695,14 @@ curl -fsSL https://github.com/StacyOs/stacyvm/releases/latest/download/stacyvm-l
 chmod +x stacyvm && sudo mv stacyvm /usr/local/bin/
 ```
 
+For public installs, verify the release first:
+
+```bash
+scripts/verify-release.sh v0.4.0 amd64
+```
+
+The installer verifies Sigstore signatures automatically when `cosign` is installed. Set `STACYVM_REQUIRE_SIGNATURES=true` to fail closed when signature verification is unavailable.
+
 ---
 
 ## Project layout

@@ -1,5 +1,22 @@
 # Changelog
 
+## Phase 9 Public Self-Serve Release Trust - 2026-05-08
+
+This checkpoint starts the Phase 9 public self-serve production readiness track.
+
+### Added
+
+- Sigstore keyless signing for release binaries and `checksums.txt`.
+- Sigstore signing for published GHCR image digests.
+- `scripts/verify-release.sh` for public release signature and checksum verification.
+- Installer Sigstore verification when `cosign` is available.
+- `STACYVM_REQUIRE_SIGNATURES=true` installer mode for fail-closed public installs.
+- Phase 9 acceptance criteria in the production readiness checklist.
+
+### Changed
+
+- Release documentation now explains binary, checksum, and container signature verification.
+
 ## Phase 8 Single-Node Production - 2026-05-08
 
 This checkpoint starts the Phase 8 single-node production readiness track.
