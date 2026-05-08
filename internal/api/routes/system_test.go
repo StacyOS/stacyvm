@@ -123,7 +123,7 @@ func TestSystemRoutes_Diagnostics(t *testing.T) {
 	}
 	var body map[string]interface{}
 	decodeSystemResponse(t, w, &body)
-	for _, field := range []string{"generated_at", "build", "process", "store", "limits", "providers", "sandboxes", "events", "operations", "redactions"} {
+	for _, field := range []string{"generated_at", "build", "process", "store", "limits", "scheduler", "rate_limit", "providers", "sandboxes", "events", "operations", "redactions"} {
 		if _, ok := body[field]; !ok {
 			t.Fatalf("diagnostics missing %s: %#v", field, body)
 		}
@@ -165,6 +165,12 @@ func TestSystemRoutes_MetricsIncludesOperationalBreakdown(t *testing.T) {
 	if _, ok := body["events"].(map[string]interface{}); !ok {
 		t.Fatal("expected events metrics")
 	}
+	if _, ok := body["scheduler"].(map[string]interface{}); !ok {
+		t.Fatal("expected scheduler metrics")
+	}
+	if _, ok := body["rate_limit"].(map[string]interface{}); !ok {
+		t.Fatal("expected rate limit metrics")
+	}
 	operations := body["operations"].([]interface{})
 	if len(operations) == 0 {
 		t.Fatal("expected operation metrics")
@@ -197,6 +203,8 @@ func TestSystemRoutes_PrometheusMetrics(t *testing.T) {
 		"stacyvm_uptime_seconds",
 		"stacyvm_provider_healthy",
 		"stacyvm_provider_health_latency_milliseconds",
+		"stacyvm_spawn_queue_depth",
+		"stacyvm_rate_limit_allowed_total",
 		"stacyvm_operation_success_total",
 		`operation="spawn"`,
 		`operation="exec"`,

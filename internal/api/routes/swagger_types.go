@@ -1,6 +1,9 @@
 package routes
 
-import "github.com/StacyOs/stacyvm/internal/orchestrator"
+import (
+	"github.com/StacyOs/stacyvm/internal/api/middleware"
+	"github.com/StacyOs/stacyvm/internal/orchestrator"
+)
 
 // StatusResponse is a generic status response.
 type StatusResponse struct {
@@ -52,6 +55,8 @@ type DiagnosticsResponse struct {
 	Sandboxes   map[string]interface{}             `json:"sandboxes"`
 	Events      orchestrator.EventBusStats         `json:"events"`
 	Operations  []orchestrator.OperationMetrics    `json:"operations"`
+	Scheduler   orchestrator.SchedulerStatus       `json:"scheduler"`
+	RateLimit   middleware.RateLimitStats          `json:"rate_limit"`
 	Redactions  []string                           `json:"redactions"`
 }
 

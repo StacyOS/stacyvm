@@ -120,6 +120,13 @@ type OperationalLimitsInfo struct {
 	MaxSpawnQueue        int    `json:"max_spawn_queue"`
 }
 
+type SchedulerStatus struct {
+	SpawnOverflow     string `json:"spawn_overflow"`
+	SpawnQueueDepth   int    `json:"spawn_queue_depth"`
+	MaxSpawnQueue     int    `json:"max_spawn_queue"`
+	SpawnQueueTimeout string `json:"spawn_queue_timeout"`
+}
+
 type OwnerQuota struct {
 	OwnerID        string    `json:"owner_id"`
 	MaxSandboxes   int       `json:"max_sandboxes"`

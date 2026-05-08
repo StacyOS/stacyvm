@@ -27,13 +27,26 @@ type rateBucket struct {
 }
 
 type RateLimiter struct {
-	mu       sync.Mutex
-	buckets  map[string]*rateBucket
-	rate     float64
-	burst    float64
-	keyBy    string
-	now      func() time.Time
-	disabled bool
+	mu                sync.Mutex
+	buckets           map[string]*rateBucket
+	rate              float64
+	requestsPerMinute int
+	burst             float64
+	keyBy             string
+	now               func() time.Time
+	disabled          bool
+	allowedTotal      uint64
+	limitedTotal      uint64
+}
+
+type RateLimitStats struct {
+	Enabled           bool   `json:"enabled"`
+	RequestsPerMinute int    `json:"requests_per_minute"`
+	Burst             int    `json:"burst"`
+	KeyBy             string `json:"key_by"`
+	ActiveBuckets     int    `json:"active_buckets"`
+	AllowedTotal      uint64 `json:"allowed_total"`
+	LimitedTotal      uint64 `json:"limited_total"`
 }
 
 func NewRateLimiter(cfg RateLimitConfig) *RateLimiter {
@@ -51,12 +64,13 @@ func NewRateLimiter(cfg RateLimitConfig) *RateLimiter {
 		keyBy = "owner"
 	}
 	return &RateLimiter{
-		buckets:  make(map[string]*rateBucket),
-		rate:     float64(cfg.RequestsPerMinute) / 60.0,
-		burst:    float64(cfg.Burst),
-		keyBy:    keyBy,
-		now:      cfg.Now,
-		disabled: !cfg.Enabled || cfg.RequestsPerMinute == 0,
+		buckets:           make(map[string]*rateBucket),
+		rate:              float64(cfg.RequestsPerMinute) / 60.0,
+		requestsPerMinute: cfg.RequestsPerMinute,
+		burst:             float64(cfg.Burst),
+		keyBy:             keyBy,
+		now:               cfg.Now,
+		disabled:          !cfg.Enabled || cfg.RequestsPerMinute == 0,
 	}
 }
 
@@ -114,12 +128,31 @@ func (rl *RateLimiter) allow(key string) (bool, int, time.Duration) {
 
 	if bucket.tokens >= 1 {
 		bucket.tokens--
+		rl.allowedTotal++
 		return true, int(math.Floor(bucket.tokens)), 0
 	}
 
 	needed := 1 - bucket.tokens
 	retryAfter := time.Duration(math.Ceil(needed/rl.rate)) * time.Second
+	rl.limitedTotal++
 	return false, 0, retryAfter
+}
+
+func (rl *RateLimiter) Stats() RateLimitStats {
+	if rl == nil {
+		return RateLimitStats{}
+	}
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	return RateLimitStats{
+		Enabled:           !rl.disabled,
+		RequestsPerMinute: rl.requestsPerMinute,
+		Burst:             int(rl.burst),
+		KeyBy:             rl.keyBy,
+		ActiveBuckets:     len(rl.buckets),
+		AllowedTotal:      rl.allowedTotal,
+		LimitedTotal:      rl.limitedTotal,
+	}
 }
 
 func (rl *RateLimiter) key(r *http.Request) string {

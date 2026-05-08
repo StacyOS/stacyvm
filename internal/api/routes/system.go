@@ -9,6 +9,7 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/StacyOs/stacyvm/internal/api/middleware"
 	"github.com/StacyOs/stacyvm/internal/httputil"
 	"github.com/StacyOs/stacyvm/internal/orchestrator"
 	"github.com/StacyOs/stacyvm/internal/providers"
@@ -24,9 +25,14 @@ type SystemRoutes struct {
 	store     store.Store
 	startTime time.Time
 	version   string
+	limiter   *middleware.RateLimiter
 }
 
-func NewSystemRoutes(registry *providers.Registry, manager *orchestrator.Manager, events *orchestrator.EventBus, st store.Store, version string) *SystemRoutes {
+func NewSystemRoutes(registry *providers.Registry, manager *orchestrator.Manager, events *orchestrator.EventBus, st store.Store, version string, limiter ...*middleware.RateLimiter) *SystemRoutes {
+	var rateLimiter *middleware.RateLimiter
+	if len(limiter) > 0 {
+		rateLimiter = limiter[0]
+	}
 	return &SystemRoutes{
 		registry:  registry,
 		manager:   manager,
@@ -34,6 +40,7 @@ func NewSystemRoutes(registry *providers.Registry, manager *orchestrator.Manager
 		store:     st,
 		startTime: time.Now(),
 		version:   version,
+		limiter:   rateLimiter,
 	}
 }
 
@@ -175,6 +182,8 @@ func (s *SystemRoutes) Diagnostics(w http.ResponseWriter, r *http.Request) {
 		},
 		"store":      storeStatus,
 		"limits":     s.manager.Limits(),
+		"scheduler":  s.manager.SchedulerStatus(),
+		"rate_limit": s.rateLimitStats(),
 		"providers":  metrics.providerHealth,
 		"sandboxes":  metrics.sandboxSummary(),
 		"events":     metrics.eventStats,
@@ -245,6 +254,8 @@ type systemMetricsSnapshot struct {
 	healthyProviders    int
 	eventStats          orchestrator.EventBusStats
 	operationMetrics    []orchestrator.OperationMetrics
+	schedulerStatus     orchestrator.SchedulerStatus
+	rateLimitStats      middleware.RateLimitStats
 }
 
 func (s *SystemRoutes) collectMetrics(ctx context.Context) (systemMetricsSnapshot, error) {
@@ -287,6 +298,8 @@ func (s *SystemRoutes) collectMetrics(ctx context.Context) (systemMetricsSnapsho
 		healthyProviders:    healthyProviders,
 		eventStats:          eventStats,
 		operationMetrics:    s.manager.OperationMetrics(),
+		schedulerStatus:     s.manager.SchedulerStatus(),
+		rateLimitStats:      s.rateLimitStats(),
 	}, nil
 }
 
@@ -306,6 +319,8 @@ func (m systemMetricsSnapshot) toResponse() map[string]interface{} {
 		},
 		"events":     m.eventStats,
 		"operations": m.operationMetrics,
+		"scheduler":  m.schedulerStatus,
+		"rate_limit": m.rateLimitStats,
 	}
 }
 
@@ -320,6 +335,13 @@ func (m systemMetricsSnapshot) sandboxSummary() map[string]interface{} {
 
 func (s *SystemRoutes) providerHealth(ctx context.Context) []ProviderHealth {
 	return collectProviderHealth(ctx, s.registry)
+}
+
+func (s *SystemRoutes) rateLimitStats() middleware.RateLimitStats {
+	if s.limiter == nil {
+		return middleware.RateLimitStats{}
+	}
+	return s.limiter.Stats()
 }
 
 // Events serves Server-Sent Events for real-time updates.

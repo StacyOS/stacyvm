@@ -139,3 +139,33 @@ func TestRateLimitErrorBody(t *testing.T) {
 		}
 	}
 }
+
+func TestRateLimitStats(t *testing.T) {
+	now := time.Date(2026, 5, 8, 12, 0, 0, 0, time.UTC)
+	limiter := NewRateLimiter(RateLimitConfig{
+		Enabled:           true,
+		RequestsPerMinute: 60,
+		Burst:             1,
+		KeyBy:             "ip",
+		Now:               func() time.Time { return now },
+	})
+
+	handler := limiter.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+
+	for i := 0; i < 2; i++ {
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/sandboxes", nil)
+		req.RemoteAddr = "203.0.113.30:5000"
+		w := httptest.NewRecorder()
+		handler.ServeHTTP(w, req)
+	}
+
+	stats := limiter.Stats()
+	if !stats.Enabled || stats.RequestsPerMinute != 60 || stats.Burst != 1 || stats.KeyBy != "ip" {
+		t.Fatalf("unexpected config stats: %+v", stats)
+	}
+	if stats.ActiveBuckets != 1 || stats.AllowedTotal != 1 || stats.LimitedTotal != 1 {
+		t.Fatalf("unexpected counters: %+v", stats)
+	}
+}

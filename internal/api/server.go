@@ -75,8 +75,10 @@ func NewServer(cfg ServerConfig, registry *providers.Registry, manager *orchestr
 			})
 		})
 
+		var rateLimiter *middleware.RateLimiter
 		if cfg.RateLimit.Enabled {
-			r.Use(middleware.RateLimit(cfg.RateLimit))
+			rateLimiter = middleware.NewRateLimiter(cfg.RateLimit)
+			r.Use(rateLimiter.Middleware)
 		}
 
 		// Routes
@@ -84,10 +86,9 @@ func NewServer(cfg ServerConfig, registry *providers.Registry, manager *orchestr
 		providerRoutes := routes.NewProviderRoutes(registry, manager)
 		templateRoutes := routes.NewTemplateRoutes(templates, manager)
 		snapshotRoutes := routes.NewSnapshotRoutes(registry)
-		systemRoutes := routes.NewSystemRoutes(registry, manager, events, st, cfg.Version)
+		systemRoutes := routes.NewSystemRoutes(registry, manager, events, st, cfg.Version, rateLimiter)
 		environmentRoutes := routes.NewEnvironmentRoutes(st, envBuild)
 		quotaRoutes := routes.NewQuotaRoutes(manager)
-
 		r.Route("/api/v1", func(r chi.Router) {
 			r.Mount("/sandboxes", sandboxRoutes.Routes())
 			r.Mount("/providers", providerRoutes.Routes())

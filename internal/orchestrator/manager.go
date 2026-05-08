@@ -979,6 +979,17 @@ func (m *Manager) Limits() OperationalLimitsInfo {
 	}
 }
 
+func (m *Manager) SchedulerStatus() SchedulerStatus {
+	m.queueMu.Lock()
+	defer m.queueMu.Unlock()
+	return SchedulerStatus{
+		SpawnOverflow:     m.limits.SpawnOverflow,
+		SpawnQueueDepth:   m.queueWaiters,
+		MaxSpawnQueue:     m.limits.MaxSpawnQueue,
+		SpawnQueueTimeout: m.limits.SpawnQueueTimeout.String(),
+	}
+}
+
 func (m *Manager) GetOwnerQuota(ctx context.Context, ownerID string) (*OwnerQuota, error) {
 	rec, err := m.store.GetOwnerQuota(ctx, ownerID)
 	if err != nil {

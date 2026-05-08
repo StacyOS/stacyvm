@@ -453,6 +453,28 @@ func TestManager_SpawnQueueTimesOut(t *testing.T) {
 	assertEventType(t, m.events.History(20), EventSpawnQueueTimeout)
 }
 
+func TestManager_SchedulerStatus(t *testing.T) {
+	m := setupManagerWithConfig(t, ManagerConfig{
+		DefaultTTL:    5 * time.Minute,
+		DefaultImage:  "alpine:latest",
+		DefaultMemory: 512,
+		DefaultVCPUs:  1,
+		Limits: OperationalLimits{
+			SpawnOverflow:     "queue",
+			SpawnQueueTimeout: 10 * time.Second,
+			MaxSpawnQueue:     7,
+		},
+	})
+
+	status := m.SchedulerStatus()
+	if status.SpawnOverflow != "queue" || status.MaxSpawnQueue != 7 || status.SpawnQueueTimeout != "10s" {
+		t.Fatalf("unexpected scheduler status: %+v", status)
+	}
+	if status.SpawnQueueDepth != 0 {
+		t.Fatalf("queue depth = %d, want 0", status.SpawnQueueDepth)
+	}
+}
+
 func TestManager_ExecStreamTimeoutEmitsErrorChunk(t *testing.T) {
 	m := setupManager(t)
 	ctx := context.Background()

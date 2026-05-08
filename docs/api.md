@@ -680,6 +680,21 @@ GET /api/v1/diagnostics
     "spawn_queue_timeout": "30s",
     "max_spawn_queue": 100
   },
+  "scheduler": {
+    "spawn_overflow": "queue",
+    "spawn_queue_depth": 3,
+    "max_spawn_queue": 100,
+    "spawn_queue_timeout": "30s"
+  },
+  "rate_limit": {
+    "enabled": true,
+    "requests_per_minute": 120,
+    "burst": 60,
+    "key_by": "owner",
+    "active_buckets": 14,
+    "allowed_total": 9132,
+    "limited_total": 27
+  },
   "providers": [
     {
       "name": "docker",
@@ -743,6 +758,21 @@ GET /api/v1/metrics
     "history_size": 1000,
     "events_total": 2401
   },
+  "scheduler": {
+    "spawn_overflow": "queue",
+    "spawn_queue_depth": 3,
+    "max_spawn_queue": 100,
+    "spawn_queue_timeout": "30s"
+  },
+  "rate_limit": {
+    "enabled": true,
+    "requests_per_minute": 120,
+    "burst": 60,
+    "key_by": "owner",
+    "active_buckets": 14,
+    "allowed_total": 9132,
+    "limited_total": 27
+  },
   "operations": [
     {
       "operation": "exec",
@@ -773,6 +803,8 @@ stacyvm_uptime_seconds 7980
 # HELP stacyvm_provider_healthy Provider health status where 1 is healthy and 0 is unhealthy.
 # TYPE stacyvm_provider_healthy gauge
 stacyvm_provider_healthy{provider="docker",default="true"} 1
+stacyvm_spawn_queue_depth 3
+stacyvm_rate_limit_blocked_total 27
 stacyvm_operation_success_total{operation="exec",provider="docker"} 482
 stacyvm_operation_failure_total{operation="exec",provider="docker"} 7
 ```

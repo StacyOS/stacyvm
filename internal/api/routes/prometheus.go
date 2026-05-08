@@ -56,6 +56,18 @@ func writePrometheusMetrics(w io.Writer, metrics systemMetricsSnapshot) {
 	writePrometheusHelp(w, "stacyvm_event_history_size", "Current event history item count.")
 	fmt.Fprintf(w, "stacyvm_event_history_size %d\n", metrics.eventStats.HistorySize)
 
+	writePrometheusHelp(w, "stacyvm_spawn_queue_depth", "Current number of spawn requests waiting for capacity.")
+	fmt.Fprintf(w, "stacyvm_spawn_queue_depth %d\n", metrics.schedulerStatus.SpawnQueueDepth)
+	writePrometheusHelp(w, "stacyvm_spawn_queue_capacity", "Configured maximum number of queued spawn requests.")
+	fmt.Fprintf(w, "stacyvm_spawn_queue_capacity %d\n", metrics.schedulerStatus.MaxSpawnQueue)
+
+	writePrometheusHelp(w, "stacyvm_rate_limit_allowed_total", "Total API requests allowed by the in-process rate limiter.")
+	fmt.Fprintf(w, "stacyvm_rate_limit_allowed_total %d\n", metrics.rateLimitStats.AllowedTotal)
+	writePrometheusHelp(w, "stacyvm_rate_limit_blocked_total", "Total API requests blocked by the in-process rate limiter.")
+	fmt.Fprintf(w, "stacyvm_rate_limit_blocked_total %d\n", metrics.rateLimitStats.LimitedTotal)
+	writePrometheusHelp(w, "stacyvm_rate_limit_active_buckets", "Current number of active rate-limit buckets.")
+	fmt.Fprintf(w, "stacyvm_rate_limit_active_buckets %d\n", metrics.rateLimitStats.ActiveBuckets)
+
 	writeOperationMetrics(w, metrics.operationMetrics)
 }
 
