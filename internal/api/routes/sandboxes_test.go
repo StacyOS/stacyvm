@@ -521,6 +521,21 @@ func TestCreateSandbox_WithOwnerID(t *testing.T) {
 	}
 }
 
+func TestCreateSandbox_InvalidOwnerID(t *testing.T) {
+	r, _ := setupTestRouter(t)
+
+	body := `{"image":"alpine:latest"}`
+	req := httptest.NewRequest("POST", "/api/v1/sandboxes", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-User-ID", "alice smith")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
 func TestWriteAndReadFile(t *testing.T) {
 	r, _ := setupTestRouter(t)
 

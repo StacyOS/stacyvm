@@ -42,6 +42,8 @@ curl -H 'X-API-Key: sk-xyz123' \
 
 CORS is permissive by default (`*`). Lock it down via reverse proxy if you expose StacyVM to the open internet.
 
+`X-User-ID` is trimmed when present. It must be 128 characters or fewer and cannot contain whitespace, control characters, or path separators.
+
 ---
 
 ## Rate limiting

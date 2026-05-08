@@ -260,6 +260,8 @@ client = Client("http://localhost:7423", user_id="alice@example.com")
 const client = new Client({ baseUrl: "http://localhost:7423", userId: "alice@example.com" });
 ```
 
+User IDs are trimmed by the server. They must be 128 characters or fewer and cannot contain whitespace, control characters, or path separators.
+
 Hardening knobs (Docker provider):
 
 ```yaml

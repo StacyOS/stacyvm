@@ -353,6 +353,13 @@ func (m *Manager) Spawn(ctx context.Context, req SpawnRequest) (*Sandbox, error)
 		}
 		ttl = parsed
 	}
+	ownerID, err := normalizeOptionalOwnerID(req.OwnerID)
+	if err != nil {
+		metricsErr = err
+		m.publishFailureForError("", OperationSpawn, metricsProvider, err)
+		return nil, err
+	}
+	req.OwnerID = ownerID
 	if err := m.acquireSpawnAdmission(ctx, req.OwnerID, ttl, metricsProvider); err != nil {
 		metricsErr = err
 		m.publishFailureForError("", OperationSpawn, metricsProvider, err)
@@ -1438,6 +1445,14 @@ func normalizeOwnerID(ownerID string) (string, error) {
 		}
 	}
 	return ownerID, nil
+}
+
+func normalizeOptionalOwnerID(ownerID string) (string, error) {
+	ownerID = strings.TrimSpace(ownerID)
+	if ownerID == "" {
+		return "", nil
+	}
+	return normalizeOwnerID(ownerID)
 }
 
 func optionalSecondsString(seconds int64) string {

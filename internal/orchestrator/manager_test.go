@@ -327,6 +327,24 @@ func TestManager_SpawnOwnerLimit(t *testing.T) {
 	}
 }
 
+func TestManager_SpawnOwnerIDValidation(t *testing.T) {
+	m := setupManager(t)
+
+	sb, err := m.Spawn(context.Background(), SpawnRequest{OwnerID: " owner-trimmed "})
+	if err != nil {
+		t.Fatalf("spawn trimmed owner: %v", err)
+	}
+	if sb.OwnerID != "owner-trimmed" {
+		t.Fatalf("owner_id = %q, want owner-trimmed", sb.OwnerID)
+	}
+
+	for _, ownerID := range []string{"owner/a", "owner a", strings.Repeat("a", 129)} {
+		if _, err := m.Spawn(context.Background(), SpawnRequest{OwnerID: ownerID}); !errors.Is(err, ErrInvalidInput) {
+			t.Fatalf("expected invalid owner for %q, got %v", ownerID, err)
+		}
+	}
+}
+
 func TestManager_PersistentOwnerQuotaLimit(t *testing.T) {
 	m := setupManagerWithConfig(t, ManagerConfig{
 		DefaultTTL:    5 * time.Minute,
