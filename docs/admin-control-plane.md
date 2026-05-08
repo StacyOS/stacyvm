@@ -26,6 +26,8 @@ Use `X-Admin-API-Key` for `/api/v1/admin/*` requests. If `auth.admin_api_key` is
 
 Authenticated requests now carry a request-scoped identity with either the `api` or `admin` role. Admin identities receive both `api:*` and `admin:*` scopes; regular API identities receive `api:*`. This keeps the current API-key behavior stable while creating a typed authorization boundary for later RBAC and identity-provider integrations.
 
+When API-key auth is enabled, admin routes also enforce the `admin:*` scope at the route layer. This is intentionally redundant with admin-key authentication today and gives future RBAC/OIDC integrations a single policy hook to satisfy.
+
 ## Dashboard Setup
 
 Open Settings, enable API key sending, and set:

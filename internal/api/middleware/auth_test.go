@@ -116,6 +116,46 @@ func TestAuthIdentityFromContextDefaultsToAnonymous(t *testing.T) {
 	}
 }
 
+func TestRequireScopeAllowsMatchingScope(t *testing.T) {
+	handler := RequireScope(ScopeAdmin)(okHandler())
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req = req.WithContext(WithAuthIdentity(req.Context(), AuthIdentity{
+		Role:   AuthRoleAdmin,
+		Scopes: []string{ScopeAPI, ScopeAdmin},
+	}))
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+}
+
+func TestRequireScopeRejectsMissingScope(t *testing.T) {
+	handler := RequireScope(ScopeAdmin)(okHandler())
+
+	tests := []struct {
+		name     string
+		identity AuthIdentity
+	}{
+		{name: "regular api identity", identity: AuthIdentity{Role: AuthRoleAPI, Scopes: []string{ScopeAPI}}},
+		{name: "anonymous identity", identity: AuthIdentity{}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, "/", nil)
+			req = req.WithContext(WithAuthIdentity(req.Context(), tt.identity))
+			w := httptest.NewRecorder()
+			handler.ServeHTTP(w, req)
+
+			if w.Code != http.StatusForbidden {
+				t.Fatalf("status = %d, want %d: %s", w.Code, http.StatusForbidden, w.Body.String())
+			}
+		})
+	}
+}
+
 func okHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)

@@ -102,6 +102,9 @@ func NewServer(cfg ServerConfig, registry *providers.Registry, manager *orchestr
 			r.Get("/pool/status", sandboxRoutes.VMPoolStatus)
 			r.Route("/admin", func(r chi.Router) {
 				r.Use(middleware.AdminAuth(cfg.AdminAPIKey, cfg.APIKey))
+				if cfg.APIKey != "" || cfg.AdminAPIKey != "" {
+					r.Use(middleware.RequireScope(middleware.ScopeAdmin))
+				}
 				r.Use(middleware.AdminAudit(st, logger, cfg.AdminAuditRetention))
 				r.Get("/audit", adminAuditRoutes.List)
 				r.Mount("/providers", providerRoutes.Routes())

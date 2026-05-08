@@ -114,6 +114,25 @@ func (i AuthIdentity) HasScope(scope string) bool {
 	return false
 }
 
+func RequireScope(scope string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			identity := AuthIdentityFromContext(r.Context())
+			if !identity.HasScope(scope) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusForbidden)
+				json.NewEncoder(w).Encode(map[string]string{
+					"code":    "FORBIDDEN",
+					"message": "required authorization scope missing",
+				})
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 type authCandidate struct {
 	Key  string
 	Role AuthRole

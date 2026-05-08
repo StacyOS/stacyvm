@@ -8,6 +8,7 @@ This checkpoint starts the Phase 6 security and governance work on top of the Ph
 
 - Request-scoped authentication identities with `api` and `admin` roles.
 - Initial scope metadata for authenticated requests: `api:*` and `admin:*`.
+- Route-level scope enforcement for authenticated admin routes.
 - Admin audit fallback attribution now uses the authenticated role when no explicit actor header is supplied.
 - Phase 6 release notes under `docs/releases/phase-6-security-governance.md`.
 

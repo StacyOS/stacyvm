@@ -19,6 +19,12 @@ Phase 6 starts the security and governance layer above the Phase 5 admin control
 - Admin keys used through either supported key header are now represented as admin identities.
 - Regular API keys remain regular API identities and still cannot access admin routes when `auth.admin_api_key` is configured.
 
+### Route-Level Scope Enforcement
+
+- Added a reusable `RequireScope` middleware.
+- Wired authenticated admin routes through `RequireScope("admin:*")`.
+- Kept unauthenticated development mode behavior unchanged when no API keys are configured.
+
 ### Audit Attribution
 
 - Admin audit fallback attribution now reads the authenticated role from request context when no `X-User-ID` actor is supplied.
@@ -34,10 +40,11 @@ Phase 6 starts the security and governance layer above the Phase 5 admin control
 
 ```sh
 go test ./internal/api/middleware
+go test ./internal/api
 go test ./...
 npm run build
 ```
 
 ## Next Phase 6 Direction
 
-The next slices should turn this identity foundation into enforceable governance: route-level scope helpers, safer admin actor attribution, configurable admin compatibility modes, and then external identity integration planning for OIDC/SSO.
+The next slices should continue the governance hardening: safer admin actor attribution, configurable admin compatibility modes, production security guidance, and then external identity integration planning for OIDC/SSO.

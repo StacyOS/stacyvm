@@ -124,6 +124,20 @@ func TestAdminRoutesFallbackToAPIKeyWhenAdminKeyUnset(t *testing.T) {
 	}
 }
 
+func TestAdminRoutesRemainOpenWhenAuthUnset(t *testing.T) {
+	srv := setupTestServer(t, ServerConfig{
+		Version: "test",
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/diagnostics", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+}
+
 func TestAdminAPIKeyCanAuthenticateRegularRoutes(t *testing.T) {
 	srv := setupTestServer(t, ServerConfig{
 		APIKey:      "client-key",
