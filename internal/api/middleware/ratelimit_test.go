@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 )
@@ -206,5 +207,42 @@ func TestRateLimitEvictsInactiveBuckets(t *testing.T) {
 	stats := limiter.Stats()
 	if stats.ActiveBuckets != 1 || stats.EvictedTotal != 1 {
 		t.Fatalf("unexpected cleanup stats: %+v", stats)
+	}
+}
+
+func TestRateLimitBucketKeysDoNotStoreRawIdentity(t *testing.T) {
+	limiter := NewRateLimiter(RateLimitConfig{
+		Enabled:           true,
+		RequestsPerMinute: 60,
+		Burst:             10,
+		KeyBy:             "owner",
+	})
+
+	handler := limiter.Middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/sandboxes", nil)
+	req.Header.Set("X-User-ID", "sensitive-owner")
+	req.Header.Set("X-API-Key", "sk-sensitive")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/sandboxes", nil)
+	req.RemoteAddr = "203.0.113.77:5000"
+	limiter.keyBy = "ip"
+	w = httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	limiter.mu.Lock()
+	defer limiter.mu.Unlock()
+	for key := range limiter.buckets {
+		if strings.Contains(key, "sensitive-owner") || strings.Contains(key, "sk-sensitive") || strings.Contains(key, "203.0.113.77") {
+			t.Fatalf("bucket key contains raw identity: %q", key)
+		}
+		parts := strings.Split(key, ":")
+		if len(parts) != 2 || len(parts[1]) != 64 {
+			t.Fatalf("bucket key is not typed sha256 form: %q", key)
+		}
 	}
 }

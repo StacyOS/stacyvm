@@ -62,6 +62,8 @@ rate_limit:
 
 The default `owner` mode uses `X-User-ID` when present, then falls back to `X-API-Key`, then client IP. Limited requests return `429 Too Many Requests` with `Retry-After`, `X-RateLimit-Limit`, and `X-RateLimit-Remaining` headers.
 
+Rate-limit buckets store hashed identity keys internally; raw owner IDs, API keys, and IP addresses are not exposed in diagnostics or metrics.
+
 ---
 
 ## Conventions

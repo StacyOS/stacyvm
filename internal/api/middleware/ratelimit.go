@@ -1,6 +1,8 @@
 package middleware
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"math"
@@ -197,19 +199,24 @@ func (rl *RateLimiter) key(r *http.Request) string {
 	switch rl.keyBy {
 	case "api_key":
 		if apiKey := strings.TrimSpace(r.Header.Get("X-API-Key")); apiKey != "" {
-			return "api_key:" + apiKey
+			return bucketKey("api_key", apiKey)
 		}
 	case "ip":
-		return "ip:" + clientIP(r)
+		return bucketKey("ip", clientIP(r))
 	default:
 		if ownerID := strings.TrimSpace(r.Header.Get("X-User-ID")); ownerID != "" {
-			return "owner:" + ownerID
+			return bucketKey("owner", ownerID)
 		}
 		if apiKey := strings.TrimSpace(r.Header.Get("X-API-Key")); apiKey != "" {
-			return "api_key:" + apiKey
+			return bucketKey("api_key", apiKey)
 		}
 	}
-	return "ip:" + clientIP(r)
+	return bucketKey("ip", clientIP(r))
+}
+
+func bucketKey(kind, value string) string {
+	sum := sha256.Sum256([]byte(kind + ":" + value))
+	return kind + ":" + hex.EncodeToString(sum[:])
 }
 
 func clientIP(r *http.Request) string {
