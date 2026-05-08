@@ -135,9 +135,10 @@ type DefaultsConfig struct {
 }
 
 type AuthConfig struct {
-	Enabled     bool   `mapstructure:"enabled"`
-	APIKey      string `mapstructure:"api_key"`
-	AdminAPIKey string `mapstructure:"admin_api_key"`
+	Enabled             bool   `mapstructure:"enabled"`
+	APIKey              string `mapstructure:"api_key"`
+	AdminAPIKey         string `mapstructure:"admin_api_key"`
+	AdminAuditRetention string `mapstructure:"admin_audit_retention"`
 }
 
 type RateLimitConfig struct {
@@ -227,6 +228,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("auth.enabled", false)
 	v.SetDefault("auth.api_key", "")
 	v.SetDefault("auth.admin_api_key", "")
+	v.SetDefault("auth.admin_audit_retention", "0s")
 
 	v.SetDefault("rate_limit.enabled", false)
 	v.SetDefault("rate_limit.requests_per_minute", 120)
@@ -330,6 +332,7 @@ func (c *Config) Validate() error {
 		"defaults.spawn_queue_timeout":    c.Defaults.SpawnQueueTimeout,
 		"rate_limit.bucket_ttl":           c.RateLimit.BucketTTL,
 		"rate_limit.cleanup_interval":     c.RateLimit.CleanupInterval,
+		"auth.admin_audit_retention":      c.Auth.AdminAuditRetention,
 		"providers.custom.timeout":        c.Providers.Custom.Timeout,
 		"providers.proot.default_timeout": c.Providers.PRoot.DefaultTimeout,
 	}

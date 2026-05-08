@@ -19,11 +19,12 @@ import (
 )
 
 type ServerConfig struct {
-	Addr        string
-	APIKey      string
-	AdminAPIKey string
-	Version     string
-	RateLimit   middleware.RateLimitConfig
+	Addr                string
+	APIKey              string
+	AdminAPIKey         string
+	AdminAuditRetention time.Duration
+	Version             string
+	RateLimit           middleware.RateLimitConfig
 }
 
 type Server struct {
@@ -101,7 +102,7 @@ func NewServer(cfg ServerConfig, registry *providers.Registry, manager *orchestr
 			r.Get("/pool/status", sandboxRoutes.VMPoolStatus)
 			r.Route("/admin", func(r chi.Router) {
 				r.Use(middleware.AdminAuth(cfg.AdminAPIKey, cfg.APIKey))
-				r.Use(middleware.AdminAudit(st, logger))
+				r.Use(middleware.AdminAudit(st, logger, cfg.AdminAuditRetention))
 				r.Get("/audit", adminAuditRoutes.List)
 				r.Mount("/providers", providerRoutes.Routes())
 				r.Mount("/quotas", quotaRoutes.Routes())

@@ -156,6 +156,7 @@ type Store interface {
 	// Admin audit
 	CreateAdminAudit(ctx context.Context, rec *AdminAuditRecord) error
 	ListAdminAudit(ctx context.Context, query AdminAuditQuery) ([]*AdminAuditRecord, error)
+	DeleteAdminAuditBefore(ctx context.Context, before time.Time) (int64, error)
 
 	// Exec logs
 	CreateExecLog(ctx context.Context, log *ExecLogRecord) error

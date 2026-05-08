@@ -337,6 +337,14 @@ func (s *SQLiteStore) ListAdminAudit(ctx context.Context, query AdminAuditQuery)
 	return records, rows.Err()
 }
 
+func (s *SQLiteStore) DeleteAdminAuditBefore(ctx context.Context, before time.Time) (int64, error) {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM admin_audit_logs WHERE created_at < ?`, before.UTC())
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
 // --- Exec Logs ---
 
 func (s *SQLiteStore) CreateExecLog(ctx context.Context, log *ExecLogRecord) error {

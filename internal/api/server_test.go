@@ -48,6 +48,35 @@ func setupTestServer(t *testing.T, cfg ServerConfig) *Server {
 	return NewServer(cfg, registry, manager, events, templates, pool, st, noopBuildStarter{}, zerolog.Nop())
 }
 
+func setupTestServerWithStore(t *testing.T, cfg ServerConfig) (*Server, *store.SQLiteStore) {
+	t.Helper()
+
+	st, err := store.NewSQLiteStore(filepath.Join(t.TempDir(), "test.db"))
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	t.Cleanup(func() { st.Close() })
+
+	registry := providers.NewRegistry()
+	mock := providers.NewMockProvider()
+	registry.Register(mock)
+	if err := registry.SetDefault("mock"); err != nil {
+		t.Fatalf("set default provider: %v", err)
+	}
+
+	events := orchestrator.NewEventBus()
+	manager := orchestrator.NewManager(registry, st, events, zerolog.Nop(), orchestrator.ManagerConfig{
+		DefaultTTL:    5 * time.Minute,
+		DefaultImage:  "alpine:latest",
+		DefaultMemory: 512,
+		DefaultVCPUs:  1,
+	})
+	templates := orchestrator.NewTemplateRegistry(st)
+	pool := orchestrator.NewPoolManager(manager, templates, zerolog.Nop())
+
+	return NewServer(cfg, registry, manager, events, templates, pool, st, noopBuildStarter{}, zerolog.Nop()), st
+}
+
 func TestAdminRoutesRequireAdminAPIKeyWhenConfigured(t *testing.T) {
 	srv := setupTestServer(t, ServerConfig{
 		APIKey:      "client-key",
@@ -169,5 +198,42 @@ func TestAdminRoutesWriteAuditLog(t *testing.T) {
 	}
 	if body := w.Body.String(); !strings.Contains(body, "/api/v1/admin/diagnostics") || !strings.Contains(body, "operator-a") {
 		t.Fatalf("csv body missing filtered audit record: %s", body)
+	}
+}
+
+func TestAdminRoutesPruneAuditLogWithRetention(t *testing.T) {
+	srv, st := setupTestServerWithStore(t, ServerConfig{
+		APIKey:              "client-key",
+		AdminAPIKey:         "admin-key",
+		AdminAuditRetention: time.Hour,
+		Version:             "test",
+	})
+	ctx := t.Context()
+	if err := st.CreateAdminAudit(ctx, &store.AdminAuditRecord{
+		Actor:     "old-operator",
+		Method:    http.MethodGet,
+		Path:      "/api/v1/admin/old",
+		Status:    http.StatusOK,
+		CreatedAt: time.Now().Add(-2 * time.Hour),
+	}); err != nil {
+		t.Fatalf("create old audit: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/diagnostics", nil)
+	req.Header.Set("X-Admin-API-Key", "admin-key")
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("diagnostics status = %d, want %d: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	records, err := st.ListAdminAudit(ctx, store.AdminAuditQuery{Limit: 10})
+	if err != nil {
+		t.Fatalf("list audit: %v", err)
+	}
+	for _, rec := range records {
+		if rec.Actor == "old-operator" {
+			t.Fatalf("old audit record was not pruned: %+v", records)
+		}
 	}
 }

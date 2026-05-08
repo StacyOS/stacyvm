@@ -74,6 +74,7 @@ auth:
   enabled: true
   api_key: "change-me-generate-at-least-32-bytes"
   admin_api_key: "change-me-generate-a-separate-admin-key"
+  admin_audit_retention: "2160h"
 
 rate_limit:
   enabled: true

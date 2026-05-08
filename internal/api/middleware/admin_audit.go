@@ -13,6 +13,7 @@ import (
 
 type adminAuditStore interface {
 	CreateAdminAudit(ctx context.Context, rec *store.AdminAuditRecord) error
+	DeleteAdminAuditBefore(ctx context.Context, before time.Time) (int64, error)
 }
 
 type auditResponseWriter struct {
@@ -25,7 +26,7 @@ func (rw *auditResponseWriter) WriteHeader(status int) {
 	rw.ResponseWriter.WriteHeader(status)
 }
 
-func AdminAudit(st adminAuditStore, logger zerolog.Logger) func(http.Handler) http.Handler {
+func AdminAudit(st adminAuditStore, logger zerolog.Logger, retention time.Duration) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if st == nil {
@@ -50,6 +51,16 @@ func AdminAudit(st adminAuditStore, logger zerolog.Logger) func(http.Handler) ht
 			}
 			if err := st.CreateAdminAudit(r.Context(), rec); err != nil {
 				logger.Warn().Err(err).Str("path", r.URL.Path).Msg("failed to write admin audit log")
+				return
+			}
+			if retention > 0 {
+				before := rec.CreatedAt.Add(-retention)
+				deleted, err := st.DeleteAdminAuditBefore(r.Context(), before)
+				if err != nil {
+					logger.Warn().Err(err).Msg("failed to prune admin audit logs")
+				} else if deleted > 0 {
+					logger.Debug().Int64("deleted", deleted).Dur("retention", retention).Msg("pruned admin audit logs")
+				}
 			}
 		})
 	}

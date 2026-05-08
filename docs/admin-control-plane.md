@@ -11,6 +11,7 @@ auth:
   enabled: true
   api_key: "sk-client"
   admin_api_key: "sk-admin"
+  admin_audit_retention: "2160h"
 ```
 
 The same values can be supplied with environment variables:
@@ -18,6 +19,7 @@ The same values can be supplied with environment variables:
 ```bash
 STACYVM_AUTH_API_KEY=sk-client
 STACYVM_AUTH_ADMIN_API_KEY=sk-admin
+STACYVM_AUTH_ADMIN_AUDIT_RETENTION=2160h
 ```
 
 Use `X-Admin-API-Key` for `/api/v1/admin/*` requests. If `auth.admin_api_key` is configured, the regular `auth.api_key` cannot access admin routes. If no admin key is configured, admin routes fall back to `auth.api_key` for compatibility.
@@ -89,6 +91,6 @@ curl \
 
 ## Storage And Retention
 
-Audit logs live in the main SQLite database. They are included in normal database backups. Phase 5 does not automatically prune audit records, so production operators should monitor database size and define a retention policy before long-running deployments.
+Audit logs live in the main SQLite database. They are included in normal database backups. Native retention is controlled by `auth.admin_audit_retention`.
 
-Until native retention is added, retention can be handled externally during a maintenance window with a database backup in hand.
+Set the value to a Go duration such as `720h` for 30 days or `2160h` for 90 days. `0s` disables native pruning. Pruning runs after successful admin audit writes, so records older than the retention window are removed as operators use the admin control plane.

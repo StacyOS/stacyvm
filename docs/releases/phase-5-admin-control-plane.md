@@ -49,6 +49,8 @@ Phase 5 starts the operator/admin control-plane work for StacyVM. This phase bui
 - Added an Audit tab to the Operations dashboard.
 - Added audit filters for actor, HTTP method, status, and path substring.
 - Added CSV export for filtered audit history.
+- Added `auth.admin_audit_retention` for native audit log pruning.
+- Production templates keep 90 days of admin audit history with `2160h`.
 
 ## Verification
 
@@ -59,4 +61,4 @@ npm run build
 
 ## Next Phase 5 Direction
 
-The next slice should add final dashboard QA polish and then prepare the Phase 5 GitHub release.
+The next slice should run final Phase 5 QA and prepare the Phase 5 GitHub release.

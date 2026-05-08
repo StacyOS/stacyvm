@@ -192,6 +192,21 @@ func TestAdminAuditLogs(t *testing.T) {
 	if len(records) != 1 || records[0].Actor != "operator-a" {
 		t.Fatalf("unexpected filtered audit records: %+v", records)
 	}
+
+	deleted, err := s.DeleteAdminAuditBefore(ctx, now.Add(500*time.Millisecond))
+	if err != nil {
+		t.Fatalf("delete old admin audit: %v", err)
+	}
+	if deleted != 1 {
+		t.Fatalf("deleted = %d, want 1", deleted)
+	}
+	records, err = s.ListAdminAudit(ctx, AdminAuditQuery{Limit: 10})
+	if err != nil {
+		t.Fatalf("list remaining admin audit: %v", err)
+	}
+	if len(records) != 1 || records[0].Actor != "operator-b" {
+		t.Fatalf("unexpected remaining audit records: %+v", records)
+	}
 }
 
 func TestProviderConfigs(t *testing.T) {

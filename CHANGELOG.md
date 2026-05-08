@@ -14,6 +14,7 @@ This checkpoint starts the Phase 5 operator control plane by separating admin ac
 - Operations dashboard page for admin quota controls and diagnostics.
 - Persisted admin audit log storage and `/api/v1/admin/audit`.
 - Admin control-plane operator guide under `docs/admin-control-plane.md`.
+- Config-driven admin audit retention through `auth.admin_audit_retention`.
 
 ### Changed
 
@@ -24,6 +25,7 @@ This checkpoint starts the Phase 5 operator control plane by separating admin ac
 - Owner quota list, save, delete, summary, usage, and diagnostics workflows are available from the dashboard.
 - Admin route access is recorded with redacted request metadata and shown in the Operations dashboard.
 - Admin audit history can be filtered by actor, method, status, and path, then exported as CSV.
+- Admin audit pruning removes records older than the configured retention window after successful admin audit writes.
 
 ### Verified
 
