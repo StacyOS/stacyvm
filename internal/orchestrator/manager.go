@@ -27,6 +27,7 @@ type Manager struct {
 
 	mu           sync.RWMutex
 	sandboxes    map[string]*Sandbox
+	admissionMu  sync.Mutex
 	queueMu      sync.Mutex
 	queueWaiters int
 	capacityCh   chan struct{}
@@ -352,11 +353,12 @@ func (m *Manager) Spawn(ctx context.Context, req SpawnRequest) (*Sandbox, error)
 		}
 		ttl = parsed
 	}
-	if err := m.waitForSpawnCapacity(ctx, req.OwnerID, ttl, metricsProvider); err != nil {
+	if err := m.acquireSpawnAdmission(ctx, req.OwnerID, ttl, metricsProvider); err != nil {
 		metricsErr = err
 		m.publishFailureForError("", OperationSpawn, metricsProvider, err)
 		return nil, err
 	}
+	defer m.admissionMu.Unlock()
 
 	now := time.Now()
 
@@ -1109,6 +1111,29 @@ func (m *Manager) publishOperationalEvent(eventType EventType, sandboxID string,
 		SandboxID: sandboxID,
 		Data:      payload,
 	})
+}
+
+func (m *Manager) acquireSpawnAdmission(ctx context.Context, ownerID string, ttl time.Duration, provider string) error {
+	for {
+		if err := m.waitForSpawnCapacity(ctx, ownerID, ttl, provider); err != nil {
+			return err
+		}
+
+		m.admissionMu.Lock()
+		decision, err := m.EvaluateSpawnAdmission(ctx, ownerID, ttl)
+		if err != nil {
+			m.admissionMu.Unlock()
+			return err
+		}
+		if decision.Allowed {
+			return nil
+		}
+		m.admissionMu.Unlock()
+
+		if !decision.Queueable || !strings.EqualFold(m.limits.SpawnOverflow, "queue") {
+			return spawnAdmissionError(decision)
+		}
+	}
 }
 
 func (m *Manager) waitForSpawnCapacity(ctx context.Context, ownerID string, ttl time.Duration, provider string) error {

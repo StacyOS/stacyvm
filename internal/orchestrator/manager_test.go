@@ -5,6 +5,7 @@ import (
 	"errors"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -44,6 +45,23 @@ func setupManagerWithConfig(t *testing.T, cfg ManagerConfig) *Manager {
 	m.Start()
 	t.Cleanup(func() { m.Stop() })
 	return m
+}
+
+type slowSpawnProvider struct {
+	providers.Provider
+	entered chan struct{}
+	release chan struct{}
+	once    sync.Once
+}
+
+func (p *slowSpawnProvider) Spawn(ctx context.Context, opts providers.SpawnOptions) (string, error) {
+	p.once.Do(func() { close(p.entered) })
+	select {
+	case <-ctx.Done():
+		return "", ctx.Err()
+	case <-p.release:
+	}
+	return p.Provider.Spawn(ctx, opts)
 }
 
 func TestManager_SpawnAndGet(t *testing.T) {
@@ -439,6 +457,81 @@ func TestManager_EvaluateSpawnAdmissionDeniesNonQueueableTTL(t *testing.T) {
 	}
 	if decision.Allowed || decision.Queueable || decision.Reason != "max_ttl" {
 		t.Fatalf("unexpected admission decision: %+v", decision)
+	}
+}
+
+func TestManager_SpawnAdmissionSerializesConcurrentCreates(t *testing.T) {
+	dir := t.TempDir()
+	st, err := store.NewSQLiteStore(filepath.Join(dir, "test.db"))
+	if err != nil {
+		t.Fatalf("new store: %v", err)
+	}
+	t.Cleanup(func() { st.Close() })
+
+	base := providers.NewMockProvider()
+	slow := &slowSpawnProvider{
+		Provider: base,
+		entered:  make(chan struct{}),
+		release:  make(chan struct{}),
+	}
+	reg := providers.NewRegistry()
+	reg.Register(slow)
+	if err := reg.SetDefault("mock"); err != nil {
+		t.Fatalf("set default provider: %v", err)
+	}
+
+	m := NewManager(reg, st, NewEventBus(), zerolog.Nop(), ManagerConfig{
+		DefaultTTL:    5 * time.Minute,
+		DefaultImage:  "alpine:latest",
+		DefaultMemory: 512,
+		DefaultVCPUs:  1,
+		Limits: OperationalLimits{
+			MaxSandboxes: 1,
+		},
+	})
+	m.Start()
+	t.Cleanup(func() { m.Stop() })
+
+	firstCh := make(chan error, 1)
+	go func() {
+		_, err := m.Spawn(context.Background(), SpawnRequest{OwnerID: "owner-a"})
+		firstCh <- err
+	}()
+
+	select {
+	case <-slow.entered:
+	case <-time.After(time.Second):
+		t.Fatal("first spawn did not enter provider")
+	}
+
+	secondCh := make(chan error, 1)
+	go func() {
+		_, err := m.Spawn(context.Background(), SpawnRequest{OwnerID: "owner-b"})
+		secondCh <- err
+	}()
+
+	select {
+	case err := <-secondCh:
+		t.Fatalf("second spawn completed before first persisted: %v", err)
+	case <-time.After(25 * time.Millisecond):
+	}
+
+	close(slow.release)
+	if err := <-firstCh; err != nil {
+		t.Fatalf("first spawn: %v", err)
+	}
+
+	err = <-secondCh
+	if !errors.Is(err, providers.ErrResourceLimit) {
+		t.Fatalf("expected second spawn resource limit, got %v", err)
+	}
+
+	list, err := m.List(context.Background())
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(list) != 1 {
+		t.Fatalf("expected one persisted sandbox, got %d", len(list))
 	}
 }
 
