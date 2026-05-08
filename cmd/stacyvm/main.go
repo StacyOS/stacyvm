@@ -33,6 +33,7 @@ func main() {
 		newVersionCmd(),
 		newTUICmd(),
 		newBuildImageCmd(),
+		newDoctorCmd(),
 	)
 
 	if err := root.Execute(); err != nil {

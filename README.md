@@ -570,7 +570,9 @@ STACYVM_LOGGING_LEVEL=debug
 
 ## Production deployment
 
-Use [docs/deployment.md](docs/deployment.md) for production setup guidance, including Docker Compose and systemd templates, auth and rate-limit defaults, health/readiness probes, Prometheus scraping, backup steps, and provider-specific rollout notes. Runtime signoff expectations live in [docs/runtime-conformance.md](docs/runtime-conformance.md). The reusable templates live under [`deploy/`](deploy/).
+Use [docs/deployment.md](docs/deployment.md) for production setup guidance, including Docker Compose and systemd templates, auth and rate-limit defaults, health/readiness probes, Prometheus scraping, backup steps, and provider-specific rollout notes. Runtime signoff expectations live in [docs/runtime-conformance.md](docs/runtime-conformance.md), and release-candidate gates live in [docs/production-readiness.md](docs/production-readiness.md). The reusable templates live under [`deploy/`](deploy/).
+
+Run `stacyvm doctor --production` on a target host before treating it as production-ready.
 
 Release automation and GHCR publishing are documented in [docs/releasing.md](docs/releasing.md).
 
@@ -622,7 +624,7 @@ Every sandbox ships locked down. You opt *in* to less restriction, not out.
 
 With the Firecracker provider you also get: dedicated kernel per sandbox, vsock-only host-guest communication (no TCP between host and guest), and ephemeral rootfs destroyed on teardown.
 
-Full security model and reporting policy: [SECURITY.md](SECURITY.md). Production admin hardening and identity-provider planning: [docs/security-governance.md](docs/security-governance.md).
+Full security model and reporting policy: [SECURITY.md](SECURITY.md). Production admin hardening and identity-provider planning: [docs/security-governance.md](docs/security-governance.md). Release-candidate threat model: [docs/threat-model.md](docs/threat-model.md).
 
 ---
 

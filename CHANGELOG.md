@@ -1,5 +1,16 @@
 # Changelog
 
+## Phase 7 Release Candidate Hardening - 2026-05-08
+
+This checkpoint starts the Phase 7 release-candidate hardening track.
+
+### Added
+
+- Initial `stacyvm doctor` command with local and production diagnostic modes.
+- Production readiness checklist under `docs/production-readiness.md`.
+- Threat model under `docs/threat-model.md`.
+- Phase 7 release notes under `docs/releases/phase-7-release-candidate-hardening.md`.
+
 ## Phase 6 Security Governance - 2026-05-08
 
 This checkpoint starts the Phase 6 security and governance work on top of the Phase 5 admin control plane.
