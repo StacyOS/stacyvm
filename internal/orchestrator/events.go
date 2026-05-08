@@ -27,6 +27,8 @@ const (
 	EventSpawnQueued       EventType = "spawn.queued"
 	EventSpawnDequeued     EventType = "spawn.dequeued"
 	EventSpawnQueueTimeout EventType = "spawn.queue_timeout"
+	EventQuotaSaved        EventType = "quota.saved"
+	EventQuotaDeleted      EventType = "quota.deleted"
 )
 
 type Event struct {

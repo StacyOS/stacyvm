@@ -359,6 +359,19 @@ func TestManager_PersistentOwnerQuotaLimit(t *testing.T) {
 	if !usage.QuotaConfigured || usage.ActiveSandboxes != 1 || usage.MaxSandboxes != 1 {
 		t.Fatalf("unexpected owner usage: %+v", usage)
 	}
+	assertEventType(t, m.events.History(20), EventQuotaSaved)
+}
+
+func TestManager_OwnerQuotaDeletePublishesEvent(t *testing.T) {
+	m := setupManager(t)
+
+	if _, err := m.SaveOwnerQuota(context.Background(), OwnerQuota{OwnerID: "owner-delete", MaxSandboxes: 1}); err != nil {
+		t.Fatalf("save quota: %v", err)
+	}
+	if err := m.DeleteOwnerQuota(context.Background(), "owner-delete"); err != nil {
+		t.Fatalf("delete quota: %v", err)
+	}
+	assertEventType(t, m.events.History(20), EventQuotaDeleted)
 }
 
 func TestManager_PersistentOwnerQuotaTTLLimit(t *testing.T) {

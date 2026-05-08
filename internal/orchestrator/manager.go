@@ -1043,7 +1043,17 @@ func (m *Manager) SaveOwnerQuota(ctx context.Context, quota OwnerQuota) (*OwnerQ
 	if err := m.store.SaveOwnerQuota(ctx, rec); err != nil {
 		return nil, err
 	}
-	return m.GetOwnerQuota(ctx, quota.OwnerID)
+	saved, err := m.GetOwnerQuota(ctx, quota.OwnerID)
+	if err != nil {
+		return nil, err
+	}
+	m.publishOperationalEvent(EventQuotaSaved, "", map[string]interface{}{
+		"owner_id":         saved.OwnerID,
+		"max_sandboxes":    saved.MaxSandboxes,
+		"max_ttl":          saved.MaxTTL,
+		"max_exec_timeout": saved.MaxExecTimeout,
+	})
+	return saved, nil
 }
 
 func (m *Manager) DeleteOwnerQuota(ctx context.Context, ownerID string) error {
@@ -1051,7 +1061,13 @@ func (m *Manager) DeleteOwnerQuota(ctx context.Context, ownerID string) error {
 	if err != nil {
 		return err
 	}
-	return m.store.DeleteOwnerQuota(ctx, ownerID)
+	if err := m.store.DeleteOwnerQuota(ctx, ownerID); err != nil {
+		return err
+	}
+	m.publishOperationalEvent(EventQuotaDeleted, "", map[string]interface{}{
+		"owner_id": ownerID,
+	})
+	return nil
 }
 
 func (m *Manager) OwnerUsage(ctx context.Context, ownerID string) (*OwnerUsage, error) {

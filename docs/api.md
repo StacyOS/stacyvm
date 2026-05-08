@@ -850,6 +850,7 @@ Common event types include:
 - `file.written`, `file.read`
 - `operation.failed`, `resource.limit`, `provider.failed`, `reconcile.action`
 - `spawn.queued`, `spawn.dequeued`, `spawn.queue_timeout`
+- `quota.saved`, `quota.deleted`
 
 Use any SSE client (`EventSource` in browsers, `httpx-sse` in Python, etc.) to consume.
 
