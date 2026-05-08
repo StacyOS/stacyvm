@@ -51,6 +51,7 @@ export type {
   SpawnAdmissionDecision,
   StreamChunk,
   FileInfo,
+  ForgevmClientConfig,
   ForgevmClientOptions,
   ApiErrorBody,
 } from "./types.js";

@@ -384,6 +384,7 @@ import {
   VMPoolStatus,
   SpawnAdmissionDecision,
   QuotaSummary,
+  ForgevmClientConfig,
   ForgevmClientOptions,
 } from "stacyvm";
 ```

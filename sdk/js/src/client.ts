@@ -11,6 +11,7 @@ import {
 import { Sandbox } from "./sandbox.js";
 import { TemplateManager } from "./templates.js";
 import type {
+  ForgevmClientConfig,
   ForgevmClientOptions,
   HealthInfo,
   ProviderInfo,
@@ -114,8 +115,10 @@ export class Client {
    * });
    * ```
    */
-  constructor(options?: ForgevmClientOptions) {
-    const opts = options ?? {};
+  constructor(options?: ForgevmClientConfig) {
+    const opts: ForgevmClientOptions = typeof options === "string"
+      ? { baseUrl: options }
+      : options ?? {};
 
     if (opts.baseUrl) {
       // Strip trailing slash for consistent URL construction.

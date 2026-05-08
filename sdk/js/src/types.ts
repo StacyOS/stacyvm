@@ -301,6 +301,11 @@ export interface ForgevmClientOptions {
 }
 
 /**
+ * Client constructor input: either a full base URL string or an options object.
+ */
+export type ForgevmClientConfig = string | ForgevmClientOptions;
+
+/**
  * VM pool status information.
  */
 export interface VMPoolStatus {
