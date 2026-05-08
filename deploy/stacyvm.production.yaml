@@ -17,6 +17,7 @@ providers:
     memory: "512m"
     cpus: "1"
     pids_limit: 256
+    user: "1000:1000"
     dropped_caps: ["ALL"]
     added_caps: []
     pool_security:

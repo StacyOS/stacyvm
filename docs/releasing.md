@@ -65,8 +65,11 @@ make test
 make build
 cd web && npm run build
 scripts/check-swagger.sh
+stacyvm config lint --production --file deploy/stacyvm.production.yaml
 make release-build-all VERSION=v0.4.0
 ```
+
+When linting the production template, provide real `STACYVM_AUTH_API_KEY` and `STACYVM_AUTH_ADMIN_API_KEY` values through the environment so placeholder secrets do not pass the release gate.
 
 For Phase 4, also confirm the production deployment templates still render:
 

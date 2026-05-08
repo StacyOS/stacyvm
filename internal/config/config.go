@@ -286,6 +286,21 @@ func (c *Config) ResolveAgentPath() string {
 }
 
 func Load() (*Config, error) {
+	configPaths := []string{"stacyvm.yaml"}
+	if home, err := os.UserHomeDir(); err == nil {
+		configPaths = append(configPaths, filepath.Join(home, ".stacyvm", "config.yaml"))
+	}
+	return load(configPaths, false)
+}
+
+func LoadFile(path string) (*Config, error) {
+	if strings.TrimSpace(path) == "" {
+		return nil, fmt.Errorf("config path is required")
+	}
+	return load([]string{path}, true)
+}
+
+func load(configPaths []string, requireConfig bool) (*Config, error) {
 	v := viper.New()
 	setDefaults(v)
 
@@ -294,12 +309,6 @@ func Load() (*Config, error) {
 	v.SetEnvPrefix("STACYVM")
 	v.SetEnvKeyReplacer(strings.NewReplacer(".", "_"))
 	v.AutomaticEnv()
-
-	// Try explicit config files in order of priority
-	configPaths := []string{"stacyvm.yaml"}
-	if home, err := os.UserHomeDir(); err == nil {
-		configPaths = append(configPaths, filepath.Join(home, ".stacyvm", "config.yaml"))
-	}
 
 	loaded := false
 	for _, p := range configPaths {
@@ -310,6 +319,8 @@ func Load() (*Config, error) {
 			}
 			loaded = true
 			break
+		} else if requireConfig {
+			return nil, fmt.Errorf("config file %s: %w", p, err)
 		}
 	}
 	_ = loaded // defaults are fine if no config file found

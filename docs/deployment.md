@@ -12,6 +12,16 @@ This guide covers a single-node StacyVM deployment suitable for an internal serv
 
 StacyVM reads config from `./stacyvm.yaml`, then `~/.stacyvm/config.yaml`, then `STACYVM_` environment variables. In production, prefer a checked-in baseline config plus environment variables for secrets and environment-specific values.
 
+Before starting a single-node staging or production host, lint the final config with the same environment variables the service will use:
+
+```bash
+STACYVM_AUTH_API_KEY=sk-live \
+STACYVM_AUTH_ADMIN_API_KEY=sk-admin \
+stacyvm config lint --production --file deploy/stacyvm.production.yaml
+```
+
+The lint command is deterministic and does not require Docker or KVM access. Use `stacyvm doctor --production` after linting when you also want live host checks for Docker, Firecracker, PRoot, database directories, and installed binaries.
+
 ## Health and Metrics
 
 Use these endpoints for load balancers and monitors:
@@ -142,9 +152,10 @@ If you run with Docker Compose, stop the service or snapshot the backing volume 
 
 1. Check the release notes for config or API changes.
 2. Back up `/var/lib/stacyvm/stacyvm.db` with `stacyvm db backup`.
-3. Replace the binary or update `STACYVM_IMAGE`.
-4. Restart the service.
-5. Confirm `GET /api/v1/ready` succeeds before routing traffic.
+3. Run `stacyvm config lint --production --file /etc/stacyvm/stacyvm.yaml` with the service environment loaded.
+4. Replace the binary or update `STACYVM_IMAGE`.
+5. Restart the service.
+6. Confirm `GET /api/v1/ready` succeeds before routing traffic.
 
 ## Provider Notes
 

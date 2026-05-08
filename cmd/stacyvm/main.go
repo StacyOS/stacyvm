@@ -34,6 +34,7 @@ func main() {
 		newTUICmd(),
 		newBuildImageCmd(),
 		newDoctorCmd(),
+		newConfigCmd(),
 		newDBCmd(),
 	)
 
