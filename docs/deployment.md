@@ -42,7 +42,7 @@ The files in `deploy/` provide a production-oriented Compose starting point:
 
 Use separate values for `STACYVM_API_KEY` and `STACYVM_ADMIN_API_KEY` in production. Admin routes live under `/api/v1/admin/*` and should be restricted to operator networks where possible.
 
-See [admin-control-plane.md](admin-control-plane.md) for admin dashboard setup, quota operations, diagnostics, audit export, and audit retention notes. The production config keeps 90 days of admin audit history with `auth.admin_audit_retention: "2160h"`.
+See [admin-control-plane.md](admin-control-plane.md) for admin dashboard setup, quota operations, diagnostics, audit export, and audit retention notes. See [security-governance.md](security-governance.md) for the production admin hardening checklist and OIDC/SSO integration plan. The production config keeps 90 days of admin audit history with `auth.admin_audit_retention: "2160h"` and disables admin fallback with `auth.admin_fallback_enabled: false`.
 
 ```bash
 cd deploy

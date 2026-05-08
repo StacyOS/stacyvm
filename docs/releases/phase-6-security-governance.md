@@ -37,6 +37,13 @@ Phase 6 starts the security and governance layer above the Phase 5 admin control
 - Kept the default as `true` for backwards compatibility.
 - Production templates set it to `false` so admin routes require a dedicated `auth.admin_api_key`.
 
+### Production Security Guidance
+
+- Added [security-governance.md](../security-governance.md).
+- Documented production admin posture, operator attribution, key handling, and audit retention guidance.
+- Added an OIDC/SSO config and claims-mapping design that reuses the Phase 6 request identity and `RequireScope` model.
+- Added a Phase 6 acceptance checklist for production deployments.
+
 ## Compatibility
 
 - No deployment config changes are required.
@@ -54,4 +61,4 @@ npm run build
 
 ## Next Phase 6 Direction
 
-The next slices should continue the governance hardening: production security guidance and external identity integration planning for OIDC/SSO.
+The next slice should run final Phase 6 cleanup, confirm CI, and publish the Phase 6 GitHub release.
