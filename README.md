@@ -375,6 +375,7 @@ Auth: pass `X-API-Key: <your-key>` if `auth.enabled: true`. For pool mode, also 
 | Method | Endpoint | Description |
 |---|---|---|
 | `POST` | `/sandboxes` | Spawn a sandbox |
+| `POST` | `/sandboxes/admission` | Preflight quota and scheduler admission |
 | `GET` | `/sandboxes` | List active sandboxes |
 | `DELETE` | `/sandboxes` | Prune expired sandboxes |
 | `GET` | `/sandboxes/{id}` | Get sandbox details |

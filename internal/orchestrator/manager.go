@@ -1389,6 +1389,31 @@ func (m *Manager) EvaluateSpawnAdmission(ctx context.Context, ownerID string, tt
 	return decision, nil
 }
 
+// EvaluateSpawnRequestAdmission evaluates a spawn request against the current
+// quota and scheduler limits without creating provider resources.
+func (m *Manager) EvaluateSpawnRequestAdmission(ctx context.Context, req SpawnRequest) (SpawnAdmissionDecision, error) {
+	ttl := m.defaultTTL
+	if req.TTL != "" {
+		parsed, err := time.ParseDuration(req.TTL)
+		if err != nil {
+			return SpawnAdmissionDecision{}, fmt.Errorf("%w: parsing TTL: %v", ErrInvalidInput, err)
+		}
+		ttl = parsed
+	}
+	ownerID, err := normalizeOptionalOwnerID(req.OwnerID)
+	if err != nil {
+		return SpawnAdmissionDecision{}, err
+	}
+	decision, err := m.EvaluateSpawnAdmission(ctx, ownerID, ttl)
+	if err != nil {
+		return SpawnAdmissionDecision{}, err
+	}
+	if decision.Queueable && !strings.EqualFold(m.limits.SpawnOverflow, "queue") {
+		decision.Queueable = false
+	}
+	return decision, nil
+}
+
 func spawnAdmissionError(decision SpawnAdmissionDecision) error {
 	switch decision.Reason {
 	case "max_ttl":

@@ -26,6 +26,7 @@ func (s *SandboxRoutes) Routes() chi.Router {
 	r.Post("/", s.Create)
 	r.Get("/", s.List)
 	r.Delete("/", s.Prune)
+	r.Post("/admission", s.Admission)
 	r.Route("/{sandboxID}", func(r chi.Router) {
 		r.Get("/", s.Get)
 		r.Delete("/", s.Destroy)
@@ -78,6 +79,37 @@ func (s *SandboxRoutes) Create(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httputil.WriteJSON(w, http.StatusCreated, sb)
+}
+
+// Admission evaluates whether a spawn request would be admitted.
+//
+//	@Summary		Evaluate spawn admission
+//	@Description	Return whether a spawn request would be allowed, queued, or denied by quota and scheduler limits
+//	@Tags			sandboxes
+//	@Accept			json
+//	@Produce		json
+//	@Param			request	body		orchestrator.SpawnRequest	true	"Spawn request"
+//	@Success		200		{object}	orchestrator.SpawnAdmissionDecision
+//	@Failure		400		{object}	httputil.APIError
+//	@Failure		500		{object}	httputil.APIError
+//	@Security		ApiKeyAuth
+//	@Router			/sandboxes/admission [post]
+func (s *SandboxRoutes) Admission(w http.ResponseWriter, r *http.Request) {
+	var req orchestrator.SpawnRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, httputil.CodeBadRequest, "invalid request body")
+		return
+	}
+	if userID := r.Header.Get("X-User-ID"); userID != "" {
+		req.OwnerID = userID
+	}
+
+	decision, err := s.manager.EvaluateSpawnRequestAdmission(r.Context(), req)
+	if err != nil {
+		writeRouteError(w, err)
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, decision)
 }
 
 // List lists all active sandboxes.

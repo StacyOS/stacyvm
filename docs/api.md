@@ -135,6 +135,32 @@ POST /api/v1/sandboxes
 }
 ```
 
+### Evaluate spawn admission
+
+```
+POST /api/v1/sandboxes/admission
+```
+
+Preflight a spawn request against current quota and scheduler limits without creating a sandbox. `X-User-ID` overrides `owner_id`, matching the spawn endpoint.
+
+**Request body**: same shape as `POST /api/v1/sandboxes`.
+
+**Response** `200 OK`:
+```json
+{
+  "allowed": false,
+  "queueable": true,
+  "reason": "max_sandboxes",
+  "active_sandboxes": 100,
+  "max_sandboxes": 100,
+  "active_owner_sandboxes": 2,
+  "max_owner_sandboxes": 10,
+  "max_ttl": "24h0m0s"
+}
+```
+
+`queueable` reflects the configured spawn overflow mode. Capacity denials are queueable only when `defaults.spawn_overflow` is `queue`; TTL denials are never queueable.
+
 ### List sandboxes
 
 ```

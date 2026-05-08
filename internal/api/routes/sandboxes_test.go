@@ -19,6 +19,16 @@ import (
 
 func setupTestRouter(t *testing.T) (chi.Router, *orchestrator.Manager) {
 	t.Helper()
+	return setupTestRouterWithConfig(t, orchestrator.ManagerConfig{
+		DefaultTTL:    5 * time.Minute,
+		DefaultImage:  "alpine:latest",
+		DefaultMemory: 512,
+		DefaultVCPUs:  1,
+	})
+}
+
+func setupTestRouterWithConfig(t *testing.T, cfg orchestrator.ManagerConfig) (chi.Router, *orchestrator.Manager) {
+	t.Helper()
 	dir := t.TempDir()
 	st, err := store.NewSQLiteStore(filepath.Join(dir, "test.db"))
 	if err != nil {
@@ -34,12 +44,7 @@ func setupTestRouter(t *testing.T) (chi.Router, *orchestrator.Manager) {
 	events := orchestrator.NewEventBus()
 	logger := zerolog.Nop()
 
-	mgr := orchestrator.NewManager(reg, st, events, logger, orchestrator.ManagerConfig{
-		DefaultTTL:    5 * time.Minute,
-		DefaultImage:  "alpine:latest",
-		DefaultMemory: 512,
-		DefaultVCPUs:  1,
-	})
+	mgr := orchestrator.NewManager(reg, st, events, logger, cfg)
 	mgr.Start()
 	t.Cleanup(func() { mgr.Stop() })
 
@@ -69,6 +74,98 @@ func TestCreateSandbox(t *testing.T) {
 	}
 	if sb.State != orchestrator.StateRunning {
 		t.Fatalf("expected running, got %s", sb.State)
+	}
+}
+
+func TestSpawnAdmissionRoute(t *testing.T) {
+	r, _ := setupTestRouterWithConfig(t, orchestrator.ManagerConfig{
+		DefaultTTL:    5 * time.Minute,
+		DefaultImage:  "alpine:latest",
+		DefaultMemory: 512,
+		DefaultVCPUs:  1,
+		Limits: orchestrator.OperationalLimits{
+			MaxSandboxes:      1,
+			SpawnOverflow:     "queue",
+			SpawnQueueTimeout: time.Second,
+			MaxSpawnQueue:     2,
+		},
+	})
+
+	body := `{"image":"alpine:latest","owner_id":"owner-a"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sandboxes", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create status = %d: %s", w.Code, w.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/sandboxes/admission", bytes.NewBufferString(`{"ttl":"1m","owner_id":"owner-b"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("admission status = %d: %s", w.Code, w.Body.String())
+	}
+
+	var decision orchestrator.SpawnAdmissionDecision
+	if err := json.NewDecoder(w.Body).Decode(&decision); err != nil {
+		t.Fatalf("decode admission: %v", err)
+	}
+	if decision.Allowed || !decision.Queueable || decision.Reason != "max_sandboxes" {
+		t.Fatalf("unexpected admission decision: %+v", decision)
+	}
+	if decision.ActiveSandboxes != 1 || decision.MaxSandboxes != 1 {
+		t.Fatalf("unexpected admission counts: %+v", decision)
+	}
+}
+
+func TestSpawnAdmissionRouteRejectModeNotQueueable(t *testing.T) {
+	r, _ := setupTestRouterWithConfig(t, orchestrator.ManagerConfig{
+		DefaultTTL:    5 * time.Minute,
+		DefaultImage:  "alpine:latest",
+		DefaultMemory: 512,
+		DefaultVCPUs:  1,
+		Limits: orchestrator.OperationalLimits{
+			MaxSandboxes: 1,
+		},
+	})
+
+	body := `{"image":"alpine:latest","owner_id":"owner-a"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sandboxes", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create status = %d: %s", w.Code, w.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/sandboxes/admission", bytes.NewBufferString(`{"owner_id":"owner-b"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("admission status = %d: %s", w.Code, w.Body.String())
+	}
+
+	var decision orchestrator.SpawnAdmissionDecision
+	if err := json.NewDecoder(w.Body).Decode(&decision); err != nil {
+		t.Fatalf("decode admission: %v", err)
+	}
+	if decision.Allowed || decision.Queueable || decision.Reason != "max_sandboxes" {
+		t.Fatalf("unexpected admission decision: %+v", decision)
+	}
+}
+
+func TestSpawnAdmissionRouteInvalidTTL(t *testing.T) {
+	r, _ := setupTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sandboxes/admission", bytes.NewBufferString(`{"ttl":"not-a-duration"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
 	}
 }
 
