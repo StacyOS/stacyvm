@@ -12,6 +12,7 @@ This checkpoint starts the Phase 5 operator control plane by separating admin ac
 - Admin key examples in deployment templates and docs.
 - Dashboard settings for separate regular and admin API keys.
 - Operations dashboard page for admin quota controls and diagnostics.
+- Persisted admin audit log storage and `/api/v1/admin/audit`.
 
 ### Changed
 
@@ -20,6 +21,7 @@ This checkpoint starts the Phase 5 operator control plane by separating admin ac
 - Dashboard provider and metrics calls now use the admin namespace.
 - Provider health checks in the dashboard now call `/api/v1/admin/providers/test`.
 - Owner quota list, save, delete, summary, usage, and diagnostics workflows are available from the dashboard.
+- Admin route access is recorded with redacted request metadata and shown in the Operations dashboard.
 
 ### Verified
 

@@ -424,6 +424,39 @@ definitions:
       provider:
         type: string
     type: object
+  internal_api_routes.AdminAuditResponse:
+    properties:
+      actor:
+        example: admin
+        type: string
+      created_at:
+        example: "2026-05-08T10:30:00Z"
+        type: string
+      duration_ms:
+        example: 4
+        type: integer
+      id:
+        example: 42
+        type: integer
+      method:
+        example: PUT
+        type: string
+      path:
+        example: /api/v1/admin/quotas/owner-a
+        type: string
+      remote_addr:
+        example: 127.0.0.1
+        type: string
+      request_id:
+        example: req-abc123
+        type: string
+      status:
+        example: 200
+        type: integer
+      user_agent:
+        example: stacyvm-web
+        type: string
+    type: object
   internal_api_routes.DiagnosticsResponse:
     properties:
       build:
@@ -625,6 +658,28 @@ info:
   title: StacyVM API
   version: "1.0"
 paths:
+  /admin/audit:
+    get:
+      description: Return recent redacted admin route access records
+      parameters:
+      - description: Maximum number of records, capped at 500
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/internal_api_routes.AdminAuditResponse'
+            type: array
+      security:
+      - ApiKeyAuth: []
+      summary: List admin audit logs
+      tags:
+      - admin
   /diagnostics:
     get:
       description: Return redacted build, store, provider, sandbox, event, and operation

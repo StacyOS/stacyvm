@@ -15,6 +15,42 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/admin/audit": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Return recent redacted admin route access records",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "List admin audit logs",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Maximum number of records, capped at 500",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/internal_api_routes.AdminAuditResponse"
+                            }
+                        }
+                    }
+                }
+            }
+        },
         "/diagnostics": {
             "get": {
                 "security": [
@@ -2091,6 +2127,51 @@ const docTemplate = `{
                 },
                 "provider": {
                     "type": "string"
+                }
+            }
+        },
+        "internal_api_routes.AdminAuditResponse": {
+            "type": "object",
+            "properties": {
+                "actor": {
+                    "type": "string",
+                    "example": "admin"
+                },
+                "created_at": {
+                    "type": "string",
+                    "example": "2026-05-08T10:30:00Z"
+                },
+                "duration_ms": {
+                    "type": "integer",
+                    "example": 4
+                },
+                "id": {
+                    "type": "integer",
+                    "example": 42
+                },
+                "method": {
+                    "type": "string",
+                    "example": "PUT"
+                },
+                "path": {
+                    "type": "string",
+                    "example": "/api/v1/admin/quotas/owner-a"
+                },
+                "remote_addr": {
+                    "type": "string",
+                    "example": "127.0.0.1"
+                },
+                "request_id": {
+                    "type": "string",
+                    "example": "req-abc123"
+                },
+                "status": {
+                    "type": "integer",
+                    "example": 200
+                },
+                "user_agent": {
+                    "type": "string",
+                    "example": "stacyvm-web"
                 }
             }
         },

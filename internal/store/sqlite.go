@@ -270,6 +270,50 @@ func (s *SQLiteStore) DeleteOwnerQuota(ctx context.Context, ownerID string) erro
 	return nil
 }
 
+func (s *SQLiteStore) CreateAdminAudit(ctx context.Context, rec *AdminAuditRecord) error {
+	if rec.CreatedAt.IsZero() {
+		rec.CreatedAt = time.Now().UTC()
+	}
+	res, err := s.db.ExecContext(ctx, `
+		INSERT INTO admin_audit_logs (actor, method, path, status, duration_ms, request_id, remote_addr, user_agent, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		rec.Actor, rec.Method, rec.Path, rec.Status, rec.DurationMS, rec.RequestID,
+		rec.RemoteAddr, rec.UserAgent, rec.CreatedAt.UTC(),
+	)
+	if err != nil {
+		return err
+	}
+	rec.ID, _ = res.LastInsertId()
+	return nil
+}
+
+func (s *SQLiteStore) ListAdminAudit(ctx context.Context, limit int) ([]*AdminAuditRecord, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	if limit > 500 {
+		limit = 500
+	}
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, actor, method, path, status, duration_ms, request_id, remote_addr, user_agent, created_at
+		FROM admin_audit_logs ORDER BY created_at DESC, id DESC LIMIT ?`, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var records []*AdminAuditRecord
+	for rows.Next() {
+		rec := &AdminAuditRecord{}
+		if err := rows.Scan(&rec.ID, &rec.Actor, &rec.Method, &rec.Path, &rec.Status,
+			&rec.DurationMS, &rec.RequestID, &rec.RemoteAddr, &rec.UserAgent, &rec.CreatedAt); err != nil {
+			return nil, err
+		}
+		records = append(records, rec)
+	}
+	return records, rows.Err()
+}
+
 // --- Exec Logs ---
 
 func (s *SQLiteStore) CreateExecLog(ctx context.Context, log *ExecLogRecord) error {

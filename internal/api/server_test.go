@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -107,5 +108,51 @@ func TestAdminAPIKeyCanAuthenticateRegularRoutes(t *testing.T) {
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+}
+
+func TestAdminRoutesWriteAuditLog(t *testing.T) {
+	srv := setupTestServer(t, ServerConfig{
+		APIKey:      "client-key",
+		AdminAPIKey: "admin-key",
+		Version:     "test",
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/admin/diagnostics", nil)
+	req.Header.Set("X-Admin-API-Key", "admin-key")
+	req.Header.Set("X-User-ID", "operator-a")
+	req.Header.Set("User-Agent", "stacyvm-test")
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("diagnostics status = %d, want %d: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/admin/audit?limit=10", nil)
+	req.Header.Set("X-Admin-API-Key", "admin-key")
+	w = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("audit status = %d, want %d: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+
+	var records []store.AdminAuditRecord
+	if err := json.NewDecoder(w.Body).Decode(&records); err != nil {
+		t.Fatalf("decode audit records: %v", err)
+	}
+	if len(records) == 0 {
+		t.Fatal("expected audit records")
+	}
+	var found bool
+	for _, rec := range records {
+		if rec.Path == "/api/v1/admin/diagnostics" {
+			found = true
+			if rec.Actor != "operator-a" || rec.Method != http.MethodGet || rec.Status != http.StatusOK {
+				t.Fatalf("unexpected diagnostics audit record: %+v", rec)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("diagnostics audit record not found: %+v", records)
 	}
 }

@@ -161,6 +161,19 @@ export interface DiagnosticsResponse {
   redactions: string[];
 }
 
+export interface AdminAuditRecord {
+  id: number;
+  actor: string;
+  method: string;
+  path: string;
+  status: number;
+  duration_ms: number;
+  request_id: string;
+  remote_addr: string;
+  user_agent: string;
+  created_at: string;
+}
+
 export interface SSEEvent {
   type: string;
   data: string;
@@ -782,6 +795,14 @@ export async function getOwnerUsage(ownerId: string): Promise<OwnerUsage> {
     `/admin/quotas/${encodeURIComponent(ownerId)}/usage`,
     { admin: true },
   );
+}
+
+export async function listAdminAudit(limit = 100): Promise<AdminAuditRecord[]> {
+  const result = await request<AdminAuditRecord[] | null>(
+    `/admin/audit?limit=${encodeURIComponent(String(limit))}`,
+    { admin: true },
+  );
+  return result ?? [];
 }
 
 // ---------------------------------------------------------------------------

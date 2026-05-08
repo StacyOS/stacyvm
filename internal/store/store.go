@@ -113,6 +113,19 @@ type OwnerQuotaRecord struct {
 	UpdatedAt             time.Time
 }
 
+type AdminAuditRecord struct {
+	ID         int64     `json:"id" example:"42"`
+	Actor      string    `json:"actor" example:"admin"`
+	Method     string    `json:"method" example:"PUT"`
+	Path       string    `json:"path" example:"/api/v1/admin/quotas/owner-a"`
+	Status     int       `json:"status" example:"200"`
+	DurationMS int64     `json:"duration_ms" example:"4"`
+	RequestID  string    `json:"request_id" example:"req-abc123"`
+	RemoteAddr string    `json:"remote_addr" example:"127.0.0.1"`
+	UserAgent  string    `json:"user_agent" example:"stacyvm-web"`
+	CreatedAt  time.Time `json:"created_at" example:"2026-05-08T10:30:00Z"`
+}
+
 // Store defines the persistence interface.
 type Store interface {
 	// Sandbox CRUD
@@ -131,6 +144,10 @@ type Store interface {
 	GetOwnerQuota(ctx context.Context, ownerID string) (*OwnerQuotaRecord, error)
 	ListOwnerQuotas(ctx context.Context) ([]*OwnerQuotaRecord, error)
 	DeleteOwnerQuota(ctx context.Context, ownerID string) error
+
+	// Admin audit
+	CreateAdminAudit(ctx context.Context, rec *AdminAuditRecord) error
+	ListAdminAudit(ctx context.Context, limit int) ([]*AdminAuditRecord, error)
 
 	// Exec logs
 	CreateExecLog(ctx context.Context, log *ExecLogRecord) error

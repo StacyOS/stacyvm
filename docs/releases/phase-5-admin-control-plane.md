@@ -40,6 +40,13 @@ Phase 5 starts the operator/admin control-plane work for StacyVM. This phase bui
 - Added an Operations dashboard page for owner quota management and diagnostics.
 - Added dashboard workflows for quota list, save, delete, summary, owner usage checks, and redacted diagnostics.
 
+### Admin Audit History
+
+- Added persisted admin audit logs for admin route access.
+- Added `/api/v1/admin/audit` to list recent redacted admin audit records.
+- Records include actor, method, path, status, duration, request ID, client address, user agent, and timestamp.
+- Added an Audit tab to the Operations dashboard.
+
 ## Verification
 
 ```sh
@@ -49,4 +56,4 @@ npm run build
 
 ## Next Phase 5 Direction
 
-The next slice should add persisted admin audit history and expose it in the Operations dashboard.
+The next slice should harden admin audit filtering/export and add stronger dashboard empty/error-state coverage.

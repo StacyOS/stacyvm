@@ -3,6 +3,7 @@ package routes
 import (
 	"github.com/StacyOs/stacyvm/internal/api/middleware"
 	"github.com/StacyOs/stacyvm/internal/orchestrator"
+	"github.com/StacyOs/stacyvm/internal/store"
 )
 
 // StatusResponse is a generic status response.
@@ -69,6 +70,9 @@ type OwnerUsageResponse = orchestrator.OwnerUsage
 
 // QuotaSummaryResponse is the response for redacted quota coverage counts.
 type QuotaSummaryResponse = orchestrator.QuotaSummary
+
+// AdminAuditResponse is a redacted admin route access log record.
+type AdminAuditResponse = store.AdminAuditRecord
 
 // MetricsResponse is the response from the metrics endpoint.
 type MetricsResponse struct {

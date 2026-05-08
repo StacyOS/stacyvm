@@ -13,6 +13,7 @@ import {
   Trash2,
 } from 'lucide-react';
 import {
+  type AdminAuditRecord,
   type DiagnosticsResponse,
   type OwnerQuota,
   type OwnerUsage,
@@ -21,12 +22,13 @@ import {
   getDiagnostics,
   getOwnerUsage,
   getQuotaSummary,
+  listAdminAudit,
   listOwnerQuotas,
   saveOwnerQuota,
 } from '../api/client';
 import { useToast } from '../hooks/useToast';
 
-type OperationsTab = 'quotas' | 'diagnostics';
+type OperationsTab = 'quotas' | 'diagnostics' | 'audit';
 
 interface QuotaForm {
   owner_id: string;
@@ -80,10 +82,17 @@ export default function Operations() {
             active={activeTab === 'diagnostics'}
             onClick={() => setActiveTab('diagnostics')}
           />
+          <TabButton
+            label="Audit"
+            active={activeTab === 'audit'}
+            onClick={() => setActiveTab('audit')}
+          />
         </div>
       </div>
 
-      {activeTab === 'quotas' ? <QuotaPanel /> : <DiagnosticsPanel />}
+      {activeTab === 'quotas' && <QuotaPanel />}
+      {activeTab === 'diagnostics' && <DiagnosticsPanel />}
+      {activeTab === 'audit' && <AuditPanel />}
     </div>
   );
 }
@@ -477,6 +486,116 @@ function DiagnosticsPanel() {
           ))}
         </div>
       </div>
+    </div>
+  );
+}
+
+function AuditPanel() {
+  const [records, setRecords] = useState<AdminAuditRecord[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = async () => {
+    setLoading(true);
+    try {
+      const result = await listAdminAudit(100);
+      setRecords(result);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load audit logs');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    refresh();
+  }, []);
+
+  return (
+    <div className="card !p-0 overflow-hidden">
+      <div className="flex items-center justify-between px-5 py-4 border-b border-navy-700">
+        <div>
+          <h3 className="text-base font-bold text-gray-100">Admin Audit</h3>
+          <p className="text-xs text-gray-500 mt-0.5">
+            Recent redacted admin route access records
+          </p>
+        </div>
+        <button onClick={refresh} disabled={loading} className="btn-ghost text-sm">
+          <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
+          Refresh
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="flex items-center justify-center py-16 text-gray-500">
+          <Loader2 className="w-5 h-5 animate-spin" />
+        </div>
+      ) : error ? (
+        <div className="flex flex-col items-center justify-center py-16 text-gray-500">
+          <AlertCircle className="w-8 h-8 mb-3 opacity-60" />
+          <p className="text-sm font-medium">{error}</p>
+        </div>
+      ) : records.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-16 text-gray-500">
+          <Shield className="w-8 h-8 mb-3 opacity-40" />
+          <p className="text-sm font-medium">No admin audit records yet</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-navy-800 text-xs text-gray-500">
+              <tr>
+                <th className="text-left font-medium px-5 py-3">Time</th>
+                <th className="text-left font-medium px-5 py-3">Actor</th>
+                <th className="text-left font-medium px-5 py-3">Request</th>
+                <th className="text-left font-medium px-5 py-3">Status</th>
+                <th className="text-left font-medium px-5 py-3">Duration</th>
+                <th className="text-left font-medium px-5 py-3">Client</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-navy-700">
+              {records.map((record) => (
+                <tr key={record.id} className="hover:bg-navy-800/50">
+                  <td className="px-5 py-3 text-xs text-gray-500 whitespace-nowrap">
+                    {new Date(record.created_at).toLocaleString()}
+                  </td>
+                  <td className="px-5 py-3 font-mono text-xs text-gray-300">
+                    {record.actor || 'admin'}
+                  </td>
+                  <td className="px-5 py-3">
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-xs text-primary-400">{record.method}</span>
+                      <span className="font-mono text-xs text-gray-300 truncate max-w-md">
+                        {record.path}
+                      </span>
+                    </div>
+                    {record.request_id && (
+                      <p className="text-[11px] font-mono text-gray-600 mt-1">
+                        {record.request_id}
+                      </p>
+                    )}
+                  </td>
+                  <td className="px-5 py-3">
+                    <span className={record.status < 400 ? 'badge-success' : 'badge-danger'}>
+                      {record.status}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3 font-mono text-xs text-gray-300">
+                    {record.duration_ms}ms
+                  </td>
+                  <td className="px-5 py-3">
+                    <p className="font-mono text-xs text-gray-300">{record.remote_addr || 'n/a'}</p>
+                    <p className="text-[11px] text-gray-600 truncate max-w-xs">
+                      {record.user_agent || 'unknown'}
+                    </p>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </div>
   );
 }

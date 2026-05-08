@@ -145,6 +145,47 @@ func TestExecLogs(t *testing.T) {
 	}
 }
 
+func TestAdminAuditLogs(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	if err := s.CreateAdminAudit(ctx, &AdminAuditRecord{
+		Actor:      "operator-a",
+		Method:     "PUT",
+		Path:       "/api/v1/admin/quotas/owner-a",
+		Status:     200,
+		DurationMS: 7,
+		RequestID:  "req-a",
+		RemoteAddr: "127.0.0.1",
+		UserAgent:  "test-agent",
+		CreatedAt:  now,
+	}); err != nil {
+		t.Fatalf("create admin audit: %v", err)
+	}
+
+	if err := s.CreateAdminAudit(ctx, &AdminAuditRecord{
+		Actor:     "operator-b",
+		Method:    "GET",
+		Path:      "/api/v1/admin/diagnostics",
+		Status:    200,
+		CreatedAt: now.Add(time.Second),
+	}); err != nil {
+		t.Fatalf("create second admin audit: %v", err)
+	}
+
+	records, err := s.ListAdminAudit(ctx, 1)
+	if err != nil {
+		t.Fatalf("list admin audit: %v", err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("expected 1 record, got %d", len(records))
+	}
+	if records[0].Actor != "operator-b" || records[0].Path != "/api/v1/admin/diagnostics" {
+		t.Fatalf("unexpected latest audit record: %+v", records[0])
+	}
+}
+
 func TestProviderConfigs(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()

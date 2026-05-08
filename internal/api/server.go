@@ -90,6 +90,7 @@ func NewServer(cfg ServerConfig, registry *providers.Registry, manager *orchestr
 		systemRoutes := routes.NewSystemRoutes(registry, manager, events, st, cfg.Version, rateLimiter)
 		environmentRoutes := routes.NewEnvironmentRoutes(st, envBuild)
 		quotaRoutes := routes.NewQuotaRoutes(manager)
+		adminAuditRoutes := routes.NewAdminAuditRoutes(st)
 		r.Route("/api/v1", func(r chi.Router) {
 			r.Mount("/sandboxes", sandboxRoutes.Routes())
 			r.Mount("/providers", providerRoutes.Routes())
@@ -100,6 +101,8 @@ func NewServer(cfg ServerConfig, registry *providers.Registry, manager *orchestr
 			r.Get("/pool/status", sandboxRoutes.VMPoolStatus)
 			r.Route("/admin", func(r chi.Router) {
 				r.Use(middleware.AdminAuth(cfg.AdminAPIKey, cfg.APIKey))
+				r.Use(middleware.AdminAudit(st, logger))
+				r.Get("/audit", adminAuditRoutes.List)
 				r.Mount("/providers", providerRoutes.Routes())
 				r.Mount("/quotas", quotaRoutes.Routes())
 				r.Get("/diagnostics", systemRoutes.Diagnostics)
