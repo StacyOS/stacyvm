@@ -57,12 +57,15 @@ func TestAdminAuditPrunesWithRetention(t *testing.T) {
 	}
 }
 
-func TestAdminAuditUsesAuthenticatedRoleWhenActorHeaderMissing(t *testing.T) {
+func TestAdminAuditUsesAuthenticatedHeaderWhenActorHeaderMissing(t *testing.T) {
 	st := &memoryAuditStore{}
 	handler := AdminAudit(st, zerolog.Nop(), 0)(okHandler())
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/quotas", nil)
-	req = req.WithContext(WithAuthIdentity(req.Context(), AuthIdentity{Role: AuthRoleAdmin}))
+	req = req.WithContext(WithAuthIdentity(req.Context(), AuthIdentity{
+		Role:   AuthRoleAdmin,
+		Header: "X-Admin-API-Key",
+	}))
 	w := httptest.NewRecorder()
 	handler.ServeHTTP(w, req)
 
@@ -72,7 +75,31 @@ func TestAdminAuditUsesAuthenticatedRoleWhenActorHeaderMissing(t *testing.T) {
 	if len(st.records) != 1 {
 		t.Fatalf("records = %d, want 1", len(st.records))
 	}
-	if st.records[0].Actor != "admin" {
-		t.Fatalf("actor = %q, want admin", st.records[0].Actor)
+	if st.records[0].Actor != "admin:X-Admin-API-Key" {
+		t.Fatalf("actor = %q, want admin:X-Admin-API-Key", st.records[0].Actor)
+	}
+}
+
+func TestAdminAuditUserIDOverridesAuthenticatedHeader(t *testing.T) {
+	st := &memoryAuditStore{}
+	handler := AdminAudit(st, zerolog.Nop(), 0)(okHandler())
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/admin/quotas", nil)
+	req.Header.Set("X-User-ID", "operator-a")
+	req = req.WithContext(WithAuthIdentity(req.Context(), AuthIdentity{
+		Role:   AuthRoleAdmin,
+		Header: "X-Admin-API-Key",
+	}))
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusOK)
+	}
+	if len(st.records) != 1 {
+		t.Fatalf("records = %d, want 1", len(st.records))
+	}
+	if st.records[0].Actor != "operator-a" {
+		t.Fatalf("actor = %q, want operator-a", st.records[0].Actor)
 	}
 }

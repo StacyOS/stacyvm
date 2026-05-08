@@ -79,6 +79,7 @@ Use diagnostics during incidents to confirm:
 Admin route access is persisted in SQLite in the `admin_audit_logs` table. Records include:
 
 - Actor from `X-User-ID`, or `admin` when no actor header is supplied.
+- When `X-User-ID` is missing on an authenticated admin request, the actor falls back to the authenticated role and key header, such as `admin:X-Admin-API-Key`.
 - HTTP method and path.
 - HTTP status and request duration.
 - Request ID.

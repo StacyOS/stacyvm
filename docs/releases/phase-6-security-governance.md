@@ -27,7 +27,8 @@ Phase 6 starts the security and governance layer above the Phase 5 admin control
 
 ### Audit Attribution
 
-- Admin audit fallback attribution now reads the authenticated role from request context when no `X-User-ID` actor is supplied.
+- Admin audit fallback attribution now reads the authenticated role and key header from request context when no `X-User-ID` actor is supplied.
+- Fallback actors are now more specific, such as `admin:X-Admin-API-Key`.
 - Existing explicit actor behavior is preserved: `X-User-ID` still wins when supplied.
 
 ## Compatibility
@@ -47,4 +48,4 @@ npm run build
 
 ## Next Phase 6 Direction
 
-The next slices should continue the governance hardening: safer admin actor attribution, configurable admin compatibility modes, production security guidance, and then external identity integration planning for OIDC/SSO.
+The next slices should continue the governance hardening: configurable admin compatibility modes, production security guidance, and then external identity integration planning for OIDC/SSO.
