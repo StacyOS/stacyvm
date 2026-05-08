@@ -74,8 +74,14 @@ export interface CreateTemplateRequest {
 
 export interface Provider {
   name: string;
+  default?: boolean;
   is_default: boolean;
   healthy: boolean;
+  latency_ms?: number;
+  last_checked?: string;
+  error?: string;
+  capabilities?: string[];
+  runtime_count?: number;
 }
 
 export interface HealthResponse {
@@ -87,8 +93,22 @@ export interface HealthResponse {
 export interface MetricsResponse {
   goroutines: number;
   memory_alloc: number;
+  memory_sys?: number;
+  memory_heap_alloc?: number;
+  gc_cycles?: number;
   active_sandboxes: number;
   total_sandboxes: number;
+  sandboxes?: {
+    total: number;
+    active: number;
+    by_state: Record<string, number>;
+    by_provider: Record<string, number>;
+  };
+  providers?: {
+    total: number;
+    healthy: number;
+    items: Provider[];
+  };
 }
 
 export interface SSEEvent {
@@ -189,6 +209,12 @@ export interface EnvironmentSuggestionsResponse {
   suggestions: string[];
 }
 
+interface StoredAppSettings {
+  authEnabled?: boolean;
+  authToken?: string;
+  adminToken?: string;
+}
+
 // ---------------------------------------------------------------------------
 // API Error
 // ---------------------------------------------------------------------------
@@ -210,21 +236,72 @@ export class ApiError extends Error {
 
 const BASE = '/api/v1';
 
+interface RequestOptions extends RequestInit {
+  admin?: boolean;
+}
+
+function loadStoredSettings(): StoredAppSettings {
+  if (typeof window === 'undefined') return {};
+
+  try {
+    const stored = window.localStorage.getItem('stacyvm-settings');
+    return stored ? (JSON.parse(stored) as StoredAppSettings) : {};
+  } catch {
+    return {};
+  }
+}
+
+function normalizeHeaders(headers?: HeadersInit): Record<string, string> {
+  if (!headers) return {};
+  if (headers instanceof Headers) return Object.fromEntries(headers.entries());
+  if (Array.isArray(headers)) return Object.fromEntries(headers);
+  return { ...headers };
+}
+
+function authHeaders(admin: boolean): Record<string, string> {
+  const settings = loadStoredSettings();
+  if (!settings.authEnabled) return {};
+
+  const headers: Record<string, string> = {};
+  const apiKey = settings.authToken?.trim();
+  const adminKey = settings.adminToken?.trim();
+
+  if (apiKey) {
+    headers['X-API-Key'] = apiKey;
+  }
+  if (admin && adminKey) {
+    headers['X-Admin-API-Key'] = adminKey;
+  }
+
+  return headers;
+}
+
+function normalizeProvider(provider: Provider): Provider {
+  const isDefault = provider.is_default ?? provider.default ?? false;
+  return {
+    ...provider,
+    default: provider.default ?? isDefault,
+    is_default: isDefault,
+  };
+}
+
 async function request<T>(
   path: string,
-  options: RequestInit = {},
+  options: RequestOptions = {},
 ): Promise<T> {
   const url = `${BASE}${path}`;
+  const { admin = false, headers: optionHeaders, ...fetchOptions } = options;
   const headers: Record<string, string> = {
-    ...(options.headers as Record<string, string>),
+    ...authHeaders(admin),
+    ...normalizeHeaders(optionHeaders),
   };
 
-  if (options.body && typeof options.body === 'string') {
+  if (fetchOptions.body && typeof fetchOptions.body === 'string') {
     headers['Content-Type'] = 'application/json';
   }
 
   const res = await fetch(url, {
-    ...options,
+    ...fetchOptions,
     headers,
   });
 
@@ -317,7 +394,7 @@ export async function execStreamNDJSON(
   const url = `${BASE}/sandboxes/${encodeURIComponent(sandboxId)}/exec`;
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...authHeaders(false), 'Content-Type': 'application/json' },
     body: JSON.stringify({ command, stream: true }),
     signal,
   });
@@ -475,8 +552,10 @@ export async function spawnFromTemplate(
 // ---------------------------------------------------------------------------
 
 export async function listProviders(): Promise<Provider[]> {
-  const result = await request<Provider[] | null>('/providers');
-  return result ?? [];
+  const result = await request<Provider[] | null>('/admin/providers', {
+    admin: true,
+  });
+  return (result ?? []).map(normalizeProvider);
 }
 
 export interface ProviderDetail {
@@ -484,11 +563,22 @@ export interface ProviderDetail {
   healthy: boolean;
   default: boolean;
   sandbox_count: number;
+  health?: Provider;
   config: Record<string, string>;
 }
 
 export async function getProviderDetail(name: string): Promise<ProviderDetail> {
-  return request<ProviderDetail>(`/providers/${encodeURIComponent(name)}`);
+  return request<ProviderDetail>(
+    `/admin/providers/${encodeURIComponent(name)}`,
+    { admin: true },
+  );
+}
+
+export async function testProviders(): Promise<Record<string, boolean>> {
+  return request<Record<string, boolean>>('/admin/providers/test', {
+    method: 'POST',
+    admin: true,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -598,7 +688,12 @@ export async function getHealth(): Promise<HealthResponse> {
 }
 
 export async function getMetrics(): Promise<MetricsResponse> {
-  return request<MetricsResponse>('/metrics');
+  const metrics = await request<MetricsResponse>('/admin/metrics', { admin: true });
+  return {
+    ...metrics,
+    active_sandboxes: metrics.active_sandboxes ?? metrics.sandboxes?.active ?? 0,
+    total_sandboxes: metrics.total_sandboxes ?? metrics.sandboxes?.total ?? 0,
+  };
 }
 
 // ---------------------------------------------------------------------------

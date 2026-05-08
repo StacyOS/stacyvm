@@ -10,15 +10,19 @@ This checkpoint starts the Phase 5 operator control plane by separating admin ac
 - `X-Admin-API-Key` support for admin requests.
 - `/api/v1/admin/*` route aliases for providers, quotas, diagnostics, JSON metrics, and Prometheus metrics.
 - Admin key examples in deployment templates and docs.
+- Dashboard settings for separate regular and admin API keys.
 
 ### Changed
 
 - Normal API and admin API keys can both authenticate regular API requests.
 - Admin routes require the admin key when configured, with fallback to the regular API key only when no admin key is set.
+- Dashboard provider and metrics calls now use the admin namespace.
+- Provider health checks in the dashboard now call `/api/v1/admin/providers/test`.
 
 ### Verified
 
 - `go test ./internal/api/middleware ./internal/config ./cmd/stacyvm`
+- `npm run build`
 
 ## Phase 4 Production Deployment - 2026-05-08
 

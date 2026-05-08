@@ -31,12 +31,20 @@ Phase 5 starts the operator/admin control-plane work for StacyVM. This phase bui
 
 - Added admin key examples to production config, Compose env, systemd env, README, deployment docs, and API docs.
 
+### Dashboard Admin Workflows
+
+- Added dashboard settings for a regular API key and a separate admin API key.
+- The shared web API client now sends `X-API-Key` and `X-Admin-API-Key` from browser settings.
+- Provider list, provider detail, provider health tests, and JSON metrics now call `/api/v1/admin/*`.
+- Provider cards now understand the backend `default`, latency, runtime count, capability, and error fields.
+
 ## Verification
 
 ```sh
 go test ./internal/api/middleware ./internal/config ./cmd/stacyvm
+npm run build
 ```
 
 ## Next Phase 5 Direction
 
-The next slice should move dashboard quota/provider/diagnostics workflows onto the admin namespace and add persisted audit history for admin operations.
+The next slice should add dedicated dashboard views for quota management, diagnostics, and persisted admin audit history.

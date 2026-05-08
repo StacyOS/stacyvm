@@ -15,7 +15,13 @@ import {
   Settings,
   Hash,
 } from 'lucide-react';
-import { type Provider, type ProviderDetail, listProviders, getHealth, getProviderDetail } from '../api/client';
+import {
+  type Provider,
+  type ProviderDetail,
+  listProviders,
+  getProviderDetail,
+  testProviders,
+} from '../api/client';
 import { ProviderCardSkeleton } from '../components/Skeleton';
 import { useToast } from '../hooks/useToast';
 
@@ -83,16 +89,15 @@ export default function Providers() {
   const handleTestConnection = async (providerName: string) => {
     setTestingProvider(providerName);
     try {
-      // Test via the health endpoint (which validates backend connectivity)
-      const health = await getHealth();
-      const ok = health.status === 'ok';
+      const results = await testProviders();
+      const ok = results[providerName] ?? false;
       const message = ok
-        ? `Connected successfully (uptime: ${health.uptime})`
-        : `Health check returned: ${health.status}`;
+        ? 'Provider health check passed'
+        : 'Provider health check failed';
       setTestResults((prev) => ({ ...prev, [providerName]: { ok, message } }));
       addToast({
         type: ok ? 'success' : 'warning',
-        title: `${providerName}: ${ok ? 'Connected' : 'Unhealthy'}`,
+        title: `${providerName}: ${ok ? 'Healthy' : 'Unhealthy'}`,
         message,
       });
     } catch (err) {
@@ -277,6 +282,17 @@ function ProviderCard({
             </span>
           </div>
           <p className="text-xs text-gray-500 mt-1">{info.description}</p>
+          <div className="flex flex-wrap items-center gap-2 mt-2 text-[11px] text-gray-500">
+            {provider.latency_ms !== undefined && (
+              <span className="font-mono">{provider.latency_ms}ms health</span>
+            )}
+            {provider.runtime_count !== undefined && (
+              <span className="font-mono">{provider.runtime_count} runtime{provider.runtime_count !== 1 ? 's' : ''}</span>
+            )}
+            {provider.error && (
+              <span className="text-red-400 truncate max-w-md">{provider.error}</span>
+            )}
+          </div>
         </div>
 
         {/* Test button + expand */}
@@ -336,6 +352,13 @@ function ProviderCard({
                   <span className="text-gray-300 font-medium">{detail.sandbox_count}</span>
                   <span>active sandbox{detail.sandbox_count !== 1 ? 'es' : ''}</span>
                 </div>
+                {detail.health?.latency_ms !== undefined && (
+                  <div className="flex items-center gap-2 text-gray-400">
+                    <Activity className="w-4 h-4" />
+                    <span className="text-gray-300 font-medium">{detail.health.latency_ms}ms</span>
+                    <span>health latency</span>
+                  </div>
+                )}
               </div>
 
               {/* Config table */}
