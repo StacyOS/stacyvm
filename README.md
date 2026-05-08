@@ -33,6 +33,7 @@ Self-hosted. Single binary. Python &amp; TypeScript SDKs. MIT licensed. No cloud
   <a href="#pick-your-isolation-level">Providers</a> •
   <a href="#live-preview">Live Preview</a> •
   <a href="#pool-mode">Pool Mode</a> •
+  <a href="docs/deployment.md">Deployment</a> •
   <a href="docs/api.md">API Reference</a> •
   <a href="CONTRIBUTING.md">Contributing</a>
 </p>
@@ -56,6 +57,7 @@ Self-hosted. Single binary. Python &amp; TypeScript SDKs. MIT licensed. No cloud
   - [Providers, pool, system](#providers-pool-system)
 - [CLI](#cli)
 - [Configuration](#configuration)
+- [Production deployment](#production-deployment)
 - [Templates](#templates-1)
 - [Security defaults](#security-defaults)
 - [Architecture](#architecture)
@@ -555,6 +557,12 @@ STACYVM_AUTH_API_KEY=sk-xyz123
 STACYVM_RATE_LIMIT_ENABLED=true
 STACYVM_LOGGING_LEVEL=debug
 ```
+
+---
+
+## Production deployment
+
+Use [docs/deployment.md](docs/deployment.md) for production setup guidance, including Docker Compose and systemd templates, auth and rate-limit defaults, health/readiness probes, Prometheus scraping, backup steps, and provider-specific rollout notes. The reusable templates live under [`deploy/`](deploy/).
 
 ---
 

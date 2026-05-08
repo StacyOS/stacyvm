@@ -1,5 +1,32 @@
 # Changelog
 
+## Phase 4 Production Deployment - 2026-05-08
+
+This checkpoint adds the first production deployment and verification surface for Phase 4: GitHub Actions CI, deployment templates, and an operator runbook.
+
+### Added
+
+- GitHub Actions workflow for Go tests/build, Swagger drift, web build, TypeScript SDK build, and Python SDK import checks.
+- Production Docker Compose template with StacyVM and Traefik for live previews.
+- Production baseline config with auth, rate limiting, sandbox caps, queueing, JSON logs, and persistent SQLite state.
+- systemd unit and environment template for binary-based Linux installs.
+- Deployment guide covering host requirements, health probes, Prometheus metrics, reverse proxy setup, backups, upgrades, and provider notes.
+- Phase 4 release notes under `docs/releases/phase-4-production-deployment.md`.
+
+### Changed
+
+- Swagger drift checks now download Go modules before invoking `swag`, which makes cold CI runners reliable.
+- README navigation now links to the production deployment guide.
+
+### Verified
+
+- `docker compose --env-file deploy/.env.example -f deploy/docker-compose.yml config`
+- YAML parsing for deployment templates
+- `git diff --check`
+- `go test ./...`
+- `cd web && npm run build`
+- `scripts/check-swagger.sh`
+
 ## Phase 3 Quotas And Scheduling - 2026-05-08
 
 This checkpoint adds the first production multi-tenant control plane: persisted owner quotas, API rate limiting, spawn backpressure, scheduler visibility, admission preflight, and SDK helpers.

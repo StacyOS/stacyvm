@@ -1,0 +1,117 @@
+# Production Deployment
+
+This guide covers a single-node StacyVM deployment suitable for an internal service, staging, or a small production installation. The default production path uses the Docker provider because it works on the broadest set of hosts; Firecracker and PRoot require extra host setup and should be validated on the target platform before rollout.
+
+## Requirements
+
+- Linux host with Docker installed when using the Docker provider.
+- A persistent data directory, normally `/var/lib/stacyvm`.
+- A generated API key with at least 32 bytes of entropy.
+- TLS and public ingress handled by a reverse proxy or load balancer in front of StacyVM.
+- Health checks wired to the API endpoints listed below.
+
+StacyVM reads config from `./stacyvm.yaml`, then `~/.stacyvm/config.yaml`, then `STACYVM_` environment variables. In production, prefer a checked-in baseline config plus environment variables for secrets and environment-specific values.
+
+## Health and Metrics
+
+Use these endpoints for load balancers and monitors:
+
+| Endpoint | Purpose |
+|---|---|
+| `GET /api/v1/live` | Process liveness. Use this for simple restart checks. |
+| `GET /api/v1/ready` | Readiness. Use this before routing traffic after deploys. |
+| `GET /api/v1/health` | Dependency and provider health summary. |
+| `GET /api/v1/metrics/prometheus` | Prometheus metrics scrape endpoint. |
+
+Authenticated deployments should send `X-API-Key: <api-key>` to protected API endpoints. Keep health probes scoped to your private network if they bypass auth at an upstream proxy.
+
+## Docker Compose
+
+The files in `deploy/` provide a production-oriented Compose starting point:
+
+- `deploy/docker-compose.yml` starts StacyVM and Traefik for live previews.
+- `deploy/stacyvm.production.yaml` enables auth, rate limiting, sandbox caps, queueing, JSON logs, and persistent SQLite state.
+- `deploy/.env.example` lists the environment variables expected by the Compose file.
+- `deploy/stacyvm.env.example` is the systemd environment file template.
+
+```bash
+cd deploy
+cp .env.example .env
+# Edit .env and replace STACYVM_API_KEY before starting.
+docker compose up -d
+docker compose logs -f stacyvm
+```
+
+For local image testing before a registry image exists:
+
+```bash
+docker build -t stacyvm:local ..
+STACYVM_IMAGE=stacyvm:local docker compose up -d
+```
+
+## systemd
+
+Use `deploy/stacyvm.service` when running the binary directly on a Linux host.
+
+```bash
+sudo useradd --system --home /var/lib/stacyvm --shell /usr/sbin/nologin stacyvm
+sudo usermod -aG docker stacyvm
+sudo install -d -o stacyvm -g stacyvm /var/lib/stacyvm
+sudo install -d -m 0750 /etc/stacyvm
+sudo install -o root -g stacyvm -m 0640 deploy/stacyvm.production.yaml /etc/stacyvm/stacyvm.yaml
+sudo install -o root -g stacyvm -m 0640 deploy/stacyvm.env.example /etc/stacyvm/stacyvm.env
+sudo install -m 0755 bin/stacyvm /usr/local/bin/stacyvm
+sudo install -m 0755 bin/stacyvm-agent /usr/local/bin/stacyvm-agent
+sudo install -m 0644 deploy/stacyvm.service /etc/systemd/system/stacyvm.service
+```
+
+Edit `/etc/stacyvm/stacyvm.env` and set a real `STACYVM_AUTH_API_KEY`. Then enable the service:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now stacyvm
+sudo systemctl status stacyvm
+```
+
+The included unit uses `WorkingDirectory=/etc/stacyvm` so StacyVM can load `/etc/stacyvm/stacyvm.yaml` through its current `./stacyvm.yaml` lookup path while keeping persistent database state in `/var/lib/stacyvm`.
+
+## Reverse Proxy
+
+Terminate TLS before StacyVM. A typical proxy should:
+
+- Forward API traffic to `http://127.0.0.1:7423`.
+- Preserve `X-API-Key` headers.
+- Route live preview hostnames such as `3000-sb-<id>.<preview-domain>` to Traefik when using Docker live previews.
+- Restrict admin and metrics endpoints to trusted networks.
+
+Set `server.preview_domain` or `STACYVM_SERVER_PREVIEW_DOMAIN` to the domain that resolves preview subdomains to your proxy.
+
+## Backups
+
+The default store is SQLite at `/var/lib/stacyvm/stacyvm.db`. For a consistent backup:
+
+```bash
+sudo systemctl stop stacyvm
+sudo cp /var/lib/stacyvm/stacyvm.db /backup/stacyvm.db
+sudo cp /var/lib/stacyvm/stacyvm.db-wal /backup/ 2>/dev/null || true
+sudo cp /var/lib/stacyvm/stacyvm.db-shm /backup/ 2>/dev/null || true
+sudo systemctl start stacyvm
+```
+
+If you run with Docker Compose, stop the service or snapshot the backing volume with your volume provider's backup tooling.
+
+## Upgrades
+
+1. Check the release notes for config or API changes.
+2. Back up `/var/lib/stacyvm/stacyvm.db`.
+3. Replace the binary or update `STACYVM_IMAGE`.
+4. Restart the service.
+5. Confirm `GET /api/v1/ready` succeeds before routing traffic.
+
+## Provider Notes
+
+Docker is the safest default for broad deployment compatibility. For stronger isolation, run Docker with gVisor (`runtime: "runsc"`) or Kata after validating the runtime on the host.
+
+Firecracker requires Linux/KVM, a kernel image, rootfs images, networking setup, and the `stacyvm-agent` binary available to the runtime. Keep Firecracker disabled in shared templates until a host conformance check passes.
+
+PRoot requires a real rootfs with the binaries your sandboxes need. Use it for restricted environments where Docker and KVM are unavailable, and validate memory/disk limits against the host because PRoot enforcement is not equivalent to VM isolation.
