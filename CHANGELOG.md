@@ -15,6 +15,7 @@ This checkpoint adds the first production deployment and verification surface fo
 - Release runbook documenting tags, manual dispatch, binary artifacts, image tags, and preflight checks.
 - `.dockerignore` for smaller and safer Docker build contexts.
 - Deployment smoke script for live, health, readiness, and Prometheus probes.
+- CI deployment smoke job using the mock provider.
 - Runtime conformance matrix for Docker, gVisor, Kata, Firecracker, PRoot, E2B, and custom providers.
 - Phase 4 release notes under `docs/releases/phase-4-production-deployment.md`.
 

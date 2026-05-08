@@ -70,10 +70,13 @@ The goal of this phase is to make StacyVM easier to validate, release, and run o
 - `.github/workflows/ci.yml`
   - Adds repository verification jobs for Go, Swagger, web, and SDKs.
   - Opts into Node 24-based JavaScript actions to address the GitHub Actions Node 20 deprecation warning.
+  - Runs a mock-provider deployment smoke job against the production smoke script.
 - `.github/workflows/release.yml`
   - Adds binary and container image release automation.
 - `scripts/check-swagger.sh`
   - Downloads modules before generating docs in a temporary workspace.
+- `scripts/ci-smoke-deployment.sh`
+  - Starts StacyVM with the mock provider and runs deployment smoke probes in CI.
 - `cmd/stacyvm/cmd_serve.go`
   - Registers the mock provider when enabled in config.
 
@@ -122,6 +125,7 @@ cd web && npm run build
 scripts/check-swagger.sh
 make release-build-all VERSION=phase-4-test
 scripts/smoke-deployment.sh http://127.0.0.1:7423
+scripts/ci-smoke-deployment.sh
 ```
 
 GitHub Actions has also passed for the initial Phase 4 CI workflow after the Swagger drift check stabilization.

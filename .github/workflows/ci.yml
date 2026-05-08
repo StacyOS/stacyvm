@@ -50,6 +50,25 @@ jobs:
       - name: Check generated Swagger docs
         run: scripts/check-swagger.sh
 
+  deployment-smoke:
+    name: Deployment smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build CLI
+        run: make build
+
+      - name: Run mock-provider deployment smoke
+        run: scripts/ci-smoke-deployment.sh
+
   web:
     name: Web build
     runs-on: ubuntu-latest
