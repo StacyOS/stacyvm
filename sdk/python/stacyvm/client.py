@@ -5,7 +5,7 @@ from __future__ import annotations
 import httpx
 
 from stacyvm.exceptions import ConnectionError, handle_response
-from stacyvm.models import SandboxInfo
+from stacyvm.models import QuotaSummary, SandboxInfo, SpawnAdmissionDecision
 from stacyvm.sandbox import Sandbox
 
 
@@ -46,6 +46,7 @@ class Client:
         memory_mb: int | None = None,
         vcpus: int | None = None,
         ttl: str | None = None,
+        owner_id: str | None = None,
         template: str | None = None,
         metadata: dict[str, str] | None = None,
     ) -> Sandbox:
@@ -59,6 +60,8 @@ class Client:
             body["vcpus"] = vcpus
         if ttl:
             body["ttl"] = ttl
+        if owner_id:
+            body["owner_id"] = owner_id
         if template:
             body["template"] = template
         if metadata:
@@ -72,6 +75,38 @@ class Client:
         handle_response(resp)
         data = resp.json()
         return Sandbox(self._http, data["id"], info=data)
+
+    def admission(
+        self,
+        image: str | None = None,
+        provider: str | None = None,
+        memory_mb: int | None = None,
+        vcpus: int | None = None,
+        ttl: str | None = None,
+        owner_id: str | None = None,
+        metadata: dict[str, str] | None = None,
+    ) -> SpawnAdmissionDecision:
+        """Preflight a spawn request without creating a sandbox."""
+        body: dict = {}
+        if image:
+            body["image"] = image
+        if provider:
+            body["provider"] = provider
+        if memory_mb:
+            body["memory_mb"] = memory_mb
+        if vcpus:
+            body["vcpus"] = vcpus
+        if ttl:
+            body["ttl"] = ttl
+        if owner_id:
+            body["owner_id"] = owner_id
+        if metadata:
+            body["metadata"] = metadata
+
+        resp = self._http.post("/api/v1/sandboxes/admission", json=body)
+        handle_response(resp)
+        data = resp.json()
+        return SpawnAdmissionDecision(**data)
 
     def get(self, sandbox_id: str) -> Sandbox:
         """Get an existing sandbox by ID."""
@@ -121,6 +156,12 @@ class Client:
         resp = self._http.get("/api/v1/pool/status")
         handle_response(resp)
         return resp.json()
+
+    def quota_summary(self) -> QuotaSummary:
+        """Get redacted quota policy coverage counts."""
+        resp = self._http.get("/api/v1/quotas/summary")
+        handle_response(resp)
+        return QuotaSummary(**resp.json())
 
     def health(self) -> dict:
         """Check server health."""

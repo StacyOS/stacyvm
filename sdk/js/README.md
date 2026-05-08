@@ -112,7 +112,17 @@ All fields on `SpawnOptions` are optional. Server defaults apply when fields are
 | `memory_mb` | `number` | RAM in MB |
 | `vcpus` | `number` | Virtual CPUs |
 | `ttl` | `string` | Auto-destroy after this duration |
+| `owner_id` | `string` | Owner ID for per-owner quotas when no `userId` header is set |
 | `metadata` | `Record<string, string>` | Free-form labels |
+
+Preflight quota and scheduler admission without creating a sandbox:
+
+```typescript
+const decision = await client.admission({ image: "python:3.12", ttl: "1h" });
+if (!decision.allowed && decision.queueable) {
+  console.log(`Request would queue because ${decision.reason}`);
+}
+```
 
 ---
 
@@ -305,6 +315,7 @@ await client.health();        // { status: "ok", version: "0.5.1", uptime: "2h13
 await client.list();          // SandboxInfo[] — all active sandboxes
 await client.providers();     // [{ name: "docker", healthy: true, default: true }, ...]
 await client.poolStatus();    // pool VM and user counts
+await client.quotaSummary();  // redacted owner quota policy counts
 await client.prune();         // returns count of expired sandboxes destroyed
 ```
 
@@ -371,6 +382,8 @@ import {
   ProviderInfo,
   HealthInfo,
   VMPoolStatus,
+  SpawnAdmissionDecision,
+  QuotaSummary,
   ForgevmClientOptions,
 } from "stacyvm";
 ```

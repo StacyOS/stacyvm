@@ -32,6 +32,30 @@ class SandboxInfo:
 
 
 @dataclass
+class SpawnAdmissionDecision:
+    """Admission result for a spawn preflight request."""
+
+    allowed: bool
+    queueable: bool
+    reason: str = ""
+    active_sandboxes: int = 0
+    max_sandboxes: int = 0
+    active_owner_sandboxes: int = 0
+    max_owner_sandboxes: int = 0
+    max_ttl: str = ""
+
+
+@dataclass
+class QuotaSummary:
+    """Redacted quota policy coverage counts."""
+
+    total: int = 0
+    with_max_sandboxes: int = 0
+    with_max_ttl: int = 0
+    with_max_exec_timeout: int = 0
+
+
+@dataclass
 class Template:
     """Sandbox template configuration."""
 

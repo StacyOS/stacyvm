@@ -1,5 +1,35 @@
 # Changelog
 
+## Phase 3 Quotas And Scheduling - 2026-05-08
+
+This checkpoint adds the first production multi-tenant control plane: persisted owner quotas, API rate limiting, spawn backpressure, scheduler visibility, admission preflight, and SDK helpers.
+
+### Added
+
+- Persisted owner quota policies for max sandboxes, max TTL, and max exec timeout.
+- Owner quota APIs, including usage and redacted summary endpoints.
+- Spawn admission decisions and `POST /api/v1/sandboxes/admission`.
+- Configurable spawn overflow queue with queue timeout and maximum queue depth.
+- Optional API rate limiting by owner, API key, or IP address.
+- Scheduler, quota, and rate-limit metrics in JSON diagnostics/metrics and Prometheus output.
+- TypeScript and Python SDK helpers for admission preflight and quota summary.
+
+### Changed
+
+- Spawn admission is serialized to avoid concurrent over-admission.
+- Queued spawns wake when capacity opens or owner quotas change.
+- Rate-limit bucket keys are hashed before storage.
+- Streaming exec cancellation is no longer reported as a timeout.
+- Streaming exec preflight errors now use the same API error mapping as non-streaming exec.
+- OpenAPI docs were regenerated for the Phase 3 API surface.
+
+### Verified
+
+- `go test ./internal/api/routes ./internal/orchestrator`
+- `make build`
+- `cd web && npm run build`
+- `make test`
+
 ## Phase 2 Observability And Ops - 2026-05-08
 
 This checkpoint adds production operations surfaces for health checks, diagnostics, metrics, audit events, and runtime limits.

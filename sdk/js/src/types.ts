@@ -57,8 +57,32 @@ export interface SpawnOptions {
   vcpus?: number;
   /** Time-to-live duration string. */
   ttl?: string;
+  /** Owner ID used for per-owner quotas when no X-User-ID header is set. */
+  owner_id?: string;
   /** Arbitrary key-value metadata. */
   metadata?: Record<string, string>;
+}
+
+/**
+ * Admission result for a spawn preflight request.
+ */
+export interface SpawnAdmissionDecision {
+  /** Whether the request can be spawned immediately. */
+  allowed: boolean;
+  /** Whether the request can wait in the spawn queue. */
+  queueable: boolean;
+  /** Denial reason, when allowed is false. */
+  reason?: string;
+  /** Current active sandbox count. */
+  active_sandboxes: number;
+  /** Configured global sandbox limit. */
+  max_sandboxes: number;
+  /** Current active sandbox count for the owner. */
+  active_owner_sandboxes?: number;
+  /** Effective sandbox limit for the owner. */
+  max_owner_sandboxes?: number;
+  /** Effective maximum TTL for the request. */
+  max_ttl?: string;
 }
 
 /**
@@ -285,6 +309,16 @@ export interface VMPoolStatus {
   max_vms: number;
   total_users: number;
   max_users_per_vm: number;
+}
+
+/**
+ * Redacted quota policy coverage counts.
+ */
+export interface QuotaSummary {
+  total: number;
+  with_max_sandboxes: number;
+  with_max_ttl: number;
+  with_max_exec_timeout: number;
 }
 
 // ---------------------------------------------------------------------------

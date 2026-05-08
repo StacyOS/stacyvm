@@ -15,6 +15,31 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/diagnostics": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Return redacted build, store, provider, sandbox, event, and operation diagnostics",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "system"
+                ],
+                "summary": "Get diagnostics",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_routes.DiagnosticsResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/events": {
             "get": {
                 "security": [
@@ -34,7 +59,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_orchestrator.Event"
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.Event"
                         }
                     }
                 }
@@ -65,6 +90,31 @@ const docTemplate = `{
                 }
             }
         },
+        "/live": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Return whether the StacyVM API process is alive",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "system"
+                ],
+                "summary": "Liveness check",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_routes.HealthResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/metrics": {
             "get": {
                 "security": [
@@ -85,6 +135,31 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/internal_api_routes.MetricsResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/metrics/prometheus": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Return runtime, provider, sandbox, event, and operation metrics in Prometheus text format",
+                "produces": [
+                    "text/plain"
+                ],
+                "tags": [
+                    "system"
+                ],
+                "summary": "Get Prometheus metrics",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "string"
                         }
                     }
                 }
@@ -180,7 +255,247 @@ const docTemplate = `{
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError"
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                        }
+                    }
+                }
+            }
+        },
+        "/quotas": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Return all persisted owner quota overrides",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "quotas"
+                ],
+                "summary": "List owner quotas",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.OwnerQuota"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/quotas/summary": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Return non-identifying counts for persisted owner quota overrides",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "quotas"
+                ],
+                "summary": "Get quota summary",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.QuotaSummary"
+                        }
+                    }
+                }
+            }
+        },
+        "/quotas/{ownerID}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Return the persisted quota override for an owner",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "quotas"
+                ],
+                "summary": "Get owner quota",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Owner ID",
+                        "name": "ownerID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.OwnerQuota"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Create or update quota overrides for an owner",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "quotas"
+                ],
+                "summary": "Save owner quota",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Owner ID",
+                        "name": "ownerID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Quota request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.OwnerQuota"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.OwnerQuota"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Delete the quota override for an owner",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "quotas"
+                ],
+                "summary": "Delete owner quota",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Owner ID",
+                        "name": "ownerID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_routes.StatusResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                        }
+                    }
+                }
+            }
+        },
+        "/quotas/{ownerID}/usage": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Return active sandbox usage and effective quota for an owner",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "quotas"
+                ],
+                "summary": "Get owner quota usage",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Owner ID",
+                        "name": "ownerID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.OwnerUsage"
+                        }
+                    }
+                }
+            }
+        },
+        "/ready": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Return whether the API is ready to serve sandbox traffic",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "system"
+                ],
+                "summary": "Readiness check",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_routes.ReadinessResponse"
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_routes.ReadinessResponse"
                         }
                     }
                 }
@@ -207,14 +522,14 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_orchestrator.Sandbox"
+                                "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.Sandbox"
                             }
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError"
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError"
                         }
                     }
                 }
@@ -243,7 +558,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_orchestrator.SpawnRequest"
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.SpawnRequest"
                         }
                     }
                 ],
@@ -251,19 +566,25 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_orchestrator.Sandbox"
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.Sandbox"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError"
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError"
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError"
                         }
                     }
                 }
@@ -292,7 +613,58 @@ const docTemplate = `{
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError"
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                        }
+                    }
+                }
+            }
+        },
+        "/sandboxes/admission": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Return whether a spawn request would be allowed, queued, or denied by quota and scheduler limits",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sandboxes"
+                ],
+                "summary": "Evaluate spawn admission",
+                "parameters": [
+                    {
+                        "description": "Spawn request",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.SpawnRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.SpawnAdmissionDecision"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError"
                         }
                     }
                 }
@@ -326,19 +698,19 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_orchestrator.Sandbox"
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.Sandbox"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError"
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError"
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError"
                         }
                     }
                 }
@@ -376,13 +748,13 @@ const docTemplate = `{
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError"
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError"
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError"
                         }
                     }
                 }
@@ -420,7 +792,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_orchestrator.ExecRequest"
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.ExecRequest"
                         }
                     }
                 ],
@@ -428,19 +800,19 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_orchestrator.ExecResult"
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.ExecResult"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError"
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError"
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError"
                         }
                     }
                 }
@@ -473,6 +845,75 @@ const docTemplate = `{
                     },
                     "400": {
                         "description": "Bad request"
+                    }
+                }
+            }
+        },
+        "/sandboxes/{sandboxID}/extend": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Add additional time to a sandbox's expiration",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sandboxes"
+                ],
+                "summary": "Extend sandbox TTL",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Sandbox ID",
+                        "name": "sandboxID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "TTL extension",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "ttl": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.Sandbox"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                        }
                     }
                 }
             }
@@ -518,19 +959,19 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError"
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError"
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError"
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError"
                         }
                     }
                 }
@@ -566,7 +1007,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_orchestrator.FileWriteRequest"
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.FileWriteRequest"
                         }
                     }
                 ],
@@ -580,19 +1021,19 @@ const docTemplate = `{
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError"
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError"
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError"
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError"
                         }
                     }
                 }
@@ -634,20 +1075,20 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_orchestrator.FileInfo"
+                                "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.FileInfo"
                             }
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError"
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError"
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError"
                         }
                     }
                 }
@@ -696,13 +1137,41 @@ const docTemplate = `{
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError"
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError"
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                        }
+                    }
+                }
+            }
+        },
+        "/snapshots": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Return all pre-built VM snapshots available for fast restore",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "snapshots"
+                ],
+                "summary": "List snapshots",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_providers.SnapshotSummary"
+                            }
                         }
                     }
                 }
@@ -729,14 +1198,14 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_orchestrator.Template"
+                                "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.Template"
                             }
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError"
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError"
                         }
                     }
                 }
@@ -765,7 +1234,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_orchestrator.Template"
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.Template"
                         }
                     }
                 ],
@@ -773,25 +1242,25 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_orchestrator.Template"
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.Template"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError"
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError"
                         }
                     },
                     "409": {
                         "description": "Conflict",
                         "schema": {
-                            "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError"
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError"
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError"
                         }
                     }
                 }
@@ -825,19 +1294,19 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_orchestrator.Template"
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.Template"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError"
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError"
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError"
                         }
                     }
                 }
@@ -873,7 +1342,7 @@ const docTemplate = `{
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_orchestrator.Template"
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.Template"
                         }
                     }
                 ],
@@ -881,25 +1350,25 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_orchestrator.Template"
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.Template"
                         }
                     },
                     "400": {
                         "description": "Bad Request",
                         "schema": {
-                            "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError"
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError"
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError"
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError"
                         }
                     }
                 }
@@ -937,13 +1406,13 @@ const docTemplate = `{
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError"
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError"
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError"
                         }
                     }
                 }
@@ -988,19 +1457,19 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_orchestrator.Sandbox"
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.Sandbox"
                         }
                     },
                     "404": {
                         "description": "Not Found",
                         "schema": {
-                            "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError"
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError"
                         }
                     },
                     "500": {
                         "description": "Internal Server Error",
                         "schema": {
-                            "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError"
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError"
                         }
                     }
                 }
@@ -1008,18 +1477,53 @@ const docTemplate = `{
         }
     },
     "definitions": {
-        "github_com_stacyvm-dev_stacyvm_internal_httputil.APIError": {
+        "github_com_StacyOs_stacyvm_internal_api_middleware.RateLimitStats": {
+            "type": "object",
+            "properties": {
+                "active_buckets": {
+                    "type": "integer"
+                },
+                "allowed_total": {
+                    "type": "integer"
+                },
+                "bucket_ttl": {
+                    "type": "string"
+                },
+                "burst": {
+                    "type": "integer"
+                },
+                "cleanup_interval": {
+                    "type": "string"
+                },
+                "enabled": {
+                    "type": "boolean"
+                },
+                "evicted_total": {
+                    "type": "integer"
+                },
+                "key_by": {
+                    "type": "string"
+                },
+                "limited_total": {
+                    "type": "integer"
+                },
+                "requests_per_minute": {
+                    "type": "integer"
+                }
+            }
+        },
+        "github_com_StacyOs_stacyvm_internal_httputil.APIError": {
             "type": "object",
             "properties": {
                 "code": {
-                    "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.ErrorCode"
+                    "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_httputil.ErrorCode"
                 },
                 "message": {
                     "type": "string"
                 }
             }
         },
-        "github_com_stacyvm-dev_stacyvm_internal_httputil.ErrorCode": {
+        "github_com_StacyOs_stacyvm_internal_httputil.ErrorCode": {
             "type": "string",
             "enum": [
                 "NOT_FOUND",
@@ -1027,7 +1531,9 @@ const docTemplate = `{
                 "INTERNAL_ERROR",
                 "UNAUTHORIZED",
                 "CONFLICT",
-                "UNAVAILABLE"
+                "UNAVAILABLE",
+                "TIMEOUT",
+                "RESOURCE_LIMIT"
             ],
             "x-enum-varnames": [
                 "CodeNotFound",
@@ -1035,10 +1541,12 @@ const docTemplate = `{
                 "CodeInternal",
                 "CodeUnauth",
                 "CodeConflict",
-                "CodeUnavailable"
+                "CodeUnavailable",
+                "CodeTimeout",
+                "CodeResourceLimit"
             ]
         },
-        "github_com_stacyvm-dev_stacyvm_internal_orchestrator.Event": {
+        "github_com_StacyOs_stacyvm_internal_orchestrator.Event": {
             "type": "object",
             "properties": {
                 "data": {
@@ -1057,11 +1565,25 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "type": {
-                    "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_orchestrator.EventType"
+                    "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.EventType"
                 }
             }
         },
-        "github_com_stacyvm-dev_stacyvm_internal_orchestrator.EventType": {
+        "github_com_StacyOs_stacyvm_internal_orchestrator.EventBusStats": {
+            "type": "object",
+            "properties": {
+                "events_total": {
+                    "type": "integer"
+                },
+                "history_size": {
+                    "type": "integer"
+                },
+                "subscribers": {
+                    "type": "integer"
+                }
+            }
+        },
+        "github_com_StacyOs_stacyvm_internal_orchestrator.EventType": {
             "type": "string",
             "enum": [
                 "sandbox.created",
@@ -1070,8 +1592,19 @@ const docTemplate = `{
                 "sandbox.error",
                 "exec.started",
                 "exec.completed",
+                "exec.failed",
+                "exec.timeout",
                 "file.written",
-                "file.read"
+                "file.read",
+                "operation.failed",
+                "resource.limit",
+                "provider.failed",
+                "reconcile.action",
+                "spawn.queued",
+                "spawn.dequeued",
+                "spawn.queue_timeout",
+                "quota.saved",
+                "quota.deleted"
             ],
             "x-enum-varnames": [
                 "EventSandboxCreated",
@@ -1080,11 +1613,22 @@ const docTemplate = `{
                 "EventSandboxError",
                 "EventExecStarted",
                 "EventExecCompleted",
+                "EventExecFailed",
+                "EventExecTimeout",
                 "EventFileWritten",
-                "EventFileRead"
+                "EventFileRead",
+                "EventOperationFailed",
+                "EventResourceLimit",
+                "EventProviderFailed",
+                "EventReconcileAction",
+                "EventSpawnQueued",
+                "EventSpawnDequeued",
+                "EventSpawnQueueTimeout",
+                "EventQuotaSaved",
+                "EventQuotaDeleted"
             ]
         },
-        "github_com_stacyvm-dev_stacyvm_internal_orchestrator.ExecRequest": {
+        "github_com_StacyOs_stacyvm_internal_orchestrator.ExecRequest": {
             "type": "object",
             "properties": {
                 "args": {
@@ -1113,7 +1657,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_stacyvm-dev_stacyvm_internal_orchestrator.ExecResult": {
+        "github_com_StacyOs_stacyvm_internal_orchestrator.ExecResult": {
             "type": "object",
             "properties": {
                 "duration": {
@@ -1130,7 +1674,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_stacyvm-dev_stacyvm_internal_orchestrator.FileInfo": {
+        "github_com_StacyOs_stacyvm_internal_orchestrator.FileInfo": {
             "type": "object",
             "properties": {
                 "is_dir": {
@@ -1150,7 +1694,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_stacyvm-dev_stacyvm_internal_orchestrator.FileWriteRequest": {
+        "github_com_StacyOs_stacyvm_internal_orchestrator.FileWriteRequest": {
             "type": "object",
             "properties": {
                 "content": {
@@ -1164,7 +1708,137 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_stacyvm-dev_stacyvm_internal_orchestrator.Sandbox": {
+        "github_com_StacyOs_stacyvm_internal_orchestrator.OperationMetrics": {
+            "type": "object",
+            "properties": {
+                "failure_total": {
+                    "type": "integer"
+                },
+                "last_error": {
+                    "type": "string"
+                },
+                "last_observed_unix": {
+                    "type": "integer"
+                },
+                "latency_avg_ms": {
+                    "type": "integer"
+                },
+                "latency_count": {
+                    "type": "integer"
+                },
+                "latency_max_ms": {
+                    "type": "integer"
+                },
+                "latency_min_ms": {
+                    "type": "integer"
+                },
+                "latency_total_ms": {
+                    "type": "integer"
+                },
+                "operation": {
+                    "type": "string"
+                },
+                "provider": {
+                    "type": "string"
+                },
+                "success_total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "github_com_StacyOs_stacyvm_internal_orchestrator.OperationalLimitsInfo": {
+            "type": "object",
+            "properties": {
+                "default_exec_timeout": {
+                    "type": "string"
+                },
+                "max_exec_timeout": {
+                    "type": "string"
+                },
+                "max_sandboxes": {
+                    "type": "integer"
+                },
+                "max_sandboxes_per_owner": {
+                    "type": "integer"
+                },
+                "max_spawn_queue": {
+                    "type": "integer"
+                },
+                "max_ttl": {
+                    "type": "string"
+                },
+                "spawn_overflow": {
+                    "type": "string"
+                },
+                "spawn_queue_timeout": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_StacyOs_stacyvm_internal_orchestrator.OwnerQuota": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "max_exec_timeout": {
+                    "type": "string"
+                },
+                "max_sandboxes": {
+                    "type": "integer"
+                },
+                "max_ttl": {
+                    "type": "string"
+                },
+                "owner_id": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_StacyOs_stacyvm_internal_orchestrator.OwnerUsage": {
+            "type": "object",
+            "properties": {
+                "active_sandboxes": {
+                    "type": "integer"
+                },
+                "max_exec_timeout": {
+                    "type": "string"
+                },
+                "max_sandboxes": {
+                    "type": "integer"
+                },
+                "max_ttl": {
+                    "type": "string"
+                },
+                "owner_id": {
+                    "type": "string"
+                },
+                "quota_configured": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "github_com_StacyOs_stacyvm_internal_orchestrator.QuotaSummary": {
+            "type": "object",
+            "properties": {
+                "total": {
+                    "type": "integer"
+                },
+                "with_max_exec_timeout": {
+                    "type": "integer"
+                },
+                "with_max_sandboxes": {
+                    "type": "integer"
+                },
+                "with_max_ttl": {
+                    "type": "integer"
+                }
+            }
+        },
+        "github_com_StacyOs_stacyvm_internal_orchestrator.Sandbox": {
             "type": "object",
             "properties": {
                 "created_at": {
@@ -1188,18 +1862,27 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
+                "owner_id": {
+                    "type": "string"
+                },
+                "preview_domain": {
+                    "type": "string"
+                },
                 "provider": {
                     "type": "string"
                 },
                 "state": {
-                    "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_orchestrator.SandboxState"
+                    "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.SandboxState"
                 },
                 "vcpus": {
                     "type": "integer"
+                },
+                "vm_id": {
+                    "type": "string"
                 }
             }
         },
-        "github_com_stacyvm-dev_stacyvm_internal_orchestrator.SandboxState": {
+        "github_com_StacyOs_stacyvm_internal_orchestrator.SandboxState": {
             "type": "string",
             "enum": [
                 "creating",
@@ -1216,7 +1899,57 @@ const docTemplate = `{
                 "StateError"
             ]
         },
-        "github_com_stacyvm-dev_stacyvm_internal_orchestrator.SecretConfig": {
+        "github_com_StacyOs_stacyvm_internal_orchestrator.SchedulerStatus": {
+            "type": "object",
+            "properties": {
+                "admission_control": {
+                    "type": "string"
+                },
+                "max_spawn_queue": {
+                    "type": "integer"
+                },
+                "spawn_dequeued_total": {
+                    "type": "integer"
+                },
+                "spawn_overflow": {
+                    "type": "string"
+                },
+                "spawn_queue_depth": {
+                    "type": "integer"
+                },
+                "spawn_queue_timeout": {
+                    "type": "string"
+                },
+                "spawn_queue_timeouts": {
+                    "type": "integer"
+                },
+                "spawn_queue_wait_avg": {
+                    "type": "string"
+                },
+                "spawn_queue_wait_avg_ms": {
+                    "type": "integer"
+                },
+                "spawn_queue_wait_count": {
+                    "type": "integer"
+                },
+                "spawn_queue_wait_max": {
+                    "type": "string"
+                },
+                "spawn_queue_wait_max_ms": {
+                    "type": "integer"
+                },
+                "spawn_queue_wait_total": {
+                    "type": "string"
+                },
+                "spawn_queue_wait_total_ms": {
+                    "type": "integer"
+                },
+                "spawn_queued_total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "github_com_StacyOs_stacyvm_internal_orchestrator.SecretConfig": {
             "type": "object",
             "properties": {
                 "inject_at": {
@@ -1227,7 +1960,36 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_stacyvm-dev_stacyvm_internal_orchestrator.SpawnRequest": {
+        "github_com_StacyOs_stacyvm_internal_orchestrator.SpawnAdmissionDecision": {
+            "type": "object",
+            "properties": {
+                "active_owner_sandboxes": {
+                    "type": "integer"
+                },
+                "active_sandboxes": {
+                    "type": "integer"
+                },
+                "allowed": {
+                    "type": "boolean"
+                },
+                "max_owner_sandboxes": {
+                    "type": "integer"
+                },
+                "max_sandboxes": {
+                    "type": "integer"
+                },
+                "max_ttl": {
+                    "type": "string"
+                },
+                "queueable": {
+                    "type": "boolean"
+                },
+                "reason": {
+                    "type": "string"
+                }
+            }
+        },
+        "github_com_StacyOs_stacyvm_internal_orchestrator.SpawnRequest": {
             "type": "object",
             "properties": {
                 "image": {
@@ -1241,6 +2003,9 @@ const docTemplate = `{
                     "additionalProperties": {
                         "type": "string"
                     }
+                },
+                "owner_id": {
+                    "type": "string"
                 },
                 "provider": {
                     "type": "string"
@@ -1256,7 +2021,7 @@ const docTemplate = `{
                 }
             }
         },
-        "github_com_stacyvm-dev_stacyvm_internal_orchestrator.Template": {
+        "github_com_StacyOs_stacyvm_internal_orchestrator.Template": {
             "type": "object",
             "properties": {
                 "allowed_hosts": {
@@ -1295,7 +2060,7 @@ const docTemplate = `{
                 "secrets": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/github_com_stacyvm-dev_stacyvm_internal_orchestrator.SecretConfig"
+                        "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.SecretConfig"
                     }
                 },
                 "setup": {
@@ -1312,6 +2077,78 @@ const docTemplate = `{
                 },
                 "version": {
                     "type": "integer"
+                }
+            }
+        },
+        "github_com_StacyOs_stacyvm_internal_providers.SnapshotSummary": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "image": {
+                    "type": "string"
+                },
+                "provider": {
+                    "type": "string"
+                }
+            }
+        },
+        "internal_api_routes.DiagnosticsResponse": {
+            "type": "object",
+            "properties": {
+                "build": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "events": {
+                    "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.EventBusStats"
+                },
+                "generated_at": {
+                    "type": "string",
+                    "example": "2026-05-08T10:30:00Z"
+                },
+                "limits": {
+                    "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.OperationalLimitsInfo"
+                },
+                "operations": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.OperationMetrics"
+                    }
+                },
+                "process": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "providers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_api_routes.ProviderHealth"
+                    }
+                },
+                "quotas": {
+                    "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.QuotaSummary"
+                },
+                "rate_limit": {
+                    "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_api_middleware.RateLimitStats"
+                },
+                "redactions": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "sandboxes": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "scheduler": {
+                    "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.SchedulerStatus"
+                },
+                "store": {
+                    "type": "object",
+                    "additionalProperties": true
                 }
             }
         },
@@ -1370,6 +2207,9 @@ const docTemplate = `{
                     "type": "boolean",
                     "example": true
                 },
+                "health": {
+                    "$ref": "#/definitions/internal_api_routes.ProviderHealth"
+                },
                 "healthy": {
                     "type": "boolean",
                     "example": true
@@ -1384,20 +2224,86 @@ const docTemplate = `{
                 }
             }
         },
-        "internal_api_routes.ProviderInfo": {
+        "internal_api_routes.ProviderHealth": {
             "type": "object",
             "properties": {
+                "capabilities": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "spawn",
+                        "exec",
+                        "files"
+                    ]
+                },
                 "default": {
                     "type": "boolean",
                     "example": true
+                },
+                "error": {
+                    "type": "string",
+                    "example": "health check returned false"
                 },
                 "healthy": {
                     "type": "boolean",
                     "example": true
                 },
+                "last_checked": {
+                    "type": "string",
+                    "example": "2026-05-08T10:30:00Z"
+                },
+                "latency_ms": {
+                    "type": "integer",
+                    "example": 3
+                },
+                "name": {
+                    "type": "string",
+                    "example": "docker"
+                },
+                "runtime_count": {
+                    "type": "integer",
+                    "example": 2
+                }
+            }
+        },
+        "internal_api_routes.ProviderInfo": {
+            "type": "object",
+            "properties": {
+                "capabilities": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "default": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "error": {
+                    "type": "string",
+                    "example": "health check returned false"
+                },
+                "healthy": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "last_checked": {
+                    "type": "string",
+                    "example": "2026-05-08T10:30:00Z"
+                },
+                "latency_ms": {
+                    "type": "integer",
+                    "example": 3
+                },
                 "name": {
                     "type": "string",
                     "example": "firecracker"
+                },
+                "runtime_count": {
+                    "type": "integer",
+                    "example": 2
                 }
             }
         },
@@ -1407,6 +2313,37 @@ const docTemplate = `{
                 "pruned": {
                     "type": "integer",
                     "example": 3
+                }
+            }
+        },
+        "internal_api_routes.ReadinessResponse": {
+            "type": "object",
+            "properties": {
+                "providers": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/internal_api_routes.ProviderHealth"
+                    }
+                },
+                "ready_providers": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "status": {
+                    "type": "string",
+                    "example": "ready"
+                },
+                "total_providers": {
+                    "type": "integer",
+                    "example": 2
+                },
+                "uptime": {
+                    "type": "string",
+                    "example": "2h30m15s"
+                },
+                "version": {
+                    "type": "string",
+                    "example": "1.0.0"
                 }
             }
         },
