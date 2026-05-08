@@ -1,5 +1,15 @@
 # Changelog
 
+## Phase 8 Single-Node Production - 2026-05-08
+
+This checkpoint starts the Phase 8 single-node production readiness track.
+
+### Added
+
+- `stacyvm db backup` for consistent SQLite backups with integrity validation.
+- `stacyvm db restore` with explicit confirmation, backup validation, pre-restore safety copy, and stale WAL/SHM cleanup.
+- Phase 8 release notes under `docs/releases/phase-8-single-node-production.md`.
+
 ## Phase 7 Release Candidate Hardening - 2026-05-08
 
 This checkpoint starts the Phase 7 release-candidate hardening track.

@@ -451,6 +451,7 @@ stacyvm exec sb-a1b2c3d4 --shell -- "echo $HOME && pwd"
 stacyvm list                                    # list active sandboxes
 stacyvm kill sb-a1b2c3d4                        # destroy
 stacyvm build-image python:3.12                 # pre-build rootfs (Firecracker)
+stacyvm db backup /backup/stacyvm.db            # consistent SQLite backup
 stacyvm tui                                     # interactive dashboard
 stacyvm version                                 # version info
 ```

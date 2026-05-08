@@ -34,6 +34,7 @@ func main() {
 		newTUICmd(),
 		newBuildImageCmd(),
 		newDoctorCmd(),
+		newDBCmd(),
 	)
 
 	if err := root.Execute(); err != nil {

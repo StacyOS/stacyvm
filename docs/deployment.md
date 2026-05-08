@@ -112,7 +112,21 @@ Set `server.preview_domain` or `STACYVM_SERVER_PREVIEW_DOMAIN` to the domain tha
 
 ## Backups
 
-The default store is SQLite at `/var/lib/stacyvm/stacyvm.db`. For a consistent backup:
+The default store is SQLite at `/var/lib/stacyvm/stacyvm.db`. Prefer the built-in backup command because it uses SQLite's online backup path and validates the output:
+
+```bash
+stacyvm db backup /backup/stacyvm-$(date +%Y%m%dT%H%M%SZ).db --database /var/lib/stacyvm/stacyvm.db
+```
+
+Restore requires the service to be stopped. The command validates the backup, creates a pre-restore safety copy of the current database, removes stale WAL/SHM sidecars, and replaces the target database:
+
+```bash
+sudo systemctl stop stacyvm
+stacyvm db restore /backup/stacyvm-20260508T120000Z.db --database /var/lib/stacyvm/stacyvm.db --yes
+sudo systemctl start stacyvm
+```
+
+For a manual fallback:
 
 ```bash
 sudo systemctl stop stacyvm
@@ -127,7 +141,7 @@ If you run with Docker Compose, stop the service or snapshot the backing volume 
 ## Upgrades
 
 1. Check the release notes for config or API changes.
-2. Back up `/var/lib/stacyvm/stacyvm.db`.
+2. Back up `/var/lib/stacyvm/stacyvm.db` with `stacyvm db backup`.
 3. Replace the binary or update `STACYVM_IMAGE`.
 4. Restart the service.
 5. Confirm `GET /api/v1/ready` succeeds before routing traffic.
