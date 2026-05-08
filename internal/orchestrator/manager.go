@@ -1104,6 +1104,7 @@ func (m *Manager) SaveOwnerQuota(ctx context.Context, quota OwnerQuota) (*OwnerQ
 		"max_ttl":          saved.MaxTTL,
 		"max_exec_timeout": saved.MaxExecTimeout,
 	})
+	m.notifySpawnCapacity()
 	return saved, nil
 }
 
@@ -1118,6 +1119,7 @@ func (m *Manager) DeleteOwnerQuota(ctx context.Context, ownerID string) error {
 	m.publishOperationalEvent(EventQuotaDeleted, "", map[string]interface{}{
 		"owner_id": ownerID,
 	})
+	m.notifySpawnCapacity()
 	return nil
 }
 

@@ -686,6 +686,64 @@ func TestManager_SpawnQueueWaitsForCapacity(t *testing.T) {
 	}
 }
 
+func TestManager_SpawnQueueResumesWhenQuotaChanges(t *testing.T) {
+	m := setupManagerWithConfig(t, ManagerConfig{
+		DefaultTTL:    5 * time.Minute,
+		DefaultImage:  "alpine:latest",
+		DefaultMemory: 512,
+		DefaultVCPUs:  1,
+		Limits: OperationalLimits{
+			SpawnOverflow:     "queue",
+			SpawnQueueTimeout: 500 * time.Millisecond,
+			MaxSpawnQueue:     2,
+		},
+	})
+	ctx := context.Background()
+	if _, err := m.SaveOwnerQuota(ctx, OwnerQuota{OwnerID: "owner-a", MaxSandboxes: 1}); err != nil {
+		t.Fatalf("save initial quota: %v", err)
+	}
+	if _, err := m.Spawn(ctx, SpawnRequest{OwnerID: "owner-a"}); err != nil {
+		t.Fatalf("first spawn: %v", err)
+	}
+
+	type spawnResult struct {
+		sb  *Sandbox
+		err error
+	}
+	resultCh := make(chan spawnResult, 1)
+	go func() {
+		sb, err := m.Spawn(ctx, SpawnRequest{OwnerID: "owner-a"})
+		resultCh <- spawnResult{sb: sb, err: err}
+	}()
+
+	select {
+	case result := <-resultCh:
+		t.Fatalf("second spawn returned before quota changed: sb=%v err=%v", result.sb, result.err)
+	case <-time.After(25 * time.Millisecond):
+	}
+
+	if _, err := m.SaveOwnerQuota(ctx, OwnerQuota{OwnerID: "owner-a", MaxSandboxes: 2}); err != nil {
+		t.Fatalf("increase quota: %v", err)
+	}
+
+	select {
+	case result := <-resultCh:
+		if result.err != nil {
+			t.Fatalf("second spawn: %v", result.err)
+		}
+		if result.sb == nil || result.sb.OwnerID != "owner-a" {
+			t.Fatalf("unexpected second spawn: %+v", result.sb)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("second spawn did not resume after quota changed")
+	}
+
+	status := m.SchedulerStatus()
+	if status.SpawnQueuedTotal != 1 || status.SpawnDequeuedTotal != 1 {
+		t.Fatalf("unexpected queue status: %+v", status)
+	}
+}
+
 func TestManager_SpawnQueueTimesOut(t *testing.T) {
 	m := setupManagerWithConfig(t, ManagerConfig{
 		DefaultTTL:    5 * time.Minute,
