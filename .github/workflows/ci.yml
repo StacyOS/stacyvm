@@ -1,0 +1,111 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - 'phase-*'
+      - 'feat/*'
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    name: Go tests and build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run Go tests
+        run: make test
+
+      - name: Build CLI
+        run: make build
+
+  swagger:
+    name: Swagger drift
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Check generated Swagger docs
+        run: scripts/check-swagger.sh
+
+  web:
+    name: Web build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web app
+        run: npm run build
+
+  sdk-js:
+    name: TypeScript SDK build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk/js
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build TypeScript SDK
+        run: bun run build
+
+  sdk-python:
+    name: Python SDK import check
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python SDK
+        run: python -m pip install -e sdk/python
+
+      - name: Compile Python SDK
+        run: python -m compileall sdk/python/stacyvm
+
+      - name: Import Python SDK
+        run: python -c "import stacyvm; print(stacyvm.__version__)"
