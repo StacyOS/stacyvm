@@ -26,6 +26,8 @@ This checkpoint adds the first production deployment and verification surface fo
 - Docker image builds now accept an explicit `VERSION` build argument and BuildKit target platform args.
 - Release artifacts now build into `dist/` with checksums instead of the repository root.
 - `stacyvm serve` now registers the mock provider when `providers.mock.enabled` is true.
+- Production Compose now allows the Traefik host port to be overridden for smoke runs.
+- Production Compose has been runtime-smoked with StacyVM, Traefik, Docker provider readiness, API probes, and live-preview routing.
 - README navigation now links to the production deployment guide.
 
 ### Verified

@@ -55,6 +55,20 @@ docker build -t stacyvm:local ..
 STACYVM_IMAGE=stacyvm:local docker compose up -d
 ```
 
+For non-invasive smoke runs on a shared host, override the published ports:
+
+```bash
+STACYVM_IMAGE=stacyvm:local STACYVM_HOST_PORT=17426 STACYVM_TRAEFIK_HOST_PORT=18080 docker compose up -d
+```
+
+Then validate the API surface:
+
+```bash
+scripts/smoke-deployment.sh http://127.0.0.1:17426 "$STACYVM_API_KEY"
+```
+
+Live-preview routing can be checked by spawning a sandbox that serves port `3000` and requesting Traefik with `Host: 3000-<sandbox-id>.<preview-domain>`.
+
 ## systemd
 
 Use `deploy/stacyvm.service` when running the binary directly on a Linux host.

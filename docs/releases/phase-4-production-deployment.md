@@ -62,6 +62,7 @@ The goal of this phase is to make StacyVM easier to validate, release, and run o
 - Added `scripts/smoke-deployment.sh` for liveness, health, readiness, and Prometheus deployment probes.
 - Added `docs/runtime-conformance.md` with host requirements and signoff checks for Docker, gVisor, Kata, Firecracker, PRoot, E2B, and custom providers.
 - Registered the mock provider in `stacyvm serve` when `providers.mock.enabled` is set, giving operators and CI a no-Docker smoke path.
+- Validated the production Compose template with StacyVM, Traefik, Docker provider readiness, API smoke probes, and a port `3000` live-preview route.
 
 ## Code Changes By Area
 
@@ -84,6 +85,7 @@ The goal of this phase is to make StacyVM easier to validate, release, and run o
 
 - `deploy/docker-compose.yml`
   - Adds a reusable production Compose template.
+  - Allows the Traefik host port to be overridden for smoke runs.
 - `deploy/stacyvm.production.yaml`
   - Adds a production baseline config.
 - `deploy/stacyvm.service`
@@ -126,6 +128,10 @@ scripts/check-swagger.sh
 make release-build-all VERSION=phase-4-test
 scripts/smoke-deployment.sh http://127.0.0.1:7423
 scripts/ci-smoke-deployment.sh
+docker build --build-arg VERSION=phase-4-compose -t stacyvm:phase-4-compose .
+docker compose -p stacyvm-phase4-smoke -f deploy/docker-compose.yml up -d
+scripts/smoke-deployment.sh http://127.0.0.1:17426 phase4-compose-key
+curl -H 'Host: 3000-<sandbox-id>.localhost' http://127.0.0.1:18080/
 ```
 
 GitHub Actions has also passed for the initial Phase 4 CI workflow after the Swagger drift check stabilization.

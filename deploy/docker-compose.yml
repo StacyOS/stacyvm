@@ -32,7 +32,7 @@ services:
       - "--providers.docker.exposedbydefault=false"
       - "--entrypoints.web.address=:80"
     ports:
-      - "80:80"
+      - "${STACYVM_TRAEFIK_HOST_PORT:-80}:80"
     volumes:
       - ${STACYVM_DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:ro
     networks:
