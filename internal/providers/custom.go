@@ -176,7 +176,7 @@ func (p *CustomProvider) Spawn(ctx context.Context, opts SpawnOptions) (string, 
 }
 
 // Exec runs a command in the sandbox.
-// POST /exec  { sandbox_id, command, args, env, workdir }
+// POST /exec  { sandbox_id, command, args, mode, env, workdir }
 // Expects response: { "exit_code": 0, "stdout": "...", "stderr": "..." }
 func (p *CustomProvider) Exec(ctx context.Context, sandboxID string, opts ExecOptions) (*ExecResult, error) {
 	body := map[string]interface{}{
@@ -185,6 +185,9 @@ func (p *CustomProvider) Exec(ctx context.Context, sandboxID string, opts ExecOp
 	}
 	if len(opts.Args) > 0 {
 		body["args"] = opts.Args
+	}
+	if opts.Mode != "" {
+		body["mode"] = opts.Mode
 	}
 	if opts.Env != nil {
 		body["env"] = opts.Env
@@ -217,7 +220,7 @@ func (p *CustomProvider) Exec(ctx context.Context, sandboxID string, opts ExecOp
 }
 
 // ExecStream runs a command and streams NDJSON output chunks.
-// POST /exec  { sandbox_id, command, args, env, workdir, stream: true }
+// POST /exec  { sandbox_id, command, args, mode, env, workdir, stream: true }
 // Expects NDJSON response: { "stream": "stdout"|"stderr", "data": "..." }
 func (p *CustomProvider) ExecStream(ctx context.Context, sandboxID string, opts ExecOptions) (<-chan StreamChunk, error) {
 	body := map[string]interface{}{
@@ -227,6 +230,9 @@ func (p *CustomProvider) ExecStream(ctx context.Context, sandboxID string, opts 
 	}
 	if len(opts.Args) > 0 {
 		body["args"] = opts.Args
+	}
+	if opts.Mode != "" {
+		body["mode"] = opts.Mode
 	}
 	if opts.Env != nil {
 		body["env"] = opts.Env

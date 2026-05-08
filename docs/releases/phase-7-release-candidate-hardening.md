@@ -34,14 +34,24 @@ Phase 7 starts the release-candidate hardening track. The goal is to move StacyV
 - Added [threat-model.md](../threat-model.md).
 - Documented assets, trust boundaries, primary threats, current mitigations, and Phase 7 security objectives.
 
+### Exec Semantics
+
+- Added explicit exec modes:
+  - `shell` preserves the existing `/bin/sh -c` behavior.
+  - `argv` runs direct process arguments without shell interpolation.
+- Updated Docker, mock, PRoot, Firecracker agent protocol, custom provider passthrough, and CLI exec handling.
+- Made `stacyvm exec` use argv mode by default, with `--shell` available for shell expressions.
+- Added tests that verify argv payloads are treated literally.
+
 ## Verification
 
 ```sh
 go test ./cmd/stacyvm
+go test ./internal/providers
 go test ./...
 npm run build
 ```
 
 ## Next Phase 7 Direction
 
-The next slices should harden Docker command execution semantics, expand file path traversal coverage, and add persisted audit coverage for sandbox lifecycle and file/exec operations.
+The next slices should expand file path traversal coverage and add persisted audit coverage for sandbox lifecycle and file/exec operations.

@@ -29,7 +29,7 @@ This threat model is the Phase 7 baseline. It focuses on StacyVM as a self-hoste
 | Regular API key accesses admin routes | Admin key separation and `admin:*` scope enforcement | Add OIDC/RBAC and per-route policy tests |
 | Missing operator attribution | `X-User-ID` and admin fallback attribution | OIDC actor claims |
 | Sandbox file path traversal | Docker/PRoot tests and provider path normalization | Expand tests across all file APIs/providers |
-| Shell command injection | Caller-controlled commands run inside sandbox | Add explicit shell/argv execution modes |
+| Shell command injection | Explicit shell/argv execution modes; argv mode avoids shell interpolation | Expand SDK examples and conformance tests for every provider |
 | Docker container escape | Dropped caps/seccomp/resource config supported | Harden defaults and certify gVisor/Kata |
 | Stale runtime after restart | Startup reconciliation | Distributed leases for multi-worker |
 | Audit gaps | Admin audit persisted | Persist sandbox lifecycle, exec, file, env, and registry audit events |

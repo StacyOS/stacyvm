@@ -543,6 +543,12 @@ func (m *Manager) Exec(ctx context.Context, sandboxID string, req ExecRequest) (
 		m.recordOperation(OperationExec, metricsProvider, time.Since(start), metricsErr)
 	}()
 
+	if err := validateExecRequest(req); err != nil {
+		metricsErr = err
+		m.publishFailureForError(sandboxID, OperationExec, metricsProvider, err)
+		return nil, err
+	}
+
 	sb, prov, err := m.getSandboxAndProvider(sandboxID)
 	if err != nil {
 		metricsErr = err
@@ -579,6 +585,7 @@ func (m *Manager) Exec(ctx context.Context, sandboxID string, req ExecRequest) (
 	result, err := prov.Exec(execCtx, m.resolveVMID(sb), providers.ExecOptions{
 		Command: req.Command,
 		Args:    req.Args,
+		Mode:    req.Mode,
 		Env:     req.Env,
 		WorkDir: workDir,
 	})
@@ -630,6 +637,12 @@ func (m *Manager) ExecStream(ctx context.Context, sandboxID string, req ExecRequ
 		}
 	}()
 
+	if err := validateExecRequest(req); err != nil {
+		metricsErr = err
+		m.publishFailureForError(sandboxID, OperationExecStream, metricsProvider, err)
+		return nil, err
+	}
+
 	sb, prov, err := m.getSandboxAndProvider(sandboxID)
 	if err != nil {
 		metricsErr = err
@@ -658,6 +671,7 @@ func (m *Manager) ExecStream(ctx context.Context, sandboxID string, req ExecRequ
 	ch, err := prov.ExecStream(execCtx, m.resolveVMID(sb), providers.ExecOptions{
 		Command: req.Command,
 		Args:    req.Args,
+		Mode:    req.Mode,
 		Env:     req.Env,
 		WorkDir: workDir,
 	})
@@ -712,6 +726,20 @@ func (m *Manager) ExecStream(ctx context.Context, sandboxID string, req ExecRequ
 		m.recordOperation(OperationExecStream, metricsProvider, time.Since(start), metricsErr)
 	}()
 	return out, nil
+}
+
+func validateExecRequest(req ExecRequest) error {
+	switch strings.TrimSpace(req.Mode) {
+	case "", providers.ExecModeShell:
+		return nil
+	case providers.ExecModeArgv:
+		if strings.TrimSpace(req.Command) == "" {
+			return InvalidInputError("argv exec mode requires command")
+		}
+		return nil
+	default:
+		return InvalidInputError(fmt.Sprintf("unsupported exec mode %q", req.Mode))
+	}
 }
 
 func (m *Manager) WriteFile(ctx context.Context, sandboxID string, req FileWriteRequest) error {

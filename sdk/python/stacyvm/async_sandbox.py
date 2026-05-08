@@ -35,6 +35,7 @@ class AsyncSandbox:
         self,
         command: str,
         args: list[str] | None = None,
+        mode: str | None = None,
         env: dict[str, str] | None = None,
         workdir: str | None = None,
         timeout: str | None = None,
@@ -43,6 +44,8 @@ class AsyncSandbox:
         body: dict = {"command": command}
         if args:
             body["args"] = args
+        if mode:
+            body["mode"] = mode
         if env:
             body["env"] = env
         if workdir:
@@ -64,6 +67,7 @@ class AsyncSandbox:
         self,
         command: str,
         args: list[str] | None = None,
+        mode: str | None = None,
         env: dict[str, str] | None = None,
         workdir: str | None = None,
     ) -> AsyncIterator[StreamChunk]:
@@ -73,6 +77,8 @@ class AsyncSandbox:
         body: dict = {"command": command, "stream": True}
         if args:
             body["args"] = args
+        if mode:
+            body["mode"] = mode
         if env:
             body["env"] = env
         if workdir:

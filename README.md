@@ -387,6 +387,8 @@ Auth: pass `X-API-Key: <your-key>` if `auth.enabled: true`. For pool mode, also 
 | `GET` | `/sandboxes/{id}/exec/ws` | Execute over WebSocket |
 | `GET` | `/sandboxes/{id}/logs` | Console logs |
 
+Exec requests default to backwards-compatible shell mode. Set `mode: "argv"` with `args` to run direct process arguments without shell interpolation.
+
 ### Files (per sandbox)
 
 | Method | Endpoint | Description |
@@ -444,7 +446,8 @@ OpenAPI spec: [docs/swagger.yaml](docs/swagger.yaml).
 ```bash
 stacyvm serve                                  # start the API server
 stacyvm spawn --image python:3.12 --ttl 1h     # spawn
-stacyvm exec sb-a1b2c3d4 -- python3 app.py     # run a command in a sandbox
+stacyvm exec sb-a1b2c3d4 -- python3 app.py     # run argv mode in a sandbox
+stacyvm exec sb-a1b2c3d4 --shell -- "echo $HOME && pwd"
 stacyvm list                                    # list active sandboxes
 stacyvm kill sb-a1b2c3d4                        # destroy
 stacyvm build-image python:3.12                 # pre-build rootfs (Firecracker)

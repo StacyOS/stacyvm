@@ -609,6 +609,7 @@ func (p *FirecrackerProvider) Exec(ctx context.Context, sandboxID string, opts E
 	params, _ := agentproto.MarshalParams(&agentproto.ExecParams{
 		Command: opts.Command,
 		Args:    opts.Args,
+		Mode:    opts.Mode,
 		WorkDir: opts.WorkDir,
 		Env:     opts.Env,
 	})
@@ -646,6 +647,7 @@ func (p *FirecrackerProvider) ExecStream(ctx context.Context, sandboxID string, 
 	params, _ := agentproto.MarshalParams(&agentproto.ExecParams{
 		Command: opts.Command,
 		Args:    opts.Args,
+		Mode:    opts.Mode,
 		WorkDir: opts.WorkDir,
 		Env:     opts.Env,
 	})

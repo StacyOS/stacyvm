@@ -63,16 +63,18 @@ func (b *fakeCustomBackend) spawn(w http.ResponseWriter, r *http.Request) {
 
 func (b *fakeCustomBackend) exec(w http.ResponseWriter, r *http.Request) {
 	var req struct {
-		SandboxID string `json:"sandbox_id"`
-		Command   string `json:"command"`
-		Stream    bool   `json:"stream"`
+		SandboxID string   `json:"sandbox_id"`
+		Command   string   `json:"command"`
+		Args      []string `json:"args"`
+		Mode      string   `json:"mode"`
+		Stream    bool     `json:"stream"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 	if req.Stream {
-		ch, err := b.mock.ExecStream(r.Context(), req.SandboxID, ExecOptions{Command: req.Command})
+		ch, err := b.mock.ExecStream(r.Context(), req.SandboxID, ExecOptions{Command: req.Command, Args: req.Args, Mode: req.Mode})
 		if err != nil {
 			writeFakeError(w, err)
 			return
@@ -84,7 +86,7 @@ func (b *fakeCustomBackend) exec(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	result, err := b.mock.Exec(r.Context(), req.SandboxID, ExecOptions{Command: req.Command})
+	result, err := b.mock.Exec(r.Context(), req.SandboxID, ExecOptions{Command: req.Command, Args: req.Args, Mode: req.Mode})
 	if err != nil {
 		writeFakeError(w, err)
 		return

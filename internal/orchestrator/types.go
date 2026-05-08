@@ -41,6 +41,7 @@ type SpawnRequest struct {
 type ExecRequest struct {
 	Command string            `json:"command"`
 	Args    []string          `json:"args,omitempty"`
+	Mode    string            `json:"mode,omitempty"`
 	Env     map[string]string `json:"env,omitempty"`
 	WorkDir string            `json:"workdir,omitempty"`
 	Timeout string            `json:"timeout,omitempty"`

@@ -121,6 +121,8 @@ export interface SandboxInfo {
 export interface ExecOptions {
   /** Positional arguments appended to the command. */
   args?: string[];
+  /** Execution mode. `shell` runs through /bin/sh -c; `argv` runs direct arguments. */
+  mode?: "shell" | "argv";
   /** Environment variables injected into the command. */
   env?: Record<string, string>;
   /** Working directory inside the sandbox. */

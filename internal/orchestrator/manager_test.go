@@ -237,6 +237,40 @@ func TestManager_Exec(t *testing.T) {
 	}
 }
 
+func TestManager_ExecArgvMode(t *testing.T) {
+	m := setupManager(t)
+	ctx := context.Background()
+
+	sb, _ := m.Spawn(ctx, SpawnRequest{Image: "alpine:latest"})
+
+	result, err := m.Exec(ctx, sb.ID, ExecRequest{
+		Mode:    providers.ExecModeArgv,
+		Command: "printf",
+		Args:    []string{"%s", "$HOME && echo injected"},
+	})
+	if err != nil {
+		t.Fatalf("exec: %v", err)
+	}
+	if result.Stdout != "$HOME && echo injected" {
+		t.Fatalf("stdout = %q, want literal argv payload", result.Stdout)
+	}
+}
+
+func TestManager_ExecRejectsUnsupportedMode(t *testing.T) {
+	m := setupManager(t)
+	ctx := context.Background()
+
+	sb, _ := m.Spawn(ctx, SpawnRequest{Image: "alpine:latest"})
+
+	_, err := m.Exec(ctx, sb.ID, ExecRequest{
+		Mode:    "raw",
+		Command: "echo nope",
+	})
+	if !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("expected ErrInvalidInput, got %v", err)
+	}
+}
+
 func TestManager_OperationMetrics(t *testing.T) {
 	m := setupManager(t)
 	ctx := context.Background()

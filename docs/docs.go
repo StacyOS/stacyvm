@@ -1712,6 +1712,9 @@ const docTemplate = `{
                         "type": "string"
                     }
                 },
+                "mode": {
+                    "type": "string"
+                },
                 "stream": {
                     "type": "boolean"
                 },

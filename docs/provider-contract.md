@@ -25,6 +25,11 @@ tests.
 ## Exec
 
 - `Exec` runs the requested command and returns stdout, stderr, and exit code.
+- Exec mode is explicit:
+  - Empty mode and `shell` run `Command` through `/bin/sh -c`; `Args` are
+    shell-quoted and appended for backwards compatibility.
+  - `argv` runs `Command` directly with `Args` as literal process arguments.
+    Providers must not invoke a shell in this mode.
 - A nonzero command exit is not a provider error. It must return an `ExecResult`
   with the nonzero exit code.
 - Provider errors are reserved for runtime failures: missing sandbox, provider

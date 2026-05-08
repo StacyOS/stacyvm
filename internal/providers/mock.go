@@ -87,9 +87,12 @@ func (m *MockProvider) Exec(ctx context.Context, sandboxID string, opts ExecOpti
 		return nil, err
 	}
 
-	// Use sandbox root as working dir and set up env so /workspace resolves
-	args := append([]string{"-c", opts.Command}, opts.Args...)
-	cmd := exec.CommandContext(ctx, "sh", args...)
+	// Use sandbox root as working dir and set up env so /workspace resolves.
+	args, err := buildExecCommand(opts)
+	if err != nil {
+		return nil, err
+	}
+	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 	cmd.Dir = filepath.Join(sb.root, "workspace")
 	if opts.WorkDir != "" {
 		cmd.Dir = filepath.Join(sb.root, opts.WorkDir)
@@ -134,8 +137,11 @@ func (m *MockProvider) ExecStream(ctx context.Context, sandboxID string, opts Ex
 		return nil, err
 	}
 
-	args := append([]string{"-c", opts.Command}, opts.Args...)
-	cmd := exec.CommandContext(ctx, "sh", args...)
+	args, err := buildExecCommand(opts)
+	if err != nil {
+		return nil, err
+	}
+	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 	cmd.Dir = filepath.Join(sb.root, "workspace")
 	if opts.WorkDir != "" {
 		cmd.Dir = filepath.Join(sb.root, opts.WorkDir)

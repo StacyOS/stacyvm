@@ -236,13 +236,13 @@ func (d *DockerProvider) Exec(ctx context.Context, sandboxID string, opts ExecOp
 		workDir = "/workspace"
 	}
 
-	shellCmd := opts.Command
-	for _, a := range opts.Args {
-		shellCmd += " " + shellQuoteDocker(a)
+	cmd, err := buildExecCommand(opts)
+	if err != nil {
+		return nil, err
 	}
 
 	execCfg := container.ExecOptions{
-		Cmd:          []string{"sh", "-c", shellCmd},
+		Cmd:          cmd,
 		WorkingDir:   workDir,
 		AttachStdout: true,
 		AttachStderr: true,
@@ -299,13 +299,13 @@ func (d *DockerProvider) ExecStream(ctx context.Context, sandboxID string, opts 
 		workDir = "/workspace"
 	}
 
-	shellCmd := opts.Command
-	for _, a := range opts.Args {
-		shellCmd += " " + shellQuoteDocker(a)
+	cmd, err := buildExecCommand(opts)
+	if err != nil {
+		return nil, err
 	}
 
 	execCfg := container.ExecOptions{
-		Cmd:          []string{"sh", "-c", shellCmd},
+		Cmd:          cmd,
 		WorkingDir:   workDir,
 		AttachStdout: true,
 		AttachStderr: true,

@@ -11,6 +11,10 @@ This checkpoint starts the Phase 7 release-candidate hardening track.
 - Threat model under `docs/threat-model.md`.
 - Phase 7 release notes under `docs/releases/phase-7-release-candidate-hardening.md`.
 
+### Changed
+
+- Made exec command mode explicit with backwards-compatible `shell` mode and safer `argv` mode.
+
 ## Phase 6 Security Governance - 2026-05-08
 
 This checkpoint starts the Phase 6 security and governance work on top of the Phase 5 admin control plane.
