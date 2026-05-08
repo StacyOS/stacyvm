@@ -11,11 +11,17 @@ This checkpoint adds the first production deployment and verification surface fo
 - Production baseline config with auth, rate limiting, sandbox caps, queueing, JSON logs, and persistent SQLite state.
 - systemd unit and environment template for binary-based Linux installs.
 - Deployment guide covering host requirements, health probes, Prometheus metrics, reverse proxy setup, backups, upgrades, and provider notes.
+- Release workflow for GitHub releases and GHCR container image publishing.
+- Release runbook documenting tags, manual dispatch, binary artifacts, image tags, and preflight checks.
+- `.dockerignore` for smaller and safer Docker build contexts.
 - Phase 4 release notes under `docs/releases/phase-4-production-deployment.md`.
 
 ### Changed
 
 - Swagger drift checks now download Go modules before invoking `swag`, which makes cold CI runners reliable.
+- CI opts into Node 24-based JavaScript actions to address the GitHub Actions Node 20 deprecation warning.
+- Docker image builds now accept an explicit `VERSION` build argument and BuildKit target platform args.
+- Release artifacts now build into `dist/` with checksums instead of the repository root.
 - README navigation now links to the production deployment guide.
 
 ### Verified
@@ -26,6 +32,7 @@ This checkpoint adds the first production deployment and verification surface fo
 - `go test ./...`
 - `cd web && npm run build`
 - `scripts/check-swagger.sh`
+- `make release-build-all VERSION=phase-4-test`
 
 ## Phase 3 Quotas And Scheduling - 2026-05-08
 

@@ -38,6 +38,15 @@ The goal of this phase is to make StacyVM easier to validate, release, and run o
   - `deploy/stacyvm.env.example`
 - Added `deploy/stacyvm.service` for binary-based Linux/systemd installs.
 
+### Release Automation
+
+- Added a release workflow for tag-driven and manually-dispatched releases.
+- Release automation builds static Linux binary artifacts for `amd64` and `arm64`.
+- Release automation publishes multi-arch container images to `ghcr.io/stacyos/stacyvm`.
+- Docker image builds now accept an explicit `VERSION` build argument.
+- Release artifacts now build into `dist/` instead of the repository root.
+- Added `.dockerignore` to keep local build outputs and dependency directories out of release image contexts.
+
 ### Deployment Runbook
 
 - Added `docs/deployment.md` covering:
@@ -57,6 +66,9 @@ The goal of this phase is to make StacyVM easier to validate, release, and run o
 
 - `.github/workflows/ci.yml`
   - Adds repository verification jobs for Go, Swagger, web, and SDKs.
+  - Opts into Node 24-based JavaScript actions to address the GitHub Actions Node 20 deprecation warning.
+- `.github/workflows/release.yml`
+  - Adds binary and container image release automation.
 - `scripts/check-swagger.sh`
   - Downloads modules before generating docs in a temporary workspace.
 
@@ -70,11 +82,19 @@ The goal of this phase is to make StacyVM easier to validate, release, and run o
   - Adds a systemd unit for running the StacyVM binary.
 - `deploy/.env.example` and `deploy/stacyvm.env.example`
   - Add environment templates for Compose and systemd.
+- `Dockerfile`
+  - Adds BuildKit platform args and explicit version injection for release image publishing.
+- `Makefile`
+  - Moves release artifacts into `dist/` and keeps checksums with the artifacts.
+- `.dockerignore`
+  - Excludes build outputs, local dependency directories, and local state files from Docker build contexts.
 
 ### Docs
 
 - `docs/deployment.md`
   - Adds the deployment guide and operator runbook.
+- `docs/releasing.md`
+  - Adds release workflow and GHCR publishing instructions.
 - `README.md`
   - Links the deployment guide from navigation and configuration docs.
 - `CHANGELOG.md`
@@ -91,6 +111,7 @@ git diff --check
 go test ./...
 cd web && npm run build
 scripts/check-swagger.sh
+make release-build-all VERSION=phase-4-test
 ```
 
 GitHub Actions has also passed for the initial Phase 4 CI workflow after the Swagger drift check stabilization.

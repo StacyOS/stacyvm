@@ -564,6 +564,8 @@ STACYVM_LOGGING_LEVEL=debug
 
 Use [docs/deployment.md](docs/deployment.md) for production setup guidance, including Docker Compose and systemd templates, auth and rate-limit defaults, health/readiness probes, Prometheus scraping, backup steps, and provider-specific rollout notes. The reusable templates live under [`deploy/`](deploy/).
 
+Release automation and GHCR publishing are documented in [docs/releasing.md](docs/releasing.md).
+
 ---
 
 ## Templates
