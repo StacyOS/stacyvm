@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/spf13/viper"
 )
@@ -311,6 +312,77 @@ func Load() (*Config, error) {
 	if err := v.Unmarshal(&cfg); err != nil {
 		return nil, fmt.Errorf("unmarshaling config: %w", err)
 	}
+	if err := cfg.Validate(); err != nil {
+		return nil, err
+	}
 
 	return &cfg, nil
+}
+
+func (c *Config) Validate() error {
+	durationFields := map[string]string{
+		"defaults.ttl":                    c.Defaults.TTL,
+		"defaults.max_ttl":                c.Defaults.MaxTTL,
+		"defaults.default_exec_timeout":   c.Defaults.DefaultExecTimeout,
+		"defaults.max_exec_timeout":       c.Defaults.MaxExecTimeout,
+		"defaults.spawn_queue_timeout":    c.Defaults.SpawnQueueTimeout,
+		"rate_limit.bucket_ttl":           c.RateLimit.BucketTTL,
+		"rate_limit.cleanup_interval":     c.RateLimit.CleanupInterval,
+		"providers.custom.timeout":        c.Providers.Custom.Timeout,
+		"providers.proot.default_timeout": c.Providers.PRoot.DefaultTimeout,
+	}
+	for name, value := range durationFields {
+		if err := validateDuration(name, value); err != nil {
+			return err
+		}
+	}
+
+	if c.Defaults.MaxSandboxes < 0 {
+		return fmt.Errorf("defaults.max_sandboxes cannot be negative")
+	}
+	if c.Defaults.MaxSandboxesPerOwner < 0 {
+		return fmt.Errorf("defaults.max_sandboxes_per_owner cannot be negative")
+	}
+	if c.Defaults.MaxSpawnQueue < 0 {
+		return fmt.Errorf("defaults.max_spawn_queue cannot be negative")
+	}
+	if c.RateLimit.RequestsPerMinute < 0 {
+		return fmt.Errorf("rate_limit.requests_per_minute cannot be negative")
+	}
+	if c.RateLimit.Burst < 0 {
+		return fmt.Errorf("rate_limit.burst cannot be negative")
+	}
+	if !isOneOf(c.Defaults.SpawnOverflow, "", "reject", "queue") {
+		return fmt.Errorf("defaults.spawn_overflow must be reject or queue")
+	}
+	if !isOneOf(c.RateLimit.KeyBy, "", "owner", "api_key", "ip") {
+		return fmt.Errorf("rate_limit.key_by must be owner, api_key, or ip")
+	}
+	if !isOneOf(c.Pool.Overflow, "", "reject", "queue") {
+		return fmt.Errorf("pool.overflow must be reject or queue")
+	}
+	return nil
+}
+
+func validateDuration(name, value string) error {
+	if value == "" {
+		return nil
+	}
+	d, err := time.ParseDuration(value)
+	if err != nil {
+		return fmt.Errorf("%s must be a valid duration: %w", name, err)
+	}
+	if d < 0 {
+		return fmt.Errorf("%s cannot be negative", name)
+	}
+	return nil
+}
+
+func isOneOf(value string, allowed ...string) bool {
+	for _, candidate := range allowed {
+		if value == candidate {
+			return true
+		}
+	}
+	return false
 }
