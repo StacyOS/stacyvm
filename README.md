@@ -633,7 +633,7 @@ Every sandbox ships locked down. You opt *in* to less restriction, not out.
 
 With the Firecracker provider you also get: dedicated kernel per sandbox, vsock-only host-guest communication (no TCP between host and guest), and ephemeral rootfs destroyed on teardown.
 
-Full security model and reporting policy: [SECURITY.md](SECURITY.md). Production admin hardening and identity-provider planning: [docs/security-governance.md](docs/security-governance.md). Release-candidate threat model: [docs/threat-model.md](docs/threat-model.md).
+Full security model and reporting policy: [SECURITY.md](SECURITY.md). Production admin hardening and identity-provider planning: [docs/security-governance.md](docs/security-governance.md). Release-candidate threat model: [docs/threat-model.md](docs/threat-model.md). Worker RPC and multi-worker trust boundary: [docs/worker-rpc-contract.md](docs/worker-rpc-contract.md).
 
 ---
 

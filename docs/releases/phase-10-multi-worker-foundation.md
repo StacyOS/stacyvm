@@ -66,6 +66,15 @@ This is not a full distributed runtime yet. It is the first production-aligned c
 - Successful destroy releases the sandbox lease.
 - Wrong-holder lease tests now prevent local destroy from mutating a sandbox owned by another worker.
 
+### Worker RPC Contract And Auth Model
+
+- Added `internal/workerproto` with transport-neutral worker request and response envelopes.
+- Defined contract methods for heartbeat, spawn, destroy, status, lease renewal, and shutdown.
+- Mutating worker assignments require a lease token in the message contract.
+- Added transport-neutral worker auth claims and initial scopes.
+- Documented the worker trust boundary, suggested headers, lease fencing rules, and Postgres cluster-store guarantees in `docs/worker-rpc-contract.md`.
+- Remote worker execution remains gated until a network transport enforces this contract.
+
 ### Diagnostics And Metrics
 
 - Diagnostics now include worker totals, online count, stale count, unhealthy count, and worker items.
@@ -89,6 +98,7 @@ This is not a full distributed runtime yet. It is the first production-aligned c
 ## Code Areas
 
 - `internal/store`: worker model, lease model, migrations, SQLite CRUD, and sandbox `worker_id` persistence.
+- `internal/workerproto`: worker RPC contract and auth claim types.
 - `internal/api/routes`: worker routes, diagnostics worker summary, and Prometheus worker metrics.
 - `internal/api/server.go`: local worker startup registration, heartbeat refresh loop, and route mounting.
 - `docs`: API, README, changelog, production readiness, and release notes.
@@ -102,8 +112,4 @@ This is not a full distributed runtime yet. It is the first production-aligned c
 
 ## Remaining Phase 10 Direction
 
-- Add worker RPC so selected remote workers can execute assigned spawns.
-- Enforce leases across remote worker RPC once remote workers can execute lifecycle operations.
-- Add remote worker authentication and RPC.
-- Add Postgres-backed worker registry semantics for production clusters.
-- Add CI coverage for remote worker RPC and distributed leases once those slices land.
+Phase 10 is complete as a foundation branch. Follow-up phases should implement the network worker daemon/transport, Postgres-backed cluster store, remote lifecycle conformance tests, and OIDC/RBAC for enterprise production.

@@ -52,7 +52,7 @@ This checklist tracks the Phase 7 release-candidate hardening work needed before
 - Scheduler placement policy is worker-aware. Initial admission placement is done; remote dispatch is pending worker RPC.
 - Sandbox ownership is tied to worker IDs. Initial local ownership is done; remote ownership enforcement is pending.
 - Distributed leases prevent duplicate worker ownership. Initial durable lease store, diagnostics, and local lifecycle enforcement are done; remote lifecycle enforcement is pending worker RPC.
-- Remote worker authentication and RPC are implemented. Pending.
+- Remote worker authentication and RPC contract is documented and represented in `internal/workerproto`; network transport remains pending.
 
 ## Current Release-Candidate Gates
 
@@ -65,7 +65,7 @@ This checklist tracks the Phase 7 release-candidate hardening work needed before
 | Runtime conformance | Partial | Harness and host certification script exist; Firecracker/PRoot remain platform-gated. |
 | Security posture | Partial | Admin governance, operation audit, path traversal checks, and explicit exec modes are implemented; OIDC/JWT implementation remains. |
 | Release automation | Passing | Release workflow signs binaries, checksums, and GHCR image digests; public verifier and installer verification exist. |
-| Worker registry | Partial | Durable worker registration, heartbeat, diagnostics, and metrics exist; scheduler ownership, leases, and remote worker RPC remain. |
+| Worker registry | Partial | Durable worker registration, heartbeat, diagnostics, metrics, placement, ownership, leases, and worker RPC contract exist; network worker transport remains. |
 
 ## Required Before Single-Node Production
 
@@ -101,3 +101,4 @@ This checklist tracks the Phase 7 release-candidate hardening work needed before
 - Durable queue/pub-sub for lifecycle events.
 - Distributed leases to prevent double ownership.
 - OIDC/SSO and RBAC implemented, not only designed.
+- Worker RPC transport must enforce [worker-rpc-contract.md](worker-rpc-contract.md).

@@ -23,7 +23,7 @@ This matrix sets expectations for public self-serve StacyVM installs. It separat
 | Firecracker | Host-certified | VM isolation path for Linux/KVM hosts | Runtime certification report for `firecracker` | Requires Linux, KVM, kernel/rootfs/agent assets, and host networking setup. |
 | PRoot | Experimental | Development and restricted hosts only | Runtime certification report for `proot` if used | Not a VM or container isolation boundary; production use is not recommended. |
 | E2B/custom provider | Preview | Integration-specific | Provider health, conformance results, and provider-specific logs | External provider availability, auth, and isolation guarantees are outside StacyVM's direct control. |
-| Multi-worker cluster | Planned | Not public self-serve yet | N/A | Postgres store, worker registration, durable scheduler, leases, and OIDC/RBAC are still required. |
+| Multi-worker cluster | Planned | Not public self-serve yet | N/A | Worker registry, placement, leases, and RPC contract exist; Postgres store, network worker transport, OIDC/RBAC, and cluster conformance are still required. |
 
 ## Public Install Requirements
 
@@ -40,7 +40,7 @@ GitHub bug and production support issue templates ask for this same evidence. Re
 
 ## Known Public Limitations
 
-- SQLite is the supported single-node store. Postgres and distributed leases are planned for multi-worker production.
+- SQLite is the supported single-node store. Durable leases exist for the local foundation; Postgres-backed cluster semantics are still required for multi-worker production.
 - API keys and admin keys are supported today. OIDC, SSO, and RBAC remain planned enterprise work.
 - Docker/runc is convenient and supported with hardened settings, but it is not equivalent to VM isolation.
 - Firecracker production readiness is host-gated because KVM, kernel, rootfs, agent, and networking setup vary by host.
