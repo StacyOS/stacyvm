@@ -18,6 +18,8 @@ This checkpoint starts the enterprise multi-worker production track after Phase 
 - Config linting guidance for staging shared worker tokens versus production per-worker credentials.
 - Cluster conformance CI script and workflow job.
 - Cluster conformance matrix documenting store, worker identity, runtime, and promotion gates.
+- Postgres-native migration definitions matching the current SQLite schema version cadence.
+- Store migration tests that keep Postgres schema coverage aligned with SQLite migrations.
 - Phase 13 release notes under `docs/releases/phase-13-cluster-store-and-worker-identity.md`.
 
 ### Changed

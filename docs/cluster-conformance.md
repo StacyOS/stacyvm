@@ -24,7 +24,7 @@ It currently verifies:
 | Store | Status | Required Checks |
 |---|---|---|
 | SQLite | Supported for single-node and internal staging | `TestSQLiteStoreContract`, migration tests, backup/restore tests |
-| Postgres | Planned for cluster production | Store contract harness, migration upgrade/downgrade rehearsal, lease takeover race tests, startup reconciliation with multiple workers |
+| Postgres | Migration foundation present, driver pending | Postgres migration alignment tests, store contract harness, migration upgrade/downgrade rehearsal, lease takeover race tests, startup reconciliation with multiple workers |
 
 Postgres must not be marked production-ready until it runs the same store contract suite as SQLite and adds database-level lease semantics that are safe across multiple control-plane or worker processes.
 
@@ -66,6 +66,7 @@ Phase 13 has completed:
 
 - Driver-based store selection.
 - SQLite store contract coverage.
+- Postgres-native migration definitions.
 - Per-worker token authentication.
 - Cluster conformance CI scaffolding.
 

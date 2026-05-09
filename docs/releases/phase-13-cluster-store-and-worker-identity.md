@@ -18,6 +18,13 @@ Postgres is intentionally not marked production-ready in this checkpoint. Config
 - Postgres config now fails with `ErrUnsupportedDriver` until a Postgres store driver is linked.
 - Added factory tests for default SQLite opening, missing SQLite path validation, and unsupported Postgres behavior.
 
+### Postgres Migration Foundation
+
+- Added Postgres-native migration definitions for the current store schema.
+- Introduced shared migration metadata so SQLite and Postgres migration versions can be compared directly.
+- Added tests that verify Postgres migrations track SQLite migration versions.
+- Added tests that verify Postgres migrations cover all store tables and avoid SQLite-only dialect tokens.
+
 ### Store Contract Harness
 
 - Added a reusable store contract test harness in `internal/store`.
@@ -65,7 +72,7 @@ Postgres is intentionally not marked production-ready in this checkpoint. Config
 
 ## Next Phase 13 Direction
 
-- Add a real Postgres store implementation with migration management.
+- Add a real Postgres store implementation that applies the new Postgres migrations.
 - Run the existing store contract tests against Postgres once the Postgres driver is implemented.
 - Continue worker identity hardening toward signed tokens or mTLS transport enforcement.
 - Add a real multi-worker conformance environment that runs control plane, worker, and Postgres together.
