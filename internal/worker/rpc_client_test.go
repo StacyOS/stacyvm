@@ -85,6 +85,43 @@ func TestRPCClientStatus(t *testing.T) {
 	}
 }
 
+func TestRPCClientExec(t *testing.T) {
+	registry := providers.NewRegistry()
+	mock := providers.NewMockProvider()
+	registry.Register(mock)
+	if err := registry.SetDefault("mock"); err != nil {
+		t.Fatalf("set default: %v", err)
+	}
+	runtimeID, err := mock.Spawn(context.Background(), providers.SpawnOptions{Image: "alpine:latest"})
+	if err != nil {
+		t.Fatalf("spawn mock: %v", err)
+	}
+	server := httptest.NewServer((&RPCServer{
+		WorkerID: "worker-a",
+		Token:    "worker-secret",
+		Registry: registry,
+	}).Handler())
+	defer server.Close()
+
+	client := RPCClient{
+		BaseURL:  server.URL,
+		WorkerID: "worker-a",
+		Token:    "worker-secret",
+	}
+	result, err := client.Exec(context.Background(), "req-1", workerproto.ExecParams{
+		SandboxID: "sb-control-plane",
+		RuntimeID: runtimeID,
+		Provider:  "mock",
+		Command:   "echo client exec",
+	})
+	if err != nil {
+		t.Fatalf("exec: %v", err)
+	}
+	if result.SandboxID != "sb-control-plane" || result.ExitCode != 0 || result.Stdout != "client exec\n" {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+}
+
 func TestRPCClientDestroy(t *testing.T) {
 	registry := providers.NewRegistry()
 	mock := providers.NewMockProvider()

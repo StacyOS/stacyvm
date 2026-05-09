@@ -1,5 +1,25 @@
 # Changelog
 
+## Phase 12 Remote Sandbox I/O Routing - 2026-05-09
+
+This checkpoint starts extending remote worker routing beyond sandbox lifecycle operations.
+
+### Added
+
+- `worker.exec` in the worker RPC contract.
+- Worker protocol exec request and result payloads.
+- `worker:exec` scope constant for future worker token scoping.
+- Worker-side non-streaming exec handling through the provider registry.
+- Typed worker RPC client support for exec calls.
+- Control-plane routing for non-streaming exec on remote-owned sandboxes.
+- Phase 12 release notes under `docs/releases/phase-12-remote-sandbox-io-routing.md`.
+
+### Changed
+
+- Remote-owned sandbox exec now uses persisted worker ownership and provider runtime ID instead of the local provider.
+- Remote exec preserves existing event, audit, metric, timeout, and exec-log behavior.
+- Pool-mode default workdir is no longer applied to remote sandboxes just because their provider runtime ID is stored in `VMID`.
+
 ## Phase 11 Remote Worker Runtime - 2026-05-09
 
 This checkpoint starts the remote worker runtime track on top of the Phase 10 worker registry, lease, and RPC contract foundation.

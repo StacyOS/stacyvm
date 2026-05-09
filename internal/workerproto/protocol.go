@@ -18,6 +18,7 @@ const (
 	MethodSpawn      = "worker.spawn"
 	MethodDestroy    = "worker.destroy"
 	MethodStatus     = "worker.status"
+	MethodExec       = "worker.exec"
 	MethodRenewLease = "worker.renew_lease"
 	MethodShutdown   = "worker.shutdown"
 )
@@ -27,6 +28,7 @@ const (
 	ScopeSpawn     = "worker:spawn"
 	ScopeDestroy   = "worker:destroy"
 	ScopeStatus    = "worker:status"
+	ScopeExec      = "worker:exec"
 	ScopeLease     = "worker:lease"
 )
 
@@ -115,6 +117,27 @@ type StatusResult struct {
 	Error     string `json:"error,omitempty"`
 }
 
+// ExecParams asks a worker to run a non-streaming command in an owned runtime.
+type ExecParams struct {
+	SandboxID string            `json:"sandbox_id"`
+	Provider  string            `json:"provider"`
+	RuntimeID string            `json:"runtime_id,omitempty"`
+	Command   string            `json:"command"`
+	Args      []string          `json:"args,omitempty"`
+	Mode      string            `json:"mode,omitempty"`
+	Env       map[string]string `json:"env,omitempty"`
+	WorkDir   string            `json:"workdir,omitempty"`
+	Timeout   string            `json:"timeout,omitempty"`
+}
+
+// ExecResult reports the completed command result from a worker runtime.
+type ExecResult struct {
+	SandboxID string `json:"sandbox_id"`
+	ExitCode  int    `json:"exit_code"`
+	Stdout    string `json:"stdout"`
+	Stderr    string `json:"stderr"`
+}
+
 // RenewLeaseParams asks a worker to confirm it still owns work and needs a
 // renewed lease window.
 type RenewLeaseParams struct {
@@ -166,6 +189,8 @@ func ValidateRequest(req Request) error {
 		return validateParams[DestroyParams](req.Params)
 	case MethodStatus:
 		return validateParams[StatusParams](req.Params)
+	case MethodExec:
+		return validateParams[ExecParams](req.Params)
 	case MethodRenewLease:
 		if req.Lease == nil {
 			return fmt.Errorf("%w: lease is required for renew_lease", ErrInvalidMessage)

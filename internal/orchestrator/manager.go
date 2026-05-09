@@ -697,18 +697,23 @@ func (m *Manager) Exec(ctx context.Context, sandboxID string, req ExecRequest) (
 
 	// In pool mode, default workdir to the sandbox's workspace.
 	workDir := req.WorkDir
-	if workDir == "" && sb.VMID != "" {
+	if workDir == "" && sb.VMID != "" && !m.isRemoteOwnedSandbox(sb) {
 		workDir = "/workspace/" + sandboxID
 	}
 
 	execStart := time.Now()
-	result, err := prov.Exec(execCtx, m.resolveVMID(sb), providers.ExecOptions{
-		Command: req.Command,
-		Args:    req.Args,
-		Mode:    req.Mode,
-		Env:     req.Env,
-		WorkDir: workDir,
-	})
+	var result *providers.ExecResult
+	if m.isRemoteOwnedSandbox(sb) {
+		result, err = m.execRemote(execCtx, sb, req, workDir)
+	} else {
+		result, err = prov.Exec(execCtx, m.resolveVMID(sb), providers.ExecOptions{
+			Command: req.Command,
+			Args:    req.Args,
+			Mode:    req.Mode,
+			Env:     req.Env,
+			WorkDir: workDir,
+		})
+	}
 	if err != nil {
 		if execCtx.Err() == context.DeadlineExceeded {
 			metricsErr = providers.ExecTimeoutError(sandboxID)
@@ -748,6 +753,36 @@ func (m *Manager) Exec(ctx context.Context, sandboxID string, req ExecRequest) (
 	m.auditOperation(ctx, "exec", sb, sandboxID, req.Command, "success", fmt.Sprintf("exit=%d duration=%s mode=%s", result.ExitCode, duration.String(), req.Mode))
 
 	return execResult, nil
+}
+
+func (m *Manager) execRemote(ctx context.Context, sb *Sandbox, req ExecRequest, workDir string) (*providers.ExecResult, error) {
+	client, err := m.remoteWorkerRPCClient(ctx, sb.WorkerID)
+	if err != nil {
+		return nil, err
+	}
+	runtimeID := strings.TrimSpace(sb.VMID)
+	if runtimeID == "" {
+		runtimeID = sb.ID
+	}
+	result, err := client.Exec(ctx, "exec-"+sb.ID, workerproto.ExecParams{
+		SandboxID: sb.ID,
+		Provider:  sb.Provider,
+		RuntimeID: runtimeID,
+		Command:   req.Command,
+		Args:      req.Args,
+		Mode:      req.Mode,
+		Env:       req.Env,
+		WorkDir:   workDir,
+		Timeout:   req.Timeout,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("remote worker exec: %w", err)
+	}
+	return &providers.ExecResult{
+		ExitCode: result.ExitCode,
+		Stdout:   result.Stdout,
+		Stderr:   result.Stderr,
+	}, nil
 }
 
 func (m *Manager) ExecStream(ctx context.Context, sandboxID string, req ExecRequest) (<-chan providers.StreamChunk, error) {
@@ -1244,6 +1279,10 @@ func (m *Manager) resolveVMID(sb *Sandbox) string {
 		return sb.VMID
 	}
 	return sb.ID
+}
+
+func (m *Manager) isRemoteOwnedSandbox(sb *Sandbox) bool {
+	return sb != nil && strings.TrimSpace(sb.WorkerID) != "" && sb.WorkerID != m.workerID
 }
 
 // VMPoolStatus returns the current VM pool status. Returns nil if pool is disabled.

@@ -1,6 +1,6 @@
 # Remote Worker Staging
 
-This guide runs StacyVM as two local processes: one control plane and one remote worker. Use the mock provider first so you can verify worker registration, remote spawn, remote status refresh, and remote destroy before introducing Docker, Firecracker, or a real network boundary.
+This guide runs StacyVM as two local processes: one control plane and one remote worker. Use the mock provider first so you can verify worker registration, remote spawn, remote status refresh, remote exec, and remote destroy before introducing Docker, Firecracker, or a real network boundary.
 
 Phase 11 remote worker mode is for internal staging. It is not the enterprise production target yet because it still uses the configured shared worker token and SQLite store semantics.
 
@@ -116,6 +116,16 @@ curl -sS -H "X-API-Key: dev-api-key-dev-api-key-dev-api-key" \
   http://127.0.0.1:7423/api/v1/sandboxes/<sandbox-id>
 ```
 
+Run a command. This routes through `worker.exec` and records a normal control-plane exec log:
+
+```bash
+curl -sS -X POST \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: dev-api-key-dev-api-key-dev-api-key" \
+  -d '{"command":"echo remote worker ok"}' \
+  http://127.0.0.1:7423/api/v1/sandboxes/<sandbox-id>/exec
+```
+
 Destroy the sandbox. This routes through `worker.destroy`, updates state, and releases the lease:
 
 ```bash
@@ -136,7 +146,8 @@ The script starts both processes, waits for worker registration, spawns a mock s
 
 ## Current Limits
 
-- Remote exec, file APIs, logs, and previews are not routed to remote workers yet.
+- Remote non-streaming exec is routed to remote workers.
+- Remote streaming exec, file APIs, logs, and previews are not routed to remote workers yet.
 - Worker auth is a shared token suitable for staging; production enterprise mode should move to signed worker identity or mTLS.
 - SQLite remains a staging/single-node store. Enterprise multi-worker mode still needs Postgres-grade lease semantics.
 - Worker shutdown enters drain mode and rejects new spawns; full assignment handoff to another worker is still pending.

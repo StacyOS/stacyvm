@@ -55,6 +55,23 @@ func (c RPCClient) Status(ctx context.Context, reqID string, params workerproto.
 	return result, nil
 }
 
+func (c RPCClient) Exec(ctx context.Context, reqID string, params workerproto.ExecParams) (workerproto.ExecResult, error) {
+	var result workerproto.ExecResult
+	resp, err := c.call(ctx, workerproto.Request{
+		ID:       reqID,
+		Method:   workerproto.MethodExec,
+		WorkerID: c.WorkerID,
+		Params:   mustRawMessage(params),
+	})
+	if err != nil {
+		return result, err
+	}
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		return result, err
+	}
+	return result, nil
+}
+
 func (c RPCClient) Destroy(ctx context.Context, reqID string, lease workerproto.LeaseToken, params workerproto.DestroyParams) error {
 	_, err := c.call(ctx, workerproto.Request{
 		ID:       reqID,
