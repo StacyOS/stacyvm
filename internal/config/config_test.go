@@ -115,6 +115,7 @@ func TestLoadAcceptsWorkerRuntimeConfig(t *testing.T) {
 worker:
   id: "worker-a"
   control_plane_url: "http://control-plane:7423"
+  listen_addr: "127.0.0.1:7430"
   heartbeat_interval: "5s"
   shutdown_timeout: "15s"
 auth:
@@ -132,6 +133,9 @@ auth:
 	}
 	if cfg.Worker.ControlPlaneURL != "http://control-plane:7423" {
 		t.Fatalf("control plane URL = %q", cfg.Worker.ControlPlaneURL)
+	}
+	if cfg.Worker.ListenAddr != "127.0.0.1:7430" {
+		t.Fatalf("listen addr = %q", cfg.Worker.ListenAddr)
 	}
 	if cfg.Auth.WorkerToken != "worker-secret" {
 		t.Fatalf("worker token = %q, want worker-secret", cfg.Auth.WorkerToken)

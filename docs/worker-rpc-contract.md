@@ -1,6 +1,6 @@
 # Worker RPC Contract
 
-Phase 10 defined the control-plane to worker contract. Phase 11 starts wiring that contract into a real worker runtime: `stacyvm worker` can authenticate to the control plane and submit heartbeat state through a worker-only HTTP endpoint.
+Phase 10 defined the control-plane to worker contract. Phase 11 starts wiring that contract into a real worker runtime: `stacyvm worker` can authenticate to the control plane, submit heartbeat state through a worker-only HTTP endpoint, and expose an optional inbound RPC server with `--listen`.
 
 Execution is still local for sandbox lifecycle mutations. Remote spawn, destroy, status, and lease renewal remain gated until the full worker RPC transport is implemented.
 
@@ -82,6 +82,20 @@ POST /api/v1/worker/{workerID}/heartbeat
 ```
 
 The endpoint requires `X-Worker-ID` plus `X-Worker-Token` and rejects requests where the authenticated worker ID differs from the `{workerID}` path.
+
+Current Phase 11 worker RPC endpoint:
+
+```text
+POST /rpc
+```
+
+Run it with:
+
+```bash
+stacyvm worker --listen 127.0.0.1:7430
+```
+
+The endpoint accepts `workerproto.Request` envelopes, requires the same worker headers, and currently implements `worker.status`. Mutating methods return explicit not-implemented responses until remote spawn/destroy/lease renewal are wired end to end.
 
 ## Cluster Store Semantics
 

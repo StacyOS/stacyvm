@@ -8,17 +8,21 @@ This checkpoint starts the remote worker runtime track on top of the Phase 10 wo
 
 - `stacyvm worker` command for running a remote worker process.
 - Worker command flags for ID, control-plane URL, worker token, heartbeat interval, and one-shot heartbeat smoke tests.
-- `worker.id`, `worker.control_plane_url`, `worker.heartbeat_interval`, and `worker.shutdown_timeout` config.
+- Worker RPC listen flag for inbound control-plane-to-worker calls.
+- `worker.id`, `worker.control_plane_url`, `worker.listen_addr`, `worker.heartbeat_interval`, and `worker.shutdown_timeout` config.
 - `auth.worker_token` for worker-to-control-plane authentication.
 - Dedicated worker auth role with `worker:heartbeat` scope.
 - Worker-only heartbeat endpoint at `POST /api/v1/worker/{workerID}/heartbeat`.
 - `internal/worker` heartbeat client and runtime loop.
+- Worker-side `/rpc` handler for `workerproto.Request` envelopes.
+- Worker RPC status handling through `worker.status`.
 - Phase 11 release notes under `docs/releases/phase-11-remote-worker-runtime.md`.
 
 ### Changed
 
 - Worker heartbeats can now be submitted without reusing API/admin keys.
 - Worker heartbeat requests are rejected when the authenticated worker ID does not match the requested worker path.
+- Mutating worker RPC methods return explicit not-implemented responses until remote lifecycle execution lands.
 - Config validation now covers worker heartbeat and shutdown durations.
 
 ## Phase 10 Multi-Worker Foundation - 2026-05-09

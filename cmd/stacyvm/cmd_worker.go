@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/StacyOs/stacyvm/internal/config"
+	"github.com/StacyOs/stacyvm/internal/providers"
 	"github.com/StacyOs/stacyvm/internal/worker"
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
@@ -19,6 +20,7 @@ func newWorkerCmd() *cobra.Command {
 	var controlPlaneURL string
 	var token string
 	var heartbeatInterval string
+	var listenAddr string
 	var once bool
 	cmd := &cobra.Command{
 		Use:   "worker",
@@ -44,10 +46,14 @@ func newWorkerCmd() *cobra.Command {
 			if heartbeatInterval == "" {
 				heartbeatInterval = cfg.Worker.HeartbeatInterval
 			}
+			if listenAddr == "" {
+				listenAddr = cfg.Worker.ListenAddr
+			}
 			interval, err := time.ParseDuration(heartbeatInterval)
 			if err != nil {
 				return fmt.Errorf("worker heartbeat interval: %w", err)
 			}
+			registry := buildWorkerRegistry(cfg)
 			logger := newCommandLogger(cfg)
 			rt := worker.Runtime{
 				Client: worker.Client{
@@ -56,12 +62,14 @@ func newWorkerCmd() *cobra.Command {
 					Token:    token,
 				},
 				HeartbeatInterval: interval,
+				ListenAddr:        listenAddr,
 				Logger:            logger,
 				Providers:         enabledProviderNames(cfg),
 				Capacity: map[string]interface{}{
 					"max_sandboxes":           cfg.Defaults.MaxSandboxes,
 					"max_sandboxes_per_owner": cfg.Defaults.MaxSandboxesPerOwner,
 				},
+				Registry: registry,
 			}
 			if once {
 				return rt.RunOnce(cmd.Context())
@@ -76,6 +84,7 @@ func newWorkerCmd() *cobra.Command {
 	cmd.Flags().StringVar(&controlPlaneURL, "control-plane", "", "control plane URL; defaults to worker.control_plane_url")
 	cmd.Flags().StringVar(&token, "worker-token", os.Getenv("STACYVM_AUTH_WORKER_TOKEN"), "worker bearer token; defaults to auth.worker_token")
 	cmd.Flags().StringVar(&heartbeatInterval, "heartbeat-interval", "", "worker heartbeat interval")
+	cmd.Flags().StringVar(&listenAddr, "listen", "", "worker RPC listen address; defaults to worker.listen_addr")
 	cmd.Flags().BoolVar(&once, "once", false, "send one heartbeat and exit")
 	return cmd
 }
@@ -114,4 +123,17 @@ func enabledProviderNames(cfg *config.Config) []string {
 		providers = append(providers, "proot")
 	}
 	return providers
+}
+
+func buildWorkerRegistry(cfg *config.Config) *providers.Registry {
+	registry := providers.NewRegistry()
+	if cfg.Providers.Mock.Enabled {
+		registry.Register(providers.NewMockProvider())
+	}
+	if len(registry.List()) > 0 {
+		if err := registry.SetDefault(cfg.Providers.Default); err != nil {
+			_ = registry.SetDefault(registry.List()[0])
+		}
+	}
+	return registry
 }

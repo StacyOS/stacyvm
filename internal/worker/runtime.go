@@ -2,23 +2,50 @@ package worker
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"time"
 
+	"github.com/StacyOs/stacyvm/internal/providers"
 	"github.com/StacyOs/stacyvm/internal/workerproto"
 	"github.com/rs/zerolog"
 )
 
 type Runtime struct {
 	Client            Client
+	ListenAddr        string
 	HeartbeatInterval time.Duration
 	Logger            zerolog.Logger
 	Providers         []string
 	Capacity          map[string]interface{}
+	Registry          *providers.Registry
 }
 
 func (r Runtime) Run(ctx context.Context) error {
+	var server *http.Server
+	serverErr := make(chan error, 1)
+	if r.ListenAddr != "" {
+		server = NewHTTPServer(r.ListenAddr, RPCServer{
+			WorkerID: r.Client.WorkerID,
+			Token:    r.Client.Token,
+			Registry: r.Registry,
+		}.Handler())
+		go func() {
+			r.Logger.Info().Str("addr", r.ListenAddr).Msg("starting worker RPC server")
+			err := server.ListenAndServe()
+			if errors.Is(err, http.ErrServerClosed) {
+				err = nil
+			}
+			serverErr <- err
+		}()
+		defer func() {
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			_ = server.Shutdown(shutdownCtx)
+		}()
+	}
 	if err := r.heartbeat(ctx); err != nil {
 		return err
 	}
@@ -32,6 +59,8 @@ func (r Runtime) Run(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
+		case err := <-serverErr:
+			return err
 		case <-ticker.C:
 			if err := r.heartbeat(ctx); err != nil {
 				r.Logger.Warn().Err(err).Msg("worker heartbeat failed")

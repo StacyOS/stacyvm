@@ -1,0 +1,133 @@
+package worker
+
+import (
+	"context"
+	"crypto/subtle"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/StacyOs/stacyvm/internal/httputil"
+	"github.com/StacyOs/stacyvm/internal/providers"
+	"github.com/StacyOs/stacyvm/internal/workerproto"
+)
+
+type RPCServer struct {
+	WorkerID string
+	Token    string
+	Registry *providers.Registry
+}
+
+func (s RPCServer) Handler() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/rpc", s.handleRPC)
+	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		httputil.WriteJSON(w, http.StatusOK, map[string]string{"status": "ok", "worker_id": s.WorkerID})
+	})
+	return mux
+}
+
+func (s RPCServer) handleRPC(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		httputil.WriteError(w, http.StatusMethodNotAllowed, httputil.CodeBadRequest, "method not allowed")
+		return
+	}
+	if !s.authenticate(r) {
+		httputil.WriteError(w, http.StatusUnauthorized, httputil.CodeUnauth, "invalid or missing worker RPC credentials")
+		return
+	}
+	var req workerproto.Request
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, httputil.CodeBadRequest, "invalid worker RPC request")
+		return
+	}
+	if req.WorkerID != s.WorkerID {
+		httputil.WriteError(w, http.StatusForbidden, httputil.CodeUnauth, "worker RPC request targets a different worker")
+		return
+	}
+	if err := workerproto.ValidateRequest(req); err != nil {
+		httputil.WriteJSON(w, http.StatusBadRequest, workerproto.Response{
+			ID:       req.ID,
+			WorkerID: s.WorkerID,
+			Error:    err.Error(),
+		})
+		return
+	}
+
+	switch req.Method {
+	case workerproto.MethodStatus:
+		s.handleStatus(w, r.Context(), req)
+	case workerproto.MethodShutdown:
+		httputil.WriteJSON(w, http.StatusOK, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID})
+	default:
+		httputil.WriteJSON(w, http.StatusNotImplemented, workerproto.Response{
+			ID:       req.ID,
+			WorkerID: s.WorkerID,
+			Error:    "worker RPC method is not implemented by this worker runtime",
+		})
+	}
+}
+
+func (s RPCServer) handleStatus(w http.ResponseWriter, ctx context.Context, req workerproto.Request) {
+	var params workerproto.StatusParams
+	if err := json.Unmarshal(req.Params, &params); err != nil {
+		httputil.WriteJSON(w, http.StatusBadRequest, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Error: err.Error()})
+		return
+	}
+	if s.Registry == nil {
+		httputil.WriteJSON(w, http.StatusServiceUnavailable, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Error: "provider registry unavailable"})
+		return
+	}
+	provider, err := s.Registry.Get(params.Provider)
+	if err != nil {
+		httputil.WriteJSON(w, http.StatusNotFound, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Error: err.Error()})
+		return
+	}
+	runtimeID := strings.TrimSpace(params.RuntimeID)
+	if runtimeID == "" {
+		runtimeID = params.SandboxID
+	}
+	status, err := provider.Status(ctx, runtimeID)
+	if err != nil {
+		code := http.StatusInternalServerError
+		if errors.Is(err, providers.ErrSandboxNotFound) {
+			code = http.StatusNotFound
+		}
+		httputil.WriteJSON(w, code, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Error: err.Error()})
+		return
+	}
+	result, _ := json.Marshal(workerproto.StatusResult{
+		SandboxID: params.SandboxID,
+		State:     status.State,
+		Provider:  provider.Name(),
+		WorkerID:  s.WorkerID,
+	})
+	httputil.WriteJSON(w, http.StatusOK, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Result: result})
+}
+
+func (s RPCServer) authenticate(r *http.Request) bool {
+	if strings.TrimSpace(s.Token) == "" || strings.TrimSpace(s.WorkerID) == "" {
+		return false
+	}
+	if r.Header.Get("X-Worker-ID") != s.WorkerID {
+		return false
+	}
+	token := r.Header.Get("X-Worker-Token")
+	if token == "" {
+		token = strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+	}
+	return subtle.ConstantTimeCompare([]byte(token), []byte(s.Token)) == 1
+}
+
+func NewHTTPServer(addr string, handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: 10 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		WriteTimeout:      30 * time.Second,
+		IdleTimeout:       60 * time.Second,
+	}
+}

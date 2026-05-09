@@ -449,6 +449,7 @@ OpenAPI spec: [docs/swagger.yaml](docs/swagger.yaml).
 ```bash
 stacyvm serve                                  # start the API server
 stacyvm worker --once                          # send one remote-worker heartbeat
+stacyvm worker --listen 127.0.0.1:7430         # heartbeat + worker RPC server
 stacyvm spawn --image python:3.12 --ttl 1h     # spawn
 stacyvm exec sb-a1b2c3d4 -- python3 app.py     # run argv mode in a sandbox
 stacyvm exec sb-a1b2c3d4 --shell -- "echo $HOME && pwd"
@@ -481,6 +482,7 @@ server:
 worker:
   id: ""                         # defaults to hostname
   control_plane_url: "http://localhost:7423"
+  listen_addr: ""                 # set to enable inbound worker RPC
   heartbeat_interval: "30s"
   shutdown_timeout: "10s"
 
