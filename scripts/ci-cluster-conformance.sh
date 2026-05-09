@@ -116,6 +116,35 @@ sed \
   "$cluster_config" >"$signed_worker_config"
 go run ./cmd/stacyvm config lint --production --file "$signed_worker_config"
 
+echo "==> Linting signed-token worker identity migration warnings"
+mixed_worker_config="$tmpdir/stacyvm.signed-worker-mixed.yaml"
+sed \
+  -e '/worker_tokens:/,/admin_fallback_enabled:/c\
+  worker_token: "shared-worker-token-with-at-least-32-bytes"\
+  worker_signing_key: "worker-signing-key-with-at-least-32-bytes"\
+  admin_fallback_enabled: false' \
+  "$cluster_config" >"$mixed_worker_config"
+mixed_lint_output="$(go run ./cmd/stacyvm config lint --production --file "$mixed_worker_config")"
+if [[ "$mixed_lint_output" != *"shared worker token still configured with signed worker tokens"* ]]; then
+  echo "$mixed_lint_output"
+  echo "expected signed-token migration warning for shared worker token" >&2
+  exit 1
+fi
+
+invalid_rotation_config="$tmpdir/stacyvm.invalid-rotation.yaml"
+sed \
+  -e '/worker_tokens:/,/admin_fallback_enabled:/c\
+  worker_signing_key: "worker-signing-key-with-at-least-32-bytes"\
+  worker_signing_keys: ["worker-signing-key-with-at-least-32-bytes"]\
+  admin_fallback_enabled: false' \
+  "$cluster_config" >"$invalid_rotation_config"
+rotation_lint_output="$(go run ./cmd/stacyvm config lint --production --file "$invalid_rotation_config")"
+if [[ "$rotation_lint_output" != *"rotation keys include the active worker signing key"* ]]; then
+  echo "$rotation_lint_output"
+  echo "expected signed-token migration warning for invalid rotation keys" >&2
+  exit 1
+fi
+
 echo "==> Linting production-aligned Postgres cluster config"
 postgres_config="$tmpdir/stacyvm.postgres.yaml"
 sed \

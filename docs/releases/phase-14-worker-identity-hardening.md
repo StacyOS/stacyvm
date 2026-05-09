@@ -78,6 +78,7 @@ Phase 14 begins the worker identity hardening lane for production multi-worker S
 - Updated the API docs for worker heartbeat and lease-renewal headers.
 - Updated the cluster conformance matrix to mark signed worker tokens as the public/enterprise worker identity path.
 - Updated production readiness notes to reflect signed worker tokens and the remaining issuer/rotation and mTLS work.
+- Added cluster conformance coverage for signed-token migration lint warnings.
 
 ## Code Areas Changed
 
