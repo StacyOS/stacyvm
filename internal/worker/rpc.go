@@ -578,7 +578,7 @@ func (s *RPCServer) authenticate(r *http.Request) bool {
 		now = time.Now
 	}
 	for _, signingKey := range append([]string{s.SigningKey}, s.SigningKeys...) {
-		claims, ok := middleware.VerifyWorkerToken(signingKey, token, now().UTC())
+		claims, ok := middleware.VerifyWorkerTokenForAudience(signingKey, token, middleware.WorkerTokenAudienceRPC, now().UTC())
 		if ok && claims.WorkerID == workerID {
 			return true
 		}

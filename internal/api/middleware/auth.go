@@ -46,6 +46,11 @@ const workerSignedTokenPrefix = "stacyvm-worker-v1"
 
 var errInvalidWorkerTokenClaims = errors.New("invalid worker token claims")
 
+const (
+	WorkerTokenAudienceControlPlane = "worker:control-plane"
+	WorkerTokenAudienceRPC          = "worker:rpc"
+)
+
 type WorkerAuthConfig struct {
 	SharedToken  string
 	WorkerTokens map[string]string
@@ -56,6 +61,7 @@ type WorkerAuthConfig struct {
 
 type WorkerTokenClaims struct {
 	WorkerID  string   `json:"worker_id"`
+	Audience  string   `json:"aud,omitempty"`
 	Scopes    []string `json:"scopes,omitempty"`
 	ExpiresAt int64    `json:"exp"`
 	IssuedAt  int64    `json:"iat,omitempty"`
@@ -299,6 +305,10 @@ func SignWorkerToken(signingKey string, claims WorkerTokenClaims) (string, error
 }
 
 func VerifyWorkerToken(signingKey, token string, now time.Time) (WorkerTokenClaims, bool) {
+	return VerifyWorkerTokenForAudience(signingKey, token, "", now)
+}
+
+func VerifyWorkerTokenForAudience(signingKey, token, audience string, now time.Time) (WorkerTokenClaims, bool) {
 	signingKey = strings.TrimSpace(signingKey)
 	token = strings.TrimSpace(token)
 	if signingKey == "" || token == "" {
@@ -322,7 +332,11 @@ func VerifyWorkerToken(signingKey, token string, now time.Time) (WorkerTokenClai
 		return WorkerTokenClaims{}, false
 	}
 	claims.WorkerID = strings.TrimSpace(claims.WorkerID)
+	claims.Audience = strings.TrimSpace(claims.Audience)
 	if claims.WorkerID == "" || claims.ExpiresAt <= 0 || !now.Before(time.Unix(claims.ExpiresAt, 0)) {
+		return WorkerTokenClaims{}, false
+	}
+	if audience = strings.TrimSpace(audience); audience != "" && claims.Audience != "" && claims.Audience != audience {
 		return WorkerTokenClaims{}, false
 	}
 	return claims, true
@@ -332,7 +346,7 @@ func validateWorkerCredentials(workerID, token, sharedWorkerToken string, worker
 	if token == "" || workerID == "" {
 		return nil, false
 	}
-	if claims, ok := verifyWorkerTokenWithAnyKey(signingKeys, token, now().UTC()); ok {
+	if claims, ok := verifyWorkerTokenWithAnyKey(signingKeys, token, WorkerTokenAudienceControlPlane, now().UTC()); ok {
 		if claims.WorkerID != workerID {
 			return nil, false
 		}
@@ -348,9 +362,9 @@ func validateWorkerCredentials(workerID, token, sharedWorkerToken string, worker
 	return nil, false
 }
 
-func verifyWorkerTokenWithAnyKey(signingKeys []string, token string, now time.Time) (WorkerTokenClaims, bool) {
+func verifyWorkerTokenWithAnyKey(signingKeys []string, token, audience string, now time.Time) (WorkerTokenClaims, bool) {
 	for _, signingKey := range signingKeys {
-		if claims, ok := VerifyWorkerToken(signingKey, token, now); ok {
+		if claims, ok := VerifyWorkerTokenForAudience(signingKey, token, audience, now); ok {
 			return claims, true
 		}
 	}

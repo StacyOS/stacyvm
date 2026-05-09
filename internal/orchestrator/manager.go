@@ -2100,6 +2100,7 @@ func (m *Manager) remoteWorkerRPCClient(ctx context.Context, workerID string) (w
 			now := time.Now().UTC()
 			return middleware.SignWorkerToken(m.workerSigningKey, middleware.WorkerTokenClaims{
 				WorkerID:  workerID,
+				Audience:  middleware.WorkerTokenAudienceRPC,
 				IssuedAt:  now.Unix(),
 				ExpiresAt: now.Add(5 * time.Minute).Unix(),
 			})

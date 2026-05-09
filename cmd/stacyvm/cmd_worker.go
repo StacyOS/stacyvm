@@ -112,6 +112,7 @@ func newWorkerTokenCmd() *cobra.Command {
 	var signingKey string
 	var ttl string
 	var scopes []string
+	var audience string
 	cmd := &cobra.Command{
 		Use:   "token <worker-id>",
 		Short: "Issue a signed worker token",
@@ -129,6 +130,7 @@ func newWorkerTokenCmd() *cobra.Command {
 				SigningKey: signingKey,
 				TTL:        ttl,
 				Scopes:     scopes,
+				Audience:   audience,
 				Now:        time.Now,
 			})
 			if err != nil {
@@ -140,6 +142,7 @@ func newWorkerTokenCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&signingKey, "signing-key", os.Getenv("STACYVM_AUTH_WORKER_SIGNING_KEY"), "worker signing key; defaults to auth.worker_signing_key")
 	cmd.Flags().StringVar(&ttl, "ttl", "5m", "token lifetime")
+	cmd.Flags().StringVar(&audience, "audience", middleware.WorkerTokenAudienceControlPlane, "token audience: worker:control-plane or worker:rpc")
 	cmd.Flags().StringArrayVar(&scopes, "scope", nil, "worker scope to include; repeatable, defaults to all worker scopes")
 	return cmd
 }
@@ -149,6 +152,7 @@ type workerTokenIssueOptions struct {
 	SigningKey string
 	TTL        string
 	Scopes     []string
+	Audience   string
 	Now        func() time.Time
 }
 
@@ -168,6 +172,13 @@ func issueWorkerToken(opts workerTokenIssueOptions) (string, error) {
 	if ttl <= 0 {
 		return "", fmt.Errorf("worker token ttl must be positive")
 	}
+	audience := strings.TrimSpace(opts.Audience)
+	if audience == "" {
+		audience = middleware.WorkerTokenAudienceControlPlane
+	}
+	if audience != middleware.WorkerTokenAudienceControlPlane && audience != middleware.WorkerTokenAudienceRPC {
+		return "", fmt.Errorf("worker token audience must be %q or %q", middleware.WorkerTokenAudienceControlPlane, middleware.WorkerTokenAudienceRPC)
+	}
 	now := opts.Now
 	if now == nil {
 		now = time.Now
@@ -175,6 +186,7 @@ func issueWorkerToken(opts workerTokenIssueOptions) (string, error) {
 	issuedAt := now().UTC()
 	return middleware.SignWorkerToken(signingKey, middleware.WorkerTokenClaims{
 		WorkerID:  workerID,
+		Audience:  audience,
 		Scopes:    opts.Scopes,
 		IssuedAt:  issuedAt.Unix(),
 		ExpiresAt: issuedAt.Add(ttl).Unix(),
@@ -191,6 +203,7 @@ func signedWorkerTokenFunc(workerID, signingKey string) func() (string, error) {
 		now := time.Now().UTC()
 		return middleware.SignWorkerToken(signingKey, middleware.WorkerTokenClaims{
 			WorkerID:  workerID,
+			Audience:  middleware.WorkerTokenAudienceControlPlane,
 			IssuedAt:  now.Unix(),
 			ExpiresAt: now.Add(5 * time.Minute).Unix(),
 		})

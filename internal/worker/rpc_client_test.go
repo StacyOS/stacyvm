@@ -112,6 +112,7 @@ func TestRPCClientStatusWithSignedToken(t *testing.T) {
 		TokenFunc: func() (string, error) {
 			return middleware.SignWorkerToken("worker-signing-key-with-at-least-32-bytes", middleware.WorkerTokenClaims{
 				WorkerID:  "worker-a",
+				Audience:  middleware.WorkerTokenAudienceRPC,
 				IssuedAt:  now.Unix(),
 				ExpiresAt: now.Add(time.Minute).Unix(),
 			})
@@ -127,6 +128,43 @@ func TestRPCClientStatusWithSignedToken(t *testing.T) {
 	}
 	if result.WorkerID != "worker-a" {
 		t.Fatalf("worker id = %q, want worker-a", result.WorkerID)
+	}
+}
+
+func TestRPCClientRejectsControlPlaneAudienceToken(t *testing.T) {
+	now := time.Date(2026, 5, 9, 10, 0, 0, 0, time.UTC)
+	registry := providers.NewRegistry()
+	registry.Register(providers.NewMockProvider())
+	if err := registry.SetDefault("mock"); err != nil {
+		t.Fatalf("set default: %v", err)
+	}
+	server := httptest.NewServer((&RPCServer{
+		WorkerID:   "worker-a",
+		SigningKey: "worker-signing-key-with-at-least-32-bytes",
+		Now:        func() time.Time { return now },
+		Registry:   registry,
+	}).Handler())
+	defer server.Close()
+
+	client := RPCClient{
+		BaseURL:  server.URL,
+		WorkerID: "worker-a",
+		TokenFunc: func() (string, error) {
+			return middleware.SignWorkerToken("worker-signing-key-with-at-least-32-bytes", middleware.WorkerTokenClaims{
+				WorkerID:  "worker-a",
+				Audience:  middleware.WorkerTokenAudienceControlPlane,
+				IssuedAt:  now.Unix(),
+				ExpiresAt: now.Add(time.Minute).Unix(),
+			})
+		},
+	}
+	_, err := client.Status(context.Background(), "req-1", workerproto.StatusParams{
+		SandboxID: "sb-control-plane",
+		RuntimeID: "runtime-id",
+		Provider:  "mock",
+	})
+	if err == nil {
+		t.Fatal("expected control-plane audience token to be rejected by worker RPC")
 	}
 }
 

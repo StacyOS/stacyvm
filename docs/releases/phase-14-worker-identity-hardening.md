@@ -10,11 +10,13 @@ Phase 14 begins the worker identity hardening lane for production multi-worker S
 - Added the `stacyvm-worker-v1.<payload>.<signature>` token format.
 - Added signed token claims for:
   - `worker_id`
+  - audience through `aud`
   - optional worker `scopes`
   - issued-at time through `iat`
   - expiry time through `exp`
 - Enforced signed-token expiry before accepting worker requests.
 - Enforced that signed `worker_id` must match the `X-Worker-ID` request header.
+- Enforced token audience separation between worker-to-control-plane routes and control-plane-to-worker RPC.
 - Filtered signed-token scopes so tokens cannot grant user, API, or admin scopes.
 - Added `stacyvm worker token <worker-id>` to issue signed worker tokens from the CLI.
 

@@ -27,6 +27,9 @@ func TestIssueWorkerTokenSignsExpectedClaims(t *testing.T) {
 	if claims.WorkerID != "worker-a" {
 		t.Fatalf("worker id = %q, want worker-a", claims.WorkerID)
 	}
+	if claims.Audience != middleware.WorkerTokenAudienceControlPlane {
+		t.Fatalf("audience = %q, want %q", claims.Audience, middleware.WorkerTokenAudienceControlPlane)
+	}
 	if claims.IssuedAt != now.Unix() {
 		t.Fatalf("issued at = %d, want %d", claims.IssuedAt, now.Unix())
 	}
@@ -47,6 +50,7 @@ func TestIssueWorkerTokenRejectsInvalidInputs(t *testing.T) {
 		{name: "missing signing key", opts: workerTokenIssueOptions{WorkerID: "worker-a", TTL: "5m"}},
 		{name: "bad ttl", opts: workerTokenIssueOptions{WorkerID: "worker-a", SigningKey: "worker-signing-key-with-at-least-32-bytes", TTL: "soon"}},
 		{name: "zero ttl", opts: workerTokenIssueOptions{WorkerID: "worker-a", SigningKey: "worker-signing-key-with-at-least-32-bytes", TTL: "0s"}},
+		{name: "bad audience", opts: workerTokenIssueOptions{WorkerID: "worker-a", SigningKey: "worker-signing-key-with-at-least-32-bytes", TTL: "5m", Audience: "admin"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
