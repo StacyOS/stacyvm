@@ -7,10 +7,11 @@ This checkpoint starts hardening remote worker identity for public and enterpris
 ### Added
 
 - HMAC-SHA256 signed worker token format with `stacyvm-worker-v1` prefix.
-- Signed worker token claims for `worker_id`, `aud`, optional worker scopes, `iat`, and `exp`.
+- Signed worker token claims for `worker_id`, `aud`, optional worker scopes, `iat`, `nbf`, and `exp`.
 - Worker auth verification for signed tokens through `auth.worker_signing_key`.
 - Additional signed-token verification keys through `auth.worker_signing_keys` for no-downtime key rotation.
 - Signed-token worker ID matching and expiry enforcement.
+- Signed-token not-before, future issued-at, clock-skew, and max-lifetime enforcement.
 - Signed-token audience separation for worker-to-control-plane and control-plane-to-worker RPC calls.
 - Worker scope filtering so signed tokens cannot grant non-worker scopes.
 - Worker runtime token derivation for heartbeat and lease-renewal calls when `auth.worker_signing_key` is configured and no static worker token is provided.

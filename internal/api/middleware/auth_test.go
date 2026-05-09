@@ -276,6 +276,89 @@ func TestWorkerAuthRejectsExpiredSignedWorkerToken(t *testing.T) {
 	}
 }
 
+func TestWorkerAuthRejectsNotYetValidSignedWorkerToken(t *testing.T) {
+	now := time.Date(2026, 5, 9, 10, 0, 0, 0, time.UTC)
+	token, err := SignWorkerToken("0123456789abcdef0123456789abcdef", WorkerTokenClaims{
+		WorkerID:  "worker-a",
+		Audience:  WorkerTokenAudienceControlPlane,
+		IssuedAt:  now.Unix(),
+		NotBefore: now.Add(2 * time.Minute).Unix(),
+		ExpiresAt: now.Add(5 * time.Minute).Unix(),
+	})
+	if err != nil {
+		t.Fatalf("sign worker token: %v", err)
+	}
+	handler := WorkerAuthWithConfig(WorkerAuthConfig{
+		SigningKey: "0123456789abcdef0123456789abcdef",
+		Now:        func() time.Time { return now },
+	})(okHandler())
+
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	req.Header.Set("X-Worker-ID", "worker-a")
+	req.Header.Set("X-Worker-Token", token)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d for not-yet-valid signed worker token: %s", w.Code, http.StatusUnauthorized, w.Body.String())
+	}
+}
+
+func TestWorkerAuthAllowsSmallSignedTokenClockSkew(t *testing.T) {
+	now := time.Date(2026, 5, 9, 10, 0, 0, 0, time.UTC)
+	token, err := SignWorkerToken("0123456789abcdef0123456789abcdef", WorkerTokenClaims{
+		WorkerID:  "worker-a",
+		Audience:  WorkerTokenAudienceControlPlane,
+		IssuedAt:  now.Add(10 * time.Second).Unix(),
+		NotBefore: now.Add(10 * time.Second).Unix(),
+		ExpiresAt: now.Add(5 * time.Minute).Unix(),
+	})
+	if err != nil {
+		t.Fatalf("sign worker token: %v", err)
+	}
+	handler := WorkerAuthWithConfig(WorkerAuthConfig{
+		SigningKey: "0123456789abcdef0123456789abcdef",
+		Now:        func() time.Time { return now },
+	})(okHandler())
+
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	req.Header.Set("X-Worker-ID", "worker-a")
+	req.Header.Set("X-Worker-Token", token)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d for signed worker token inside clock skew: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+}
+
+func TestWorkerAuthRejectsSignedWorkerTokenExceedingMaxTTL(t *testing.T) {
+	now := time.Date(2026, 5, 9, 10, 0, 0, 0, time.UTC)
+	token, err := SignWorkerToken("0123456789abcdef0123456789abcdef", WorkerTokenClaims{
+		WorkerID:  "worker-a",
+		Audience:  WorkerTokenAudienceControlPlane,
+		IssuedAt:  now.Unix(),
+		ExpiresAt: now.Add(MaxWorkerTokenTTL + time.Second).Unix(),
+	})
+	if err != nil {
+		t.Fatalf("sign worker token: %v", err)
+	}
+	handler := WorkerAuthWithConfig(WorkerAuthConfig{
+		SigningKey: "0123456789abcdef0123456789abcdef",
+		Now:        func() time.Time { return now },
+	})(okHandler())
+
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	req.Header.Set("X-Worker-ID", "worker-a")
+	req.Header.Set("X-Worker-Token", token)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d for signed worker token exceeding max TTL: %s", w.Code, http.StatusUnauthorized, w.Body.String())
+	}
+}
+
 func TestWorkerAuthRejectsRPCAudienceSignedWorkerToken(t *testing.T) {
 	now := time.Date(2026, 5, 9, 10, 0, 0, 0, time.UTC)
 	token, err := SignWorkerToken("0123456789abcdef0123456789abcdef", WorkerTokenClaims{

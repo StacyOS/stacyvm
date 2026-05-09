@@ -50,6 +50,7 @@ func TestIssueWorkerTokenRejectsInvalidInputs(t *testing.T) {
 		{name: "missing signing key", opts: workerTokenIssueOptions{WorkerID: "worker-a", TTL: "5m"}},
 		{name: "bad ttl", opts: workerTokenIssueOptions{WorkerID: "worker-a", SigningKey: "worker-signing-key-with-at-least-32-bytes", TTL: "soon"}},
 		{name: "zero ttl", opts: workerTokenIssueOptions{WorkerID: "worker-a", SigningKey: "worker-signing-key-with-at-least-32-bytes", TTL: "0s"}},
+		{name: "too long ttl", opts: workerTokenIssueOptions{WorkerID: "worker-a", SigningKey: "worker-signing-key-with-at-least-32-bytes", TTL: (middleware.MaxWorkerTokenTTL + time.Second).String()}},
 		{name: "bad audience", opts: workerTokenIssueOptions{WorkerID: "worker-a", SigningKey: "worker-signing-key-with-at-least-32-bytes", TTL: "5m", Audience: "admin"}},
 	}
 	for _, tt := range tests {

@@ -13,8 +13,11 @@ Phase 14 begins the worker identity hardening lane for production multi-worker S
   - audience through `aud`
   - optional worker `scopes`
   - issued-at time through `iat`
+  - optional not-before time through `nbf`
   - expiry time through `exp`
 - Enforced signed-token expiry before accepting worker requests.
+- Enforced signed-token not-before and issued-at validation with clock-skew tolerance.
+- Enforced a 15 minute max signed worker token lifetime when `iat` is present.
 - Enforced that signed `worker_id` must match the `X-Worker-ID` request header.
 - Enforced token audience separation between worker-to-control-plane routes and control-plane-to-worker RPC.
 - Filtered signed-token scopes so tokens cannot grant user, API, or admin scopes.

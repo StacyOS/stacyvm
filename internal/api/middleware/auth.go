@@ -49,6 +49,8 @@ var errInvalidWorkerTokenClaims = errors.New("invalid worker token claims")
 const (
 	WorkerTokenAudienceControlPlane = "worker:control-plane"
 	WorkerTokenAudienceRPC          = "worker:rpc"
+	MaxWorkerTokenTTL               = 15 * time.Minute
+	WorkerTokenClockSkew            = 30 * time.Second
 )
 
 type WorkerAuthConfig struct {
@@ -65,6 +67,7 @@ type WorkerTokenClaims struct {
 	Scopes    []string `json:"scopes,omitempty"`
 	ExpiresAt int64    `json:"exp"`
 	IssuedAt  int64    `json:"iat,omitempty"`
+	NotBefore int64    `json:"nbf,omitempty"`
 }
 
 func Auth(apiKey string) func(http.Handler) http.Handler {
@@ -334,6 +337,15 @@ func VerifyWorkerTokenForAudience(signingKey, token, audience string, now time.T
 	claims.WorkerID = strings.TrimSpace(claims.WorkerID)
 	claims.Audience = strings.TrimSpace(claims.Audience)
 	if claims.WorkerID == "" || claims.ExpiresAt <= 0 || !now.Before(time.Unix(claims.ExpiresAt, 0)) {
+		return WorkerTokenClaims{}, false
+	}
+	if claims.NotBefore > 0 && now.Add(WorkerTokenClockSkew).Before(time.Unix(claims.NotBefore, 0)) {
+		return WorkerTokenClaims{}, false
+	}
+	if claims.IssuedAt > 0 && now.Add(WorkerTokenClockSkew).Before(time.Unix(claims.IssuedAt, 0)) {
+		return WorkerTokenClaims{}, false
+	}
+	if claims.IssuedAt > 0 && time.Unix(claims.ExpiresAt, 0).Sub(time.Unix(claims.IssuedAt, 0)) > MaxWorkerTokenTTL {
 		return WorkerTokenClaims{}, false
 	}
 	if audience = strings.TrimSpace(audience); audience != "" && claims.Audience != "" && claims.Audience != audience {

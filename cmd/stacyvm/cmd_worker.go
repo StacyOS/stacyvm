@@ -172,6 +172,9 @@ func issueWorkerToken(opts workerTokenIssueOptions) (string, error) {
 	if ttl <= 0 {
 		return "", fmt.Errorf("worker token ttl must be positive")
 	}
+	if ttl > middleware.MaxWorkerTokenTTL {
+		return "", fmt.Errorf("worker token ttl must be <= %s", middleware.MaxWorkerTokenTTL)
+	}
 	audience := strings.TrimSpace(opts.Audience)
 	if audience == "" {
 		audience = middleware.WorkerTokenAudienceControlPlane
