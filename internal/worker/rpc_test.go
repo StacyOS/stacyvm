@@ -210,6 +210,87 @@ func TestRPCServerSpawnRejectsLeaseMismatch(t *testing.T) {
 	}
 }
 
+func TestRPCServerDestroy(t *testing.T) {
+	registry := providers.NewRegistry()
+	mock := providers.NewMockProvider()
+	registry.Register(mock)
+	if err := registry.SetDefault("mock"); err != nil {
+		t.Fatalf("set default: %v", err)
+	}
+	runtimeID, err := mock.Spawn(t.Context(), providers.SpawnOptions{Image: "alpine:latest"})
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	handler := RPCServer{WorkerID: "worker-a", Token: "worker-secret", Registry: registry}.Handler()
+	params, _ := json.Marshal(workerproto.DestroyParams{
+		SandboxID: "sb-control-plane",
+		Provider:  "mock",
+		RuntimeID: runtimeID,
+	})
+	reqBody, _ := json.Marshal(workerproto.Request{
+		ID:       "req-1",
+		Method:   workerproto.MethodDestroy,
+		WorkerID: "worker-a",
+		Lease: &workerproto.LeaseToken{
+			ResourceID: "sb-control-plane",
+			HolderID:   "worker-a",
+			Generation: 1,
+			ExpiresAt:  time.Now().UTC().Add(time.Minute),
+		},
+		Params: params,
+	})
+	req := httptest.NewRequest(http.MethodPost, "/rpc", bytes.NewReader(reqBody))
+	req.Header.Set("X-Worker-ID", "worker-a")
+	req.Header.Set("X-Worker-Token", "worker-secret")
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	status, err := mock.Status(t.Context(), runtimeID)
+	if err != nil {
+		t.Fatalf("status after destroy: %v", err)
+	}
+	if status.State != "destroyed" {
+		t.Fatalf("state after destroy = %q, want destroyed", status.State)
+	}
+}
+
+func TestRPCServerDestroyRejectsLeaseMismatch(t *testing.T) {
+	registry := providers.NewRegistry()
+	registry.Register(providers.NewMockProvider())
+	handler := RPCServer{WorkerID: "worker-a", Token: "worker-secret", Registry: registry}.Handler()
+	params, _ := json.Marshal(workerproto.DestroyParams{
+		SandboxID: "sb-control-plane",
+		Provider:  "mock",
+		RuntimeID: "runtime-1",
+	})
+	reqBody, _ := json.Marshal(workerproto.Request{
+		ID:       "req-1",
+		Method:   workerproto.MethodDestroy,
+		WorkerID: "worker-a",
+		Lease: &workerproto.LeaseToken{
+			ResourceID: "sb-other",
+			HolderID:   "worker-a",
+			Generation: 1,
+			ExpiresAt:  time.Now().UTC().Add(time.Minute),
+		},
+		Params: params,
+	})
+	req := httptest.NewRequest(http.MethodPost, "/rpc", bytes.NewReader(reqBody))
+	req.Header.Set("X-Worker-ID", "worker-a")
+	req.Header.Set("X-Worker-Token", "worker-secret")
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d", w.Code, http.StatusForbidden)
+	}
+}
+
 func TestRPCServerRenewLeaseRejectsExpiredToken(t *testing.T) {
 	renewer := &fakeLeaseRenewer{}
 	handler := RPCServer{WorkerID: "worker-a", Token: "worker-secret", Registry: providers.NewRegistry(), LeaseRenewer: renewer}.Handler()

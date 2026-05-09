@@ -95,7 +95,7 @@ Run it with:
 stacyvm worker --listen 127.0.0.1:7430
 ```
 
-The endpoint accepts `workerproto.Request` envelopes, requires the same worker headers, and currently implements `worker.status`, `worker.renew_lease`, and `worker.spawn`. Destroy returns explicit not-implemented responses until remote lifecycle execution is wired end to end.
+The endpoint accepts `workerproto.Request` envelopes, requires the same worker headers, and currently implements `worker.status`, `worker.renew_lease`, `worker.spawn`, and `worker.destroy`.
 
 For `worker.spawn`, the request carries a control-plane `sandbox_id` and the response returns both that ID and the provider `runtime_id`. The control plane should persist that mapping before routing later status, exec, file, or destroy operations to the owning worker.
 
@@ -113,6 +113,8 @@ Remote workers advertise their control-plane callback endpoint through heartbeat
 When the scheduler selects a non-local worker with `rpc_url` and `auth.worker_token` is configured, the control plane acquires the sandbox lease for that worker, calls `worker.spawn`, persists the selected `worker_id`, and stores the returned provider runtime ID for later routing.
 
 Sandbox reads use the persisted `worker_id` and provider `runtime_id` to call `worker.status` on the owning worker. If the worker reports a changed state, the control plane updates its stored sandbox state. If the worker is temporarily unreachable, the control plane keeps serving the cached record and logs the refresh failure at debug level.
+
+Remote destroy uses the same persisted ownership tuple. The control plane fetches the durable sandbox lease, presents it to `worker.destroy`, updates sandbox state to `destroyed`, and releases the lease after the worker confirms teardown.
 
 Current Phase 11 control-plane lease renewal endpoint:
 

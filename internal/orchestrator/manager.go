@@ -2139,6 +2139,16 @@ func (m *Manager) Destroy(ctx context.Context, id string) error {
 		}
 	}
 	if sb != nil {
+		if strings.TrimSpace(sb.WorkerID) != "" && sb.WorkerID != m.workerID {
+			metricsErr = m.destroyRemote(ctx, id, sb)
+			if metricsErr != nil {
+				m.publishOperationFailure(EventOperationFailed, id, OperationDestroy, metricsProvider, metricsErr)
+				m.auditOperation(ctx, "sandbox.destroy", sb, id, "", "failure", metricsErr.Error())
+				return metricsErr
+			}
+			m.auditOperation(ctx, "sandbox.destroy", sb, id, "", "success", "remote_worker="+sb.WorkerID)
+			return nil
+		}
 		if _, err := m.acquireSandboxLease(ctx, id, sb.ExpiresAt); err != nil {
 			metricsErr = err
 			m.publishOperationFailure(EventOperationFailed, id, OperationDestroy, metricsProvider, err)
@@ -2197,6 +2207,48 @@ func (m *Manager) Destroy(ctx context.Context, id string) error {
 
 	m.auditOperation(ctx, "sandbox.destroy", sb, id, "", "success", "")
 	m.logger.Info().Str("sandbox", id).Msg("sandbox destroyed")
+	return nil
+}
+
+func (m *Manager) destroyRemote(ctx context.Context, id string, sb *Sandbox) error {
+	client, err := m.remoteWorkerRPCClient(ctx, sb.WorkerID)
+	if err != nil {
+		return err
+	}
+	lease, err := m.store.GetLease(ctx, id)
+	if err != nil {
+		return fmt.Errorf("getting remote sandbox lease: %w", err)
+	}
+	if lease.HolderID != sb.WorkerID {
+		return fmt.Errorf("remote sandbox lease holder %q does not match worker %q", lease.HolderID, sb.WorkerID)
+	}
+	runtimeID := strings.TrimSpace(sb.VMID)
+	if runtimeID == "" {
+		runtimeID = id
+	}
+	if err := client.Destroy(ctx, "destroy-"+id, leaseTokenFromStore(lease), workerproto.DestroyParams{
+		SandboxID: id,
+		Provider:  sb.Provider,
+		RuntimeID: runtimeID,
+	}); err != nil {
+		return fmt.Errorf("remote worker destroy: %w", err)
+	}
+	if err := m.store.UpdateSandboxState(ctx, id, string(StateDestroyed)); err != nil {
+		return err
+	}
+	_ = m.store.ReleaseLease(ctx, id, sb.WorkerID)
+	m.mu.Lock()
+	if current, ok := m.sandboxes[id]; ok {
+		current.State = StateDestroyed
+	}
+	delete(m.sandboxes, id)
+	m.mu.Unlock()
+	m.events.Publish(Event{
+		Type:      EventSandboxDestroyed,
+		SandboxID: id,
+	})
+	m.notifySpawnCapacity()
+	m.logger.Info().Str("sandbox", id).Str("worker", sb.WorkerID).Str("runtime", runtimeID).Msg("remote sandbox destroyed")
 	return nil
 }
 

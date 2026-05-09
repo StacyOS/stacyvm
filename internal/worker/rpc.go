@@ -68,6 +68,8 @@ func (s RPCServer) handleRPC(w http.ResponseWriter, r *http.Request) {
 		s.handleRenewLease(w, r.Context(), req)
 	case workerproto.MethodSpawn:
 		s.handleSpawn(w, r.Context(), req)
+	case workerproto.MethodDestroy:
+		s.handleDestroy(w, r.Context(), req)
 	case workerproto.MethodShutdown:
 		httputil.WriteJSON(w, http.StatusOK, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID})
 	default:
@@ -158,6 +160,40 @@ func (s RPCServer) handleSpawn(w http.ResponseWriter, ctx context.Context, req w
 		Metadata:  params.Metadata,
 	})
 	httputil.WriteJSON(w, http.StatusOK, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Result: result})
+}
+
+func (s RPCServer) handleDestroy(w http.ResponseWriter, ctx context.Context, req workerproto.Request) {
+	if err := validateLeaseToken(req.Lease, s.WorkerID); err != nil {
+		httputil.WriteJSON(w, http.StatusForbidden, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Error: err.Error()})
+		return
+	}
+	var params workerproto.DestroyParams
+	if err := json.Unmarshal(req.Params, &params); err != nil {
+		httputil.WriteJSON(w, http.StatusBadRequest, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Error: err.Error()})
+		return
+	}
+	if params.SandboxID != req.Lease.ResourceID {
+		httputil.WriteJSON(w, http.StatusForbidden, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Error: "lease resource does not match destroy request"})
+		return
+	}
+	if s.Registry == nil {
+		httputil.WriteJSON(w, http.StatusServiceUnavailable, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Error: "provider registry unavailable"})
+		return
+	}
+	provider, err := s.Registry.Get(params.Provider)
+	if err != nil {
+		httputil.WriteJSON(w, http.StatusNotFound, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Error: err.Error()})
+		return
+	}
+	runtimeID := strings.TrimSpace(params.RuntimeID)
+	if runtimeID == "" {
+		runtimeID = params.SandboxID
+	}
+	if err := provider.Destroy(ctx, runtimeID); err != nil && !errors.Is(err, providers.ErrSandboxNotFound) {
+		httputil.WriteJSON(w, http.StatusInternalServerError, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Error: err.Error()})
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID})
 }
 
 func (s RPCServer) handleRenewLease(w http.ResponseWriter, ctx context.Context, req workerproto.Request) {

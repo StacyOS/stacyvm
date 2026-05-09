@@ -247,6 +247,71 @@ func TestManager_GetRefreshesRemoteStatus(t *testing.T) {
 	}
 }
 
+func TestManager_DestroyRoutesToRemoteWorker(t *testing.T) {
+	remoteRegistry := providers.NewRegistry()
+	remoteMock := providers.NewMockProvider()
+	remoteRegistry.Register(remoteMock)
+	if err := remoteRegistry.SetDefault("mock"); err != nil {
+		t.Fatalf("set remote default: %v", err)
+	}
+	server := httptest.NewServer(worker.RPCServer{
+		WorkerID: "worker-remote",
+		Token:    "worker-secret",
+		Registry: remoteRegistry,
+	}.Handler())
+	defer server.Close()
+
+	m := setupManagerWithConfig(t, ManagerConfig{
+		DefaultTTL:    5 * time.Minute,
+		DefaultImage:  "alpine:latest",
+		DefaultMemory: 512,
+		DefaultVCPUs:  1,
+		WorkerToken:   "worker-secret",
+	})
+	providersJSON, _ := json.Marshal([]string{"mock"})
+	capacityJSON, _ := json.Marshal(map[string]interface{}{
+		"max_sandboxes": 10,
+		"rpc_url":       server.URL,
+	})
+	now := time.Now().UTC()
+	if err := m.store.SaveWorker(context.Background(), &store.WorkerRecord{
+		ID:            "worker-remote",
+		Hostname:      "remote-host",
+		Status:        "online",
+		Providers:     string(providersJSON),
+		Capabilities:  `["remote_worker","spawn","status","destroy"]`,
+		Capacity:      string(capacityJSON),
+		LastHeartbeat: now,
+	}); err != nil {
+		t.Fatalf("save worker: %v", err)
+	}
+	sb, err := m.Spawn(context.Background(), SpawnRequest{Image: "alpine:latest"})
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+
+	if err := m.Destroy(context.Background(), sb.ID); err != nil {
+		t.Fatalf("destroy: %v", err)
+	}
+	status, err := remoteMock.Status(context.Background(), sb.VMID)
+	if err != nil {
+		t.Fatalf("remote runtime status: %v", err)
+	}
+	if status.State != "destroyed" {
+		t.Fatalf("remote runtime state = %s, want destroyed", status.State)
+	}
+	rec, err := m.store.GetSandbox(context.Background(), sb.ID)
+	if err != nil {
+		t.Fatalf("get record: %v", err)
+	}
+	if rec.State != string(StateDestroyed) {
+		t.Fatalf("stored state = %s, want destroyed", rec.State)
+	}
+	if _, err := m.store.GetLease(context.Background(), sb.ID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("lease err = %v, want not found", err)
+	}
+}
+
 func TestManager_List(t *testing.T) {
 	m := setupManager(t)
 	ctx := context.Background()
