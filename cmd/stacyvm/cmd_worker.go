@@ -163,7 +163,25 @@ func newWorkerTokenCmd() *cobra.Command {
 	cmd.Flags().StringVar(&notBefore, "not-before", "0s", "delay before token becomes valid")
 	cmd.Flags().StringVar(&outputFormat, "format", "token", "output format: token or json")
 	cmd.Flags().StringArrayVar(&scopes, "scope", nil, "worker scope to include; repeatable, defaults to all worker scopes")
+	cmd.AddCommand(newWorkerTokenInspectCmd())
 	return cmd
+}
+
+func newWorkerTokenInspectCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "inspect <token>",
+		Short: "Inspect signed worker token claims without verifying the signature",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			result, err := inspectWorkerToken(args[0])
+			if err != nil {
+				return err
+			}
+			encoder := json.NewEncoder(cmd.OutOrStdout())
+			encoder.SetIndent("", "  ")
+			return encoder.Encode(result)
+		},
+	}
 }
 
 type workerTokenIssueOptions struct {
@@ -186,6 +204,17 @@ type workerTokenIssueResult struct {
 	IssuedAt  string   `json:"issued_at"`
 	NotBefore string   `json:"not_before,omitempty"`
 	ExpiresAt string   `json:"expires_at"`
+}
+
+type workerTokenInspectResult struct {
+	SignatureVerified bool     `json:"signature_verified"`
+	WorkerID          string   `json:"worker_id,omitempty"`
+	TokenID           string   `json:"token_id,omitempty"`
+	Audience          string   `json:"audience,omitempty"`
+	Scopes            []string `json:"scopes,omitempty"`
+	IssuedAt          string   `json:"issued_at,omitempty"`
+	NotBefore         string   `json:"not_before,omitempty"`
+	ExpiresAt         string   `json:"expires_at,omitempty"`
 }
 
 func issueWorkerToken(opts workerTokenIssueOptions) (workerTokenIssueResult, error) {
@@ -263,6 +292,30 @@ func issueWorkerToken(opts workerTokenIssueOptions) (workerTokenIssueResult, err
 		return workerTokenIssueResult{}, err
 	}
 	return result, nil
+}
+
+func inspectWorkerToken(token string) (workerTokenInspectResult, error) {
+	claims, ok := middleware.DecodeWorkerTokenClaims(token)
+	if !ok {
+		return workerTokenInspectResult{}, fmt.Errorf("invalid signed worker token format")
+	}
+	return workerTokenInspectResult{
+		SignatureVerified: false,
+		WorkerID:          claims.WorkerID,
+		TokenID:           claims.TokenID,
+		Audience:          claims.Audience,
+		Scopes:            claims.Scopes,
+		IssuedAt:          unixTimeString(claims.IssuedAt),
+		NotBefore:         unixTimeString(claims.NotBefore),
+		ExpiresAt:         unixTimeString(claims.ExpiresAt),
+	}, nil
+}
+
+func unixTimeString(sec int64) string {
+	if sec <= 0 {
+		return ""
+	}
+	return time.Unix(sec, 0).UTC().Format(time.RFC3339)
 }
 
 func signedWorkerTokenFunc(workerID, signingKey string) func() (string, error) {

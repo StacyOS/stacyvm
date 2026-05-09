@@ -23,6 +23,7 @@ Phase 14 begins the worker identity hardening lane for production multi-worker S
 - Enforced token audience separation between worker-to-control-plane routes and control-plane-to-worker RPC.
 - Added `auth.worker_revoked_token_ids` emergency revocation for signed worker token IDs.
 - Added worker token issuer `--format json`, `--token-id`, and `--not-before` options for incident-response runbooks.
+- Added `stacyvm worker token inspect <token>` to recover unverified signed-token metadata and `jti` values during incident response.
 - Filtered signed-token scopes so tokens cannot grant user, API, or admin scopes.
 - Added `stacyvm worker token <worker-id>` to issue signed worker tokens from the CLI.
 
@@ -33,6 +34,7 @@ Phase 14 begins the worker identity hardening lane for production multi-worker S
 - Kept `auth.worker_token` for shared-token staging compatibility.
 - Kept `auth.worker_tokens` for per-worker static token migration paths.
 - Updated `stacyvm config lint --production` so a strong `auth.worker_signing_key` satisfies production-aligned worker credential checks.
+- Added config lint warnings when revoked signed-token IDs are configured without signed worker-token verification.
 
 ### Worker runtime
 

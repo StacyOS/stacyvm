@@ -104,6 +104,15 @@ The same signed token format is accepted by worker RPC servers for control-plane
 
 Issued tokens include a `jti` token ID. During an incident, add a compromised token ID to `auth.worker_revoked_token_ids`; both worker-to-control-plane routes and control-plane-to-worker RPC reject matching signed tokens.
 
+Token incident-response runbook:
+
+```bash
+stacyvm worker token worker-a --ttl 5m --format json
+stacyvm worker token inspect '<signed-worker-token>'
+```
+
+`stacyvm worker token inspect` decodes token metadata without verifying the signature. Use it to recover `worker_id`, `jti`, `aud`, and expiry metadata from an already-captured token before adding the `jti` value to `auth.worker_revoked_token_ids`; do not treat inspected claims as authenticated identity.
+
 No-downtime signing-key rotation uses a two-key window:
 
 1. Set the new key as `auth.worker_signing_key`.

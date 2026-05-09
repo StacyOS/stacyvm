@@ -87,11 +87,15 @@ func lintAuthConfig(cfg *config.Config, production bool) []doctorCheck {
 		}
 	} else if len(cfg.Auth.WorkerSigningKeys) > 0 {
 		checks = append(checks, doctorCheck{Name: "auth.worker_signing_key", Status: severityForProduction(production), Message: "additional verification keys configured without a primary signing key", Remediation: "Set auth.worker_signing_key to the active signing key and keep old keys in auth.worker_signing_keys only during rotation."})
+		checks = append(checks, lintWorkerRevokedTokenIDsWithoutSigningKey(cfg.Auth.WorkerRevokedTokenIDs)...)
 	} else if len(cfg.Auth.WorkerTokens) > 0 {
+		checks = append(checks, lintWorkerRevokedTokenIDsWithoutSigningKey(cfg.Auth.WorkerRevokedTokenIDs)...)
 		checks = append(checks, doctorCheck{Name: "auth.worker_tokens", Status: doctorPass, Message: fmt.Sprintf("%d per-worker token(s) configured", len(cfg.Auth.WorkerTokens))})
 	} else if cfg.Auth.WorkerToken != "" {
+		checks = append(checks, lintWorkerRevokedTokenIDsWithoutSigningKey(cfg.Auth.WorkerRevokedTokenIDs)...)
 		checks = append(checks, doctorCheck{Name: "auth.worker_tokens", Status: doctorWarn, Message: "using shared worker token", Remediation: "Configure auth.worker_tokens for production workers so each worker has an individually rotatable credential."})
 	} else {
+		checks = append(checks, lintWorkerRevokedTokenIDsWithoutSigningKey(cfg.Auth.WorkerRevokedTokenIDs)...)
 		checks = append(checks, doctorCheck{Name: "auth.worker_tokens", Status: doctorWarn, Message: "no worker credentials configured", Remediation: "Set auth.worker_token for staging, auth.worker_tokens for migration, or auth.worker_signing_key for production signed worker identity."})
 	}
 	if cfg.Auth.APIKey != "" && cfg.Auth.APIKey == cfg.Auth.AdminAPIKey {
@@ -111,6 +115,18 @@ func lintAuthConfig(cfg *config.Config, production bool) []doctorCheck {
 		checks = append(checks, doctorCheck{Name: "auth.admin_audit_retention", Status: doctorPass, Message: retention.String()})
 	}
 	return checks
+}
+
+func lintWorkerRevokedTokenIDsWithoutSigningKey(tokenIDs []string) []doctorCheck {
+	if len(tokenIDs) == 0 {
+		return nil
+	}
+	return []doctorCheck{{
+		Name:        "auth.worker_revoked_token_ids",
+		Status:      doctorWarn,
+		Message:     fmt.Sprintf("%d revoked worker token id(s) configured without signed worker tokens", len(tokenIDs)),
+		Remediation: "Keep auth.worker_revoked_token_ids only alongside auth.worker_signing_key during an incident-response window.",
+	}}
 }
 
 func lintSecret(name, value string, production bool, remediation string) doctorCheck {

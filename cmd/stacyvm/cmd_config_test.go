@@ -99,6 +99,21 @@ func TestLintAuthConfigAcceptsWorkerSigningKey(t *testing.T) {
 	}
 }
 
+func TestLintAuthConfigWarnsRevokedWorkerTokenIDsWithoutSigningKey(t *testing.T) {
+	cfg := validProductionConfig()
+	cfg.Auth.WorkerRevokedTokenIDs = []string{"revoked-token-id"}
+
+	checks := lintAuthConfig(cfg, true)
+	statuses := map[string]doctorStatus{}
+	for _, check := range checks {
+		statuses[check.Name] = check.Status
+	}
+
+	if statuses["auth.worker_revoked_token_ids"] != doctorWarn {
+		t.Fatalf("auth.worker_revoked_token_ids status = %s, want %s", statuses["auth.worker_revoked_token_ids"], doctorWarn)
+	}
+}
+
 func TestLintWorkerRPCConfigChecksMTLSInputs(t *testing.T) {
 	cfg := validProductionConfig()
 	cfg.Worker.RPCTLS.Enabled = true

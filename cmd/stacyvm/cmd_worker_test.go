@@ -74,3 +74,42 @@ func TestIssueWorkerTokenRejectsInvalidInputs(t *testing.T) {
 		})
 	}
 }
+
+func TestInspectWorkerTokenShowsUnverifiedClaims(t *testing.T) {
+	now := time.Date(2026, 5, 9, 10, 0, 0, 0, time.UTC)
+	issued, err := issueWorkerToken(workerTokenIssueOptions{
+		WorkerID:   "worker-a",
+		SigningKey: "worker-signing-key-with-at-least-32-bytes",
+		TTL:        "5m",
+		Scopes:     []string{middleware.ScopeWorkerHeartbeat},
+		Audience:   middleware.WorkerTokenAudienceRPC,
+		TokenID:    "token-id-1",
+		Now:        func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatalf("issue worker token: %v", err)
+	}
+
+	inspected, err := inspectWorkerToken(issued.Token)
+	if err != nil {
+		t.Fatalf("inspect worker token: %v", err)
+	}
+	if inspected.SignatureVerified {
+		t.Fatal("inspect result should not report signature verification")
+	}
+	if inspected.WorkerID != "worker-a" || inspected.TokenID != "token-id-1" || inspected.Audience != middleware.WorkerTokenAudienceRPC {
+		t.Fatalf("unexpected inspect result: %+v", inspected)
+	}
+	if inspected.IssuedAt != now.Format(time.RFC3339) || inspected.ExpiresAt != now.Add(5*time.Minute).Format(time.RFC3339) {
+		t.Fatalf("unexpected inspect timestamps: %+v", inspected)
+	}
+	if len(inspected.Scopes) != 1 || inspected.Scopes[0] != middleware.ScopeWorkerHeartbeat {
+		t.Fatalf("scopes = %#v, want heartbeat scope", inspected.Scopes)
+	}
+}
+
+func TestInspectWorkerTokenRejectsInvalidFormat(t *testing.T) {
+	if _, err := inspectWorkerToken("not-a-worker-token"); err == nil {
+		t.Fatal("expected error")
+	}
+}

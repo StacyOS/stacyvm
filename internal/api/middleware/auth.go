@@ -324,6 +324,28 @@ func VerifyWorkerToken(signingKey, token string, now time.Time) (WorkerTokenClai
 	return VerifyWorkerTokenForAudience(signingKey, token, "", now)
 }
 
+// DecodeWorkerTokenClaims decodes signed worker token metadata without verifying
+// the signature. Callers must not use the returned claims as authenticated identity.
+func DecodeWorkerTokenClaims(token string) (WorkerTokenClaims, bool) {
+	token = strings.TrimSpace(token)
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 || parts[0] != workerSignedTokenPrefix {
+		return WorkerTokenClaims{}, false
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return WorkerTokenClaims{}, false
+	}
+	var claims WorkerTokenClaims
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return WorkerTokenClaims{}, false
+	}
+	claims.WorkerID = strings.TrimSpace(claims.WorkerID)
+	claims.TokenID = strings.TrimSpace(claims.TokenID)
+	claims.Audience = strings.TrimSpace(claims.Audience)
+	return claims, true
+}
+
 func VerifyWorkerTokenForAudience(signingKey, token, audience string, now time.Time) (WorkerTokenClaims, bool) {
 	signingKey = strings.TrimSpace(signingKey)
 	token = strings.TrimSpace(token)
@@ -339,17 +361,10 @@ func VerifyWorkerTokenForAudience(signingKey, token, audience string, now time.T
 	if subtle.ConstantTimeCompare([]byte(parts[2]), []byte(expectedSignature)) != 1 {
 		return WorkerTokenClaims{}, false
 	}
-	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil {
+	claims, ok := DecodeWorkerTokenClaims(token)
+	if !ok {
 		return WorkerTokenClaims{}, false
 	}
-	var claims WorkerTokenClaims
-	if err := json.Unmarshal(payload, &claims); err != nil {
-		return WorkerTokenClaims{}, false
-	}
-	claims.WorkerID = strings.TrimSpace(claims.WorkerID)
-	claims.TokenID = strings.TrimSpace(claims.TokenID)
-	claims.Audience = strings.TrimSpace(claims.Audience)
 	if claims.WorkerID == "" || claims.ExpiresAt <= 0 || !now.Before(time.Unix(claims.ExpiresAt, 0)) {
 		return WorkerTokenClaims{}, false
 	}
