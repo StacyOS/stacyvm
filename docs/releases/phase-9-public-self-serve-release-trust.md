@@ -46,9 +46,10 @@ Phase 9 starts the public self-serve readiness track. This first slice focuses o
 ### Public Release Sanity
 
 - Added `scripts/ci-public-release-sanity.sh`.
+- Added `scripts/post-release-validate.sh <version>` for the post-tag release gate.
 - CI now syntax-checks public install and verification scripts.
 - CI builds release binaries for supported architectures and verifies `checksums.txt`.
-- Real GitHub release asset verification remains a required post-tag drill for each published version.
+- Real GitHub release asset verification is now executable as a post-tag drill for each published version.
 
 ### Diagnostics Remediation
 
@@ -72,6 +73,7 @@ Phase 9 starts the public self-serve readiness track. This first slice focuses o
 bash -n scripts/install.sh
 bash -n scripts/verify-release.sh
 bash -n scripts/ci-upgrade-migration.sh
+scripts/post-release-validate.sh --help
 scripts/ci-upgrade-migration.sh
 scripts/ci-public-release-sanity.sh
 bun test
@@ -82,4 +84,4 @@ go test ./...
 
 ## Remaining Phase 9 Direction
 
-Phase 9 is now complete from a branch-readiness perspective. The only release-time follow-up is to run `scripts/verify-release.sh` and the installer against the actual GitHub assets after the next real version tag is published.
+Phase 9 is now complete from a branch-readiness perspective. The only release-time follow-up is to run `scripts/post-release-validate.sh <version>` against the actual GitHub assets after the next real version tag is published.

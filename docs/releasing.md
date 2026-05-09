@@ -127,6 +127,18 @@ scripts/verify-release.sh v0.4.0 amd64
 scripts/verify-release.sh v0.4.0 arm64
 ```
 
+Or run the full post-release gate:
+
+```bash
+scripts/post-release-validate.sh v0.4.0
+STACYVM_VALIDATE_INSTALLER=true scripts/post-release-validate.sh v0.4.0
+```
+
+The full gate confirms that every binary, checksum, signature, and certificate
+asset exists on the GitHub release, runs signature and checksum verification for
+both architectures, and can exercise `scripts/install.sh` in verify-only mode on
+Linux.
+
 ## Notes
 
 - Do not store release secrets in `stacyvm.production.yaml`; pass them through environment variables.

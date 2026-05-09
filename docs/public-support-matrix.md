@@ -64,8 +64,13 @@ GitHub bug and production support issue templates ask for this same evidence. Re
 CI builds release binaries and validates checksums before code is merged into a release branch. After a real version tag is published, maintainers should run the public verifier against the GitHub release assets:
 
 ```bash
-scripts/verify-release.sh <version> amd64
-scripts/verify-release.sh <version> arm64
+scripts/post-release-validate.sh <version>
 ```
 
-Run the installer once on a clean Linux host with default checksum verification and once with `STACYVM_REQUIRE_SIGNATURES=true` plus `cosign` installed.
+On a clean Linux host, also run the installer in verify-only mode with signatures required:
+
+```bash
+STACYVM_VALIDATE_INSTALLER=true scripts/post-release-validate.sh <version>
+```
+
+For a final install smoke, run `scripts/install.sh` once with default checksum verification and once with `STACYVM_REQUIRE_SIGNATURES=true` plus `cosign` installed.

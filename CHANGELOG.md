@@ -16,6 +16,7 @@ This checkpoint starts the Phase 9 public self-serve production readiness track.
 - Diagnostics remediation links for production readiness, runtime certification, release verification, support bundles, and upgrade rollback.
 - Public self-serve limitations and support matrix under `docs/public-support-matrix.md`.
 - Public release sanity checks in CI for installer/verifier shell syntax, release builds, and checksum validation.
+- `scripts/post-release-validate.sh` for post-tag release asset, signature, checksum, and installer verify-only validation.
 - Mock-based TypeScript and Python SDK parity smoke tests in CI.
 - GitHub bug and production support issue templates that request support bundle, config lint, upgrade rehearsal, runtime certification, and release verification evidence.
 
@@ -26,6 +27,7 @@ This checkpoint starts the Phase 9 public self-serve production readiness track.
 - Docker integration tests are opt-in with `STACYVM_DOCKER_INTEGRATION=1` so default CI remains independent of Docker Hub and host daemon state.
 - TypeScript SDK spawn options now include `template`, matching Python spawn behavior.
 - Python SDK now exposes `templates` and `providers()` helpers for closer TypeScript parity.
+- `scripts/install.sh` supports `STACYVM_VERIFY_ONLY=true` for release validation without installing binaries or touching host setup.
 
 ## Phase 8 Single-Node Production - 2026-05-08
 

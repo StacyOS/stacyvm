@@ -8,6 +8,7 @@
 #   STACYVM_VERSION       — specific version to install (default: latest)
 #   STACYVM_INSTALL_DIR   — where to put binaries (default: /usr/local/bin)
 #   STACYVM_REQUIRE_SIGNATURES — require Sigstore verification with cosign (default: false)
+#   STACYVM_VERIFY_ONLY   — download and verify release assets, then exit before installing
 #
 set -euo pipefail
 
@@ -143,6 +144,11 @@ sha256sum -c checksums.txt --ignore-missing 2>/dev/null || {
 }
 info "Checksums verified"
 cd - > /dev/null
+
+if [[ "${STACYVM_VERIFY_ONLY:-false}" == "true" ]]; then
+    info "Verify-only mode complete; skipping install and host setup."
+    exit 0
+fi
 
 # ── Install binaries ─────────────────────────────────────
 info "Installing to ${INSTALL_DIR}..."

@@ -10,6 +10,7 @@ trap 'rm -rf "$DIST_DIR"' EXIT
 echo "==> Checking public install and verification scripts"
 bash -n scripts/install.sh
 bash -n scripts/verify-release.sh
+bash -n scripts/post-release-validate.sh
 
 echo "==> Building release artifacts"
 make release-build-all VERSION=phase-9-ci DIST_DIR="$DIST_DIR"
