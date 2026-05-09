@@ -164,6 +164,7 @@ func newWorkerTokenCmd() *cobra.Command {
 	cmd.Flags().StringVar(&outputFormat, "format", "token", "output format: token or json")
 	cmd.Flags().StringArrayVar(&scopes, "scope", nil, "worker scope to include; repeatable, defaults to all worker scopes")
 	cmd.AddCommand(newWorkerTokenInspectCmd())
+	cmd.AddCommand(newWorkerTokenVerifyCmd())
 	return cmd
 }
 
@@ -182,6 +183,51 @@ func newWorkerTokenInspectCmd() *cobra.Command {
 			return encoder.Encode(result)
 		},
 	}
+}
+
+func newWorkerTokenVerifyCmd() *cobra.Command {
+	var signingKey string
+	var verificationKeys []string
+	var audience string
+	var workerID string
+	var revokedTokenIDs []string
+	cmd := &cobra.Command{
+		Use:   "verify <token>",
+		Short: "Verify a signed worker token against signing keys and revocation settings",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			if signingKey == "" {
+				signingKey = cfg.Auth.WorkerSigningKey
+			}
+			verificationKeys = append(append([]string{}, cfg.Auth.WorkerSigningKeys...), verificationKeys...)
+			revokedTokenIDs = append(append([]string{}, cfg.Auth.WorkerRevokedTokenIDs...), revokedTokenIDs...)
+			result, err := verifyWorkerToken(workerTokenVerifyOptions{
+				Token:           args[0],
+				SigningKey:      signingKey,
+				VerificationKey: verificationKeys,
+				Audience:        audience,
+				WorkerID:        workerID,
+				RevokedTokenIDs: revokedTokenIDs,
+				Now:             time.Now,
+			})
+			if err != nil {
+				return err
+			}
+			encoder := json.NewEncoder(cmd.OutOrStdout())
+			encoder.SetIndent("", "  ")
+			return encoder.Encode(result)
+		},
+	}
+	cmd.Flags().StringVar(&signingKey, "signing-key", os.Getenv("STACYVM_AUTH_WORKER_SIGNING_KEY"), "active worker signing key; defaults to auth.worker_signing_key")
+	cmd.Flags().StringArrayVar(&verificationKeys, "verification-key", nil, "additional verification key accepted during rotation; repeatable")
+	cmd.Flags().StringVar(&audience, "audience", "", "expected token audience: worker:control-plane or worker:rpc")
+	cmd.Flags().StringVar(&workerID, "worker-id", "", "expected worker ID")
+	cmd.Flags().StringArrayVar(&revokedTokenIDs, "revoked-token-id", nil, "revoked token ID to reject; repeatable")
+	return cmd
 }
 
 type workerTokenIssueOptions struct {
@@ -215,6 +261,16 @@ type workerTokenInspectResult struct {
 	IssuedAt          string   `json:"issued_at,omitempty"`
 	NotBefore         string   `json:"not_before,omitempty"`
 	ExpiresAt         string   `json:"expires_at,omitempty"`
+}
+
+type workerTokenVerifyOptions struct {
+	Token           string
+	SigningKey      string
+	VerificationKey []string
+	Audience        string
+	WorkerID        string
+	RevokedTokenIDs []string
+	Now             func() time.Time
 }
 
 func issueWorkerToken(opts workerTokenIssueOptions) (workerTokenIssueResult, error) {
@@ -309,6 +365,55 @@ func inspectWorkerToken(token string) (workerTokenInspectResult, error) {
 		NotBefore:         unixTimeString(claims.NotBefore),
 		ExpiresAt:         unixTimeString(claims.ExpiresAt),
 	}, nil
+}
+
+func verifyWorkerToken(opts workerTokenVerifyOptions) (workerTokenInspectResult, error) {
+	keys := cleanStrings(append([]string{opts.SigningKey}, opts.VerificationKey...))
+	if len(keys) == 0 {
+		return workerTokenInspectResult{}, fmt.Errorf("worker signing key is required")
+	}
+	audience := strings.TrimSpace(opts.Audience)
+	if audience != "" && audience != middleware.WorkerTokenAudienceControlPlane && audience != middleware.WorkerTokenAudienceRPC {
+		return workerTokenInspectResult{}, fmt.Errorf("worker token audience must be %q or %q", middleware.WorkerTokenAudienceControlPlane, middleware.WorkerTokenAudienceRPC)
+	}
+	now := opts.Now
+	if now == nil {
+		now = time.Now
+	}
+	var claims middleware.WorkerTokenClaims
+	var ok bool
+	for _, key := range keys {
+		claims, ok = middleware.VerifyWorkerTokenForAudience(key, opts.Token, audience, now().UTC())
+		if ok {
+			break
+		}
+	}
+	if !ok {
+		return workerTokenInspectResult{}, fmt.Errorf("invalid signed worker token")
+	}
+	if expectedWorkerID := strings.TrimSpace(opts.WorkerID); expectedWorkerID != "" && claims.WorkerID != expectedWorkerID {
+		return workerTokenInspectResult{}, fmt.Errorf("worker token worker_id %q does not match expected worker %q", claims.WorkerID, expectedWorkerID)
+	}
+	revoked := map[string]struct{}{}
+	for _, id := range cleanStrings(opts.RevokedTokenIDs) {
+		revoked[id] = struct{}{}
+	}
+	if _, isRevoked := revoked[claims.TokenID]; claims.TokenID != "" && isRevoked {
+		return workerTokenInspectResult{}, fmt.Errorf("worker token %q is revoked", claims.TokenID)
+	}
+	result, _ := inspectWorkerToken(opts.Token)
+	result.SignatureVerified = true
+	return result, nil
+}
+
+func cleanStrings(values []string) []string {
+	clean := make([]string, 0, len(values))
+	for _, value := range values {
+		if value = strings.TrimSpace(value); value != "" {
+			clean = append(clean, value)
+		}
+	}
+	return clean
 }
 
 func unixTimeString(sec int64) string {

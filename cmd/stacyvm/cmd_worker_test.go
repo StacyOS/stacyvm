@@ -113,3 +113,90 @@ func TestInspectWorkerTokenRejectsInvalidFormat(t *testing.T) {
 		t.Fatal("expected error")
 	}
 }
+
+func TestVerifyWorkerTokenAcceptsRotationKey(t *testing.T) {
+	now := time.Date(2026, 5, 9, 10, 0, 0, 0, time.UTC)
+	issued, err := issueWorkerToken(workerTokenIssueOptions{
+		WorkerID:   "worker-a",
+		SigningKey: "old-worker-signing-key-with-at-least-32-bytes",
+		TTL:        "5m",
+		Audience:   middleware.WorkerTokenAudienceRPC,
+		TokenID:    "token-id-1",
+		Now:        func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatalf("issue worker token: %v", err)
+	}
+
+	verified, err := verifyWorkerToken(workerTokenVerifyOptions{
+		Token:           issued.Token,
+		SigningKey:      "new-worker-signing-key-with-at-least-32-bytes",
+		VerificationKey: []string{"old-worker-signing-key-with-at-least-32-bytes"},
+		Audience:        middleware.WorkerTokenAudienceRPC,
+		WorkerID:        "worker-a",
+		Now:             func() time.Time { return now.Add(time.Minute) },
+	})
+	if err != nil {
+		t.Fatalf("verify worker token: %v", err)
+	}
+	if !verified.SignatureVerified {
+		t.Fatal("verify result should report signature verification")
+	}
+	if verified.TokenID != "token-id-1" || verified.WorkerID != "worker-a" || verified.Audience != middleware.WorkerTokenAudienceRPC {
+		t.Fatalf("unexpected verify result: %+v", verified)
+	}
+}
+
+func TestVerifyWorkerTokenRejectsRevokedTokenID(t *testing.T) {
+	now := time.Date(2026, 5, 9, 10, 0, 0, 0, time.UTC)
+	issued, err := issueWorkerToken(workerTokenIssueOptions{
+		WorkerID:   "worker-a",
+		SigningKey: "worker-signing-key-with-at-least-32-bytes",
+		TTL:        "5m",
+		TokenID:    "revoked-token-id",
+		Now:        func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatalf("issue worker token: %v", err)
+	}
+
+	if _, err := verifyWorkerToken(workerTokenVerifyOptions{
+		Token:           issued.Token,
+		SigningKey:      "worker-signing-key-with-at-least-32-bytes",
+		RevokedTokenIDs: []string{"revoked-token-id"},
+		Now:             func() time.Time { return now.Add(time.Minute) },
+	}); err == nil {
+		t.Fatal("expected revoked token to fail verification")
+	}
+}
+
+func TestVerifyWorkerTokenRejectsWrongAudienceAndWorker(t *testing.T) {
+	now := time.Date(2026, 5, 9, 10, 0, 0, 0, time.UTC)
+	issued, err := issueWorkerToken(workerTokenIssueOptions{
+		WorkerID:   "worker-a",
+		SigningKey: "worker-signing-key-with-at-least-32-bytes",
+		TTL:        "5m",
+		Audience:   middleware.WorkerTokenAudienceControlPlane,
+		Now:        func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatalf("issue worker token: %v", err)
+	}
+
+	if _, err := verifyWorkerToken(workerTokenVerifyOptions{
+		Token:      issued.Token,
+		SigningKey: "worker-signing-key-with-at-least-32-bytes",
+		Audience:   middleware.WorkerTokenAudienceRPC,
+		Now:        func() time.Time { return now.Add(time.Minute) },
+	}); err == nil {
+		t.Fatal("expected wrong audience to fail verification")
+	}
+	if _, err := verifyWorkerToken(workerTokenVerifyOptions{
+		Token:      issued.Token,
+		SigningKey: "worker-signing-key-with-at-least-32-bytes",
+		WorkerID:   "worker-b",
+		Now:        func() time.Time { return now.Add(time.Minute) },
+	}); err == nil {
+		t.Fatal("expected wrong worker to fail verification")
+	}
+}

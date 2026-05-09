@@ -109,9 +109,10 @@ Token incident-response runbook:
 ```bash
 stacyvm worker token worker-a --ttl 5m --format json
 stacyvm worker token inspect '<signed-worker-token>'
+stacyvm worker token verify '<signed-worker-token>' --worker-id worker-a --audience worker:control-plane
 ```
 
-`stacyvm worker token inspect` decodes token metadata without verifying the signature. Use it to recover `worker_id`, `jti`, `aud`, and expiry metadata from an already-captured token before adding the `jti` value to `auth.worker_revoked_token_ids`; do not treat inspected claims as authenticated identity.
+`stacyvm worker token inspect` decodes token metadata without verifying the signature. Use it to recover `worker_id`, `jti`, `aud`, and expiry metadata from an already-captured token before adding the `jti` value to `auth.worker_revoked_token_ids`; do not treat inspected claims as authenticated identity. `stacyvm worker token verify` validates the signature against `auth.worker_signing_key`, accepts `auth.worker_signing_keys` during rotation, applies optional `--worker-id` and `--audience` expectations, and rejects configured revoked token IDs.
 
 No-downtime signing-key rotation uses a two-key window:
 

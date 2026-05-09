@@ -24,6 +24,7 @@ Phase 14 begins the worker identity hardening lane for production multi-worker S
 - Added `auth.worker_revoked_token_ids` emergency revocation for signed worker token IDs.
 - Added worker token issuer `--format json`, `--token-id`, and `--not-before` options for incident-response runbooks.
 - Added `stacyvm worker token inspect <token>` to recover unverified signed-token metadata and `jti` values during incident response.
+- Added `stacyvm worker token verify <token>` to validate signed tokens against active and rotation keys, expected worker IDs, expected audiences, and revoked token IDs.
 - Filtered signed-token scopes so tokens cannot grant user, API, or admin scopes.
 - Added `stacyvm worker token <worker-id>` to issue signed worker tokens from the CLI.
 
@@ -68,6 +69,7 @@ Phase 14 begins the worker identity hardening lane for production multi-worker S
 
 - Updated the README configuration example.
 - Updated the worker RPC contract with signed-token semantics.
+- Documented the issue, inspect, verify, and revoke operator runbook for worker tokens.
 - Updated the API docs for worker heartbeat and lease-renewal headers.
 - Updated the cluster conformance matrix to mark signed worker tokens as the public/enterprise worker identity path.
 - Updated production readiness notes to reflect signed worker tokens and the remaining issuer/rotation and mTLS work.
