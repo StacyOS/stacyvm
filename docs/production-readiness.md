@@ -62,11 +62,11 @@ This checklist tracks the Phase 7 release-candidate hardening work needed before
 | Web build | Passing | CI runs `npm run build`. |
 | SDK checks | Passing | TypeScript builds, Python imports, and mock-based SDK parity smoke tests run in CI. |
 | Deployment smoke | Passing | Mock-provider smoke is in CI. Docker live host certification remains external. |
-| Cluster conformance | Partial | Always-on CI covers SQLite store contract, live Postgres store contract, Postgres migration rehearsal, Postgres lease concurrency, per-worker identity, production cluster config lint, and Postgres-backed remote worker smoke. See `docs/cluster-conformance.md`. |
+| Cluster conformance | Partial | Always-on CI covers SQLite store contract, live Postgres store contract, Postgres migration rehearsal, Postgres lease concurrency, per-worker and signed worker identity, worker identity certification reporting, production cluster config lint, and Postgres-backed remote worker smoke. See `docs/cluster-conformance.md`. |
 | Runtime conformance | Partial | Harness and host certification script exist; Firecracker/PRoot remain platform-gated. |
 | Security posture | Partial | Admin governance, operation audit, path traversal checks, and explicit exec modes are implemented; OIDC/JWT implementation remains. |
 | Release automation | Passing | Release workflow signs binaries, checksums, and GHCR image digests; public verifier and installer verification exist. |
-| Worker registry | Partial | Durable worker registration, heartbeat, diagnostics, metrics, placement, ownership, leases, per-worker token auth, and worker RPC contract exist; network worker transport remains. |
+| Worker registry | Partial | Durable worker registration, heartbeat, diagnostics, metrics, placement, ownership, leases, per-worker token auth, signed worker identity, worker RPC routing, and worker RPC mTLS wiring exist; production distributed mode still needs target-network mTLS smoke evidence and runtime-certified workers. |
 
 ## Required Before Single-Node Production
 
@@ -97,7 +97,7 @@ This checklist tracks the Phase 7 release-candidate hardening work needed before
 ## Required Before Enterprise/Multi-Worker
 
 - Postgres store implementation. Driver, migrations, contract path, migration rehearsal, lease race coverage, and mock-provider remote worker smoke exist; production distributed mode still needs backup/restore-specific migration rehearsal.
-- Worker registration and heartbeat model. Durable registry, per-worker token auth, signed worker tokens, issuer/rotation workflow, and worker RPC mTLS wiring exist; production distributed mode still needs target-network mTLS smoke evidence for public/enterprise deployments.
+- Worker registration and heartbeat model. Durable registry, per-worker token auth, signed worker tokens, issuer/rotation workflow, worker identity certification reporting, and worker RPC mTLS wiring exist; production distributed mode still needs target-network mTLS smoke evidence and runtime-certified workers for public/enterprise deployments.
 - Scheduler abstraction with placement policy.
 - Durable queue/pub-sub for lifecycle events.
 - Distributed leases to prevent double ownership.
