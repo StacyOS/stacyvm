@@ -95,7 +95,9 @@ Run it with:
 stacyvm worker --listen 127.0.0.1:7430
 ```
 
-The endpoint accepts `workerproto.Request` envelopes, requires the same worker headers, and currently implements `worker.status` and `worker.renew_lease`. Spawn and destroy return explicit not-implemented responses until remote lifecycle execution is wired end to end.
+The endpoint accepts `workerproto.Request` envelopes, requires the same worker headers, and currently implements `worker.status`, `worker.renew_lease`, and `worker.spawn`. Destroy returns explicit not-implemented responses until remote lifecycle execution is wired end to end.
+
+For `worker.spawn`, the request carries a control-plane `sandbox_id` and the response returns both that ID and the provider `runtime_id`. The control plane should persist that mapping before routing later status, exec, file, or destroy operations to the owning worker.
 
 Current Phase 11 control-plane lease renewal endpoint:
 

@@ -18,6 +18,8 @@ This checkpoint starts the remote worker runtime track on top of the Phase 10 wo
 - Worker RPC status handling through `worker.status`.
 - Worker-authenticated lease renewal endpoint for durable control-plane leases.
 - Worker RPC lease renewal handling through `worker.renew_lease`.
+- Worker-side spawn RPC handling through `worker.spawn`.
+- Typed worker RPC client methods for spawn and status calls.
 - Phase 11 release notes under `docs/releases/phase-11-remote-worker-runtime.md`.
 
 ### Changed
@@ -25,7 +27,8 @@ This checkpoint starts the remote worker runtime track on top of the Phase 10 wo
 - Worker heartbeats can now be submitted without reusing API/admin keys.
 - Worker heartbeat requests are rejected when the authenticated worker ID does not match the requested worker path.
 - Worker lease renewal validates resource, holder, and expiry before renewing durable control-plane leases.
-- Spawn and destroy worker RPC methods return explicit not-implemented responses until remote lifecycle execution lands.
+- Worker spawn validates lease ownership before creating a provider runtime and returns both control-plane sandbox ID and provider runtime ID.
+- Destroy worker RPC methods return explicit not-implemented responses until remote lifecycle execution lands.
 - Config validation now covers worker heartbeat and shutdown durations.
 
 ## Phase 10 Multi-Worker Foundation - 2026-05-09
