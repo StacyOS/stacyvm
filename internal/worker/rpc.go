@@ -75,6 +75,8 @@ func (s *RPCServer) handleRPC(w http.ResponseWriter, r *http.Request) {
 		s.handleStatus(w, r.Context(), req)
 	case workerproto.MethodExec:
 		s.handleExec(w, r.Context(), req)
+	case workerproto.MethodExecStream:
+		s.handleExecStream(w, r.Context(), req)
 	case workerproto.MethodRenewLease:
 		s.handleRenewLease(w, r.Context(), req)
 	case workerproto.MethodSpawn:
@@ -190,6 +192,68 @@ func (s *RPCServer) handleExec(w http.ResponseWriter, ctx context.Context, req w
 		ExitCode:  execResult.ExitCode,
 		Stdout:    execResult.Stdout,
 		Stderr:    execResult.Stderr,
+	})
+	httputil.WriteJSON(w, http.StatusOK, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Result: result})
+}
+
+func (s *RPCServer) handleExecStream(w http.ResponseWriter, ctx context.Context, req workerproto.Request) {
+	var params workerproto.ExecParams
+	if err := json.Unmarshal(req.Params, &params); err != nil {
+		httputil.WriteJSON(w, http.StatusBadRequest, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Error: err.Error()})
+		return
+	}
+	if s.Registry == nil {
+		httputil.WriteJSON(w, http.StatusServiceUnavailable, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Error: "provider registry unavailable"})
+		return
+	}
+	provider, err := s.Registry.Get(params.Provider)
+	if err != nil {
+		httputil.WriteJSON(w, http.StatusNotFound, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Error: err.Error()})
+		return
+	}
+	runtimeID := strings.TrimSpace(params.RuntimeID)
+	if runtimeID == "" {
+		runtimeID = params.SandboxID
+	}
+	execCtx := ctx
+	var cancel context.CancelFunc
+	if strings.TrimSpace(params.Timeout) != "" {
+		timeout, err := time.ParseDuration(params.Timeout)
+		if err != nil {
+			httputil.WriteJSON(w, http.StatusBadRequest, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Error: err.Error()})
+			return
+		}
+		if timeout > 0 {
+			execCtx, cancel = context.WithTimeout(ctx, timeout)
+			defer cancel()
+		}
+	}
+	ch, err := provider.ExecStream(execCtx, runtimeID, providers.ExecOptions{
+		Command: params.Command,
+		Args:    params.Args,
+		Mode:    params.Mode,
+		Env:     params.Env,
+		WorkDir: params.WorkDir,
+	})
+	if err != nil {
+		code := http.StatusInternalServerError
+		if errors.Is(err, providers.ErrSandboxNotFound) {
+			code = http.StatusNotFound
+		}
+		httputil.WriteJSON(w, code, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Error: err.Error()})
+		return
+	}
+	chunks := make([]workerproto.StreamChunk, 0, 8)
+	for chunk := range ch {
+		chunks = append(chunks, workerproto.StreamChunk{Stream: chunk.Stream, Data: chunk.Data})
+	}
+	if execCtx.Err() != nil {
+		httputil.WriteJSON(w, http.StatusGatewayTimeout, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Error: execCtx.Err().Error()})
+		return
+	}
+	result, _ := json.Marshal(workerproto.ExecStreamResult{
+		SandboxID: params.SandboxID,
+		Chunks:    chunks,
 	})
 	httputil.WriteJSON(w, http.StatusOK, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Result: result})
 }

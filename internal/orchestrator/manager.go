@@ -822,17 +822,22 @@ func (m *Manager) ExecStream(ctx context.Context, sandboxID string, req ExecRequ
 	}
 
 	workDir := req.WorkDir
-	if workDir == "" && sb.VMID != "" {
+	if workDir == "" && sb.VMID != "" && !m.isRemoteOwnedSandbox(sb) {
 		workDir = "/workspace/" + sandboxID
 	}
 
-	ch, err := prov.ExecStream(execCtx, m.resolveVMID(sb), providers.ExecOptions{
-		Command: req.Command,
-		Args:    req.Args,
-		Mode:    req.Mode,
-		Env:     req.Env,
-		WorkDir: workDir,
-	})
+	var ch <-chan providers.StreamChunk
+	if m.isRemoteOwnedSandbox(sb) {
+		ch, err = m.execStreamRemote(execCtx, sb, req, workDir)
+	} else {
+		ch, err = prov.ExecStream(execCtx, m.resolveVMID(sb), providers.ExecOptions{
+			Command: req.Command,
+			Args:    req.Args,
+			Mode:    req.Mode,
+			Env:     req.Env,
+			WorkDir: workDir,
+		})
+	}
 	if err != nil {
 		if cancel != nil {
 			cancel()
@@ -882,6 +887,39 @@ func (m *Manager) ExecStream(ctx context.Context, sandboxID string, req ExecRequ
 			m.publishOperationFailure(EventExecFailed, sandboxID, OperationExecStream, metricsProvider, metricsErr)
 		}
 		m.recordOperation(OperationExecStream, metricsProvider, time.Since(start), metricsErr)
+	}()
+	return out, nil
+}
+
+func (m *Manager) execStreamRemote(ctx context.Context, sb *Sandbox, req ExecRequest, workDir string) (<-chan providers.StreamChunk, error) {
+	client, err := m.remoteWorkerRPCClient(ctx, sb.WorkerID)
+	if err != nil {
+		return nil, err
+	}
+	runtimeID := strings.TrimSpace(sb.VMID)
+	if runtimeID == "" {
+		runtimeID = sb.ID
+	}
+	result, err := client.ExecStream(ctx, "exec-stream-"+sb.ID, workerproto.ExecParams{
+		SandboxID: sb.ID,
+		Provider:  sb.Provider,
+		RuntimeID: runtimeID,
+		Command:   req.Command,
+		Args:      req.Args,
+		Mode:      req.Mode,
+		Env:       req.Env,
+		WorkDir:   workDir,
+		Timeout:   req.Timeout,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("remote worker exec stream: %w", err)
+	}
+	out := make(chan providers.StreamChunk, len(result.Chunks))
+	go func() {
+		defer close(out)
+		for _, chunk := range result.Chunks {
+			out <- providers.StreamChunk{Stream: chunk.Stream, Data: chunk.Data}
+		}
 	}()
 	return out, nil
 }

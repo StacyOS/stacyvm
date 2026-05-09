@@ -118,6 +118,53 @@ func TestRPCServerExec(t *testing.T) {
 	}
 }
 
+func TestRPCServerExecStream(t *testing.T) {
+	registry := providers.NewRegistry()
+	mock := providers.NewMockProvider()
+	registry.Register(mock)
+	if err := registry.SetDefault("mock"); err != nil {
+		t.Fatalf("set default: %v", err)
+	}
+	runtimeID, err := mock.Spawn(t.Context(), providers.SpawnOptions{Image: "alpine:latest"})
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	handler := (&RPCServer{WorkerID: "worker-a", Token: "worker-secret", Registry: registry}).Handler()
+	params, _ := json.Marshal(workerproto.ExecParams{
+		SandboxID: "sb-control-plane",
+		Provider:  "mock",
+		RuntimeID: runtimeID,
+		Command:   "echo worker stream",
+	})
+	reqBody, _ := json.Marshal(workerproto.Request{
+		ID:       "req-1",
+		Method:   workerproto.MethodExecStream,
+		WorkerID: "worker-a",
+		Params:   params,
+	})
+	req := httptest.NewRequest(http.MethodPost, "/rpc", bytes.NewReader(reqBody))
+	req.Header.Set("X-Worker-ID", "worker-a")
+	req.Header.Set("X-Worker-Token", "worker-secret")
+	w := httptest.NewRecorder()
+
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	var resp workerproto.Response
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
+	var result workerproto.ExecStreamResult
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		t.Fatalf("decode result: %v", err)
+	}
+	if result.SandboxID != "sb-control-plane" || len(result.Chunks) != 1 || result.Chunks[0].Data != "worker stream\n" {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+}
+
 func TestRPCServerRenewLease(t *testing.T) {
 	renewed := workerproto.LeaseToken{
 		ResourceID: "sb-1",

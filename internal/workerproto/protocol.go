@@ -19,6 +19,7 @@ const (
 	MethodDestroy    = "worker.destroy"
 	MethodStatus     = "worker.status"
 	MethodExec       = "worker.exec"
+	MethodExecStream = "worker.exec_stream"
 	MethodRenewLease = "worker.renew_lease"
 	MethodShutdown   = "worker.shutdown"
 )
@@ -138,6 +139,18 @@ type ExecResult struct {
 	Stderr    string `json:"stderr"`
 }
 
+// StreamChunk is one stdout/stderr payload emitted by worker.exec_stream.
+type StreamChunk struct {
+	Stream string `json:"stream"`
+	Data   string `json:"data"`
+}
+
+// ExecStreamResult reports buffered stream chunks from a worker runtime.
+type ExecStreamResult struct {
+	SandboxID string        `json:"sandbox_id"`
+	Chunks    []StreamChunk `json:"chunks"`
+}
+
 // RenewLeaseParams asks a worker to confirm it still owns work and needs a
 // renewed lease window.
 type RenewLeaseParams struct {
@@ -190,6 +203,8 @@ func ValidateRequest(req Request) error {
 	case MethodStatus:
 		return validateParams[StatusParams](req.Params)
 	case MethodExec:
+		return validateParams[ExecParams](req.Params)
+	case MethodExecStream:
 		return validateParams[ExecParams](req.Params)
 	case MethodRenewLease:
 		if req.Lease == nil {
