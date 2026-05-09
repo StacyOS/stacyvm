@@ -36,6 +36,7 @@ For host-level worker identity signoff, run:
 
 ```bash
 scripts/certify-worker-identity.sh worker-a
+scripts/certify-worker-identity.sh worker-a --format markdown --output worker-identity-certification.md
 ```
 
 The script issues a signed worker token from a secret file, inspects unverified metadata, verifies the signature and audience, confirms revoked token IDs are rejected, and generates a no-secret rotation plan.

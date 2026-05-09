@@ -23,6 +23,7 @@ For Phase 14 worker identity signoff, run the signed-token lifecycle smoke:
 
 ```sh
 scripts/certify-worker-identity.sh worker-a
+scripts/certify-worker-identity.sh worker-a --format markdown --output worker-identity-certification.md
 ```
 
 This verifies token issue, inspect, verify, revocation rejection, and rotation-plan generation using secret files. Set `STACYVM_WORKER_SIGNING_KEY_FILE`, `STACYVM_OLD_WORKER_SIGNING_KEY_FILE`, `STACYVM_WORKER_IDENTITY_AUDIENCE`, or `STACYVM_WORKER_IDENTITY_TTL` to point at deployment-specific values.
@@ -66,7 +67,7 @@ Before calling a single-node host production-ready, collect:
 - `stacyvm upgrade rehearse --config <config> --database <db> --backup-output <path>`
 - `stacyvm doctor --production`
 - `scripts/certify-runtime.sh <runtime> --format markdown --output <runtime>-certification.md`
-- `scripts/certify-worker-identity.sh <worker-id>`
+- `scripts/certify-worker-identity.sh <worker-id> --format markdown --output worker-identity-certification.md`
 - Provider conformance or smoke output for the configured runtime.
 
 Store these artifacts with the deployment record. Do not treat a runtime as
