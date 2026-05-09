@@ -58,6 +58,8 @@ type spawnQueueStats struct {
 	waitMax       time.Duration
 }
 
+const sandboxLeaseGrace = 5 * time.Minute
+
 type ManagerConfig struct {
 	DefaultTTL    time.Duration
 	DefaultImage  string
@@ -287,6 +289,10 @@ func (m *Manager) reconcileProviderRuntimes(ctx context.Context, known map[strin
 			if expiresAt.Before(time.Now()) {
 				expiresAt = time.Now().Add(m.defaultTTL)
 			}
+			if _, err := m.acquireSandboxLease(ctx, runtime.ID, expiresAt); err != nil {
+				m.logger.Warn().Err(err).Str("sandbox", runtime.ID).Msg("reconcile: skipping runtime adoption because lease is unavailable")
+				continue
+			}
 
 			metaJSON, _ := json.Marshal(runtime.Metadata)
 			rec := &store.SandboxRecord{
@@ -424,6 +430,12 @@ func (m *Manager) Spawn(ctx context.Context, req SpawnRequest) (*Sandbox, error)
 	}
 	sb.ID = id
 	sb.State = StateRunning
+	if _, err := m.acquireSandboxLease(ctx, sb.ID, sb.ExpiresAt); err != nil {
+		_ = prov.Destroy(ctx, id)
+		metricsErr = err
+		m.publishOperationFailure(EventOperationFailed, id, OperationSpawn, metricsProvider, err)
+		return nil, fmt.Errorf("acquiring sandbox lease: %w", err)
+	}
 
 	// Persist
 	metaJSON, _ := json.Marshal(sb.Metadata)
@@ -444,6 +456,7 @@ func (m *Manager) Spawn(ctx context.Context, req SpawnRequest) (*Sandbox, error)
 	}); err != nil {
 		// Best effort: destroy the sandbox if DB write fails
 		prov.Destroy(ctx, id)
+		_ = m.releaseSandboxLease(ctx, id)
 		metricsErr = err
 		m.publishOperationFailure(EventOperationFailed, id, OperationSpawn, metricsProvider, err)
 		return nil, fmt.Errorf("persisting sandbox: %w", err)
@@ -498,6 +511,11 @@ func (m *Manager) spawnPooled(ctx context.Context, prov providers.Provider, req 
 		Metadata:      req.Metadata,
 		PreviewDomain: m.previewDomain,
 	}
+	if _, err := m.acquireSandboxLease(ctx, sb.ID, sb.ExpiresAt); err != nil {
+		m.vmPoolMgr.Release(vmID, sandboxID)
+		m.publishOperationFailure(EventOperationFailed, sandboxID, OperationSpawn, prov.Name(), err)
+		return nil, fmt.Errorf("acquiring sandbox lease: %w", err)
+	}
 
 	// Create the sandbox's isolated workspace on the VM.
 	workspaceDir := "/workspace/" + sandboxID
@@ -506,6 +524,7 @@ func (m *Manager) spawnPooled(ctx context.Context, prov providers.Provider, req 
 	})
 	if err != nil {
 		m.vmPoolMgr.Release(vmID, sandboxID)
+		_ = m.releaseSandboxLease(ctx, sandboxID)
 		m.publishOperationFailure(EventOperationFailed, sandboxID, OperationSpawn, prov.Name(), err)
 		return nil, fmt.Errorf("creating workspace: %w", err)
 	}
@@ -528,6 +547,7 @@ func (m *Manager) spawnPooled(ctx context.Context, prov providers.Provider, req 
 		UpdatedAt: now,
 	}); err != nil {
 		m.vmPoolMgr.Release(vmID, sandboxID)
+		_ = m.releaseSandboxLease(ctx, sandboxID)
 		m.publishOperationFailure(EventOperationFailed, sandboxID, OperationSpawn, prov.Name(), err)
 		return nil, fmt.Errorf("persisting sandbox: %w", err)
 	}
@@ -1516,6 +1536,22 @@ func (m *Manager) notifySpawnCapacity() {
 	m.queueMu.Unlock()
 }
 
+func (m *Manager) acquireSandboxLease(ctx context.Context, sandboxID string, expiresAt time.Time) (*store.LeaseRecord, error) {
+	ttl := time.Until(expiresAt) + sandboxLeaseGrace
+	if ttl <= 0 {
+		ttl = sandboxLeaseGrace
+	}
+	return m.store.AcquireLease(ctx, sandboxID, "sandbox", m.workerID, ttl)
+}
+
+func (m *Manager) releaseSandboxLease(ctx context.Context, sandboxID string) error {
+	err := m.store.ReleaseLease(ctx, sandboxID, m.workerID)
+	if errors.Is(err, store.ErrNotFound) {
+		return nil
+	}
+	return err
+}
+
 func (m *Manager) EvaluateSpawnAdmission(ctx context.Context, ownerID string, ttl time.Duration) (SpawnAdmissionDecision, error) {
 	return m.evaluateSpawnAdmission(ctx, ownerID, ttl, "")
 }
@@ -1803,6 +1839,10 @@ func (m *Manager) spawnDirect(ctx context.Context, req SpawnRequest) (*Sandbox, 
 		WorkerID:      m.workerID,
 		PreviewDomain: m.previewDomain,
 	}
+	if _, err := m.acquireSandboxLease(ctx, sb.ID, sb.ExpiresAt); err != nil {
+		_ = prov.Destroy(ctx, id)
+		return nil, fmt.Errorf("acquiring pool VM lease: %w", err)
+	}
 
 	metaJSON, _ := json.Marshal(sb.Metadata)
 	if err := m.store.CreateSandbox(ctx, &store.SandboxRecord{
@@ -1819,6 +1859,7 @@ func (m *Manager) spawnDirect(ctx context.Context, req SpawnRequest) (*Sandbox, 
 		UpdatedAt: now,
 	}); err != nil {
 		prov.Destroy(ctx, id)
+		_ = m.releaseSandboxLease(ctx, id)
 		return nil, fmt.Errorf("persisting pool VM: %w", err)
 	}
 
@@ -1899,6 +1940,21 @@ func (m *Manager) Destroy(ctx context.Context, id string) error {
 		metricsProvider = sb.Provider
 	}
 
+	if sb == nil {
+		if rec, err := m.store.GetSandbox(ctx, id); err == nil {
+			sb = recordToSandbox(rec)
+			metricsProvider = sb.Provider
+		}
+	}
+	if sb != nil {
+		if _, err := m.acquireSandboxLease(ctx, id, sb.ExpiresAt); err != nil {
+			metricsErr = err
+			m.publishOperationFailure(EventOperationFailed, id, OperationDestroy, metricsProvider, err)
+			m.auditOperation(ctx, "sandbox.destroy", sb, id, "", "failure", "lease_unavailable: "+err.Error())
+			return err
+		}
+	}
+
 	if sb != nil && sb.VMID != "" && m.vmPoolMgr != nil {
 		metricsErr = m.destroyPooled(ctx, id, sb)
 		if metricsErr != nil {
@@ -1914,6 +1970,7 @@ func (m *Manager) Destroy(ctx context.Context, id string) error {
 	if err != nil {
 		// If we can't find the provider, just update the store
 		m.store.DeleteSandbox(ctx, id)
+		_ = m.releaseSandboxLease(ctx, id)
 		m.mu.Lock()
 		delete(m.sandboxes, id)
 		m.mu.Unlock()
@@ -1932,6 +1989,7 @@ func (m *Manager) Destroy(ctx context.Context, id string) error {
 	}
 
 	m.store.UpdateSandboxState(ctx, id, string(StateDestroyed))
+	_ = m.releaseSandboxLease(ctx, id)
 	m.mu.Lock()
 	if sb, ok := m.sandboxes[id]; ok {
 		sb.State = StateDestroyed
@@ -1971,6 +2029,7 @@ func (m *Manager) destroyPooled(ctx context.Context, id string, sb *Sandbox) err
 		}
 		// Clean up the VM's sandbox record too.
 		m.store.DeleteSandbox(ctx, vmID)
+		_ = m.releaseSandboxLease(ctx, vmID)
 		m.mu.Lock()
 		delete(m.sandboxes, vmID)
 		m.mu.Unlock()
@@ -1979,6 +2038,7 @@ func (m *Manager) destroyPooled(ctx context.Context, id string, sb *Sandbox) err
 
 	// Clean up the logical sandbox record.
 	m.store.UpdateSandboxState(ctx, id, string(StateDestroyed))
+	_ = m.releaseSandboxLease(ctx, id)
 	m.mu.Lock()
 	if cached, ok := m.sandboxes[id]; ok {
 		cached.State = StateDestroyed

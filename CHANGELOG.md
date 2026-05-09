@@ -17,6 +17,7 @@ This checkpoint starts the enterprise and multi-worker readiness track.
 - Worker ownership on sandbox records through persisted `worker_id`.
 - Worker-aware spawn admission that evaluates eligible workers by status, heartbeat freshness, provider support, capacity, and active sandbox count.
 - Durable lease storage with acquire, renew, release, get, and list semantics for future distributed sandbox ownership.
+- Lease enforcement around local spawn/adopt/destroy lifecycle paths.
 - Diagnostics worker summary with online, stale, unhealthy, and total counts.
 - Diagnostics lease summary with active, expired, total, and per-holder counts.
 - Diagnostics sandbox summaries grouped by worker ID.
@@ -32,6 +33,7 @@ This checkpoint starts the enterprise and multi-worker readiness track.
 - Scheduler status now reports the active local worker ID.
 - Scheduler status now reports the selected worker and eligible worker count while remote execution remains gated on worker RPC.
 - Lease acquisition is holder-checked and expiry-aware so later workers can safely fence lifecycle ownership.
+- Destroy now requires the local worker to acquire or hold the sandbox lease before mutating provider or store state.
 
 ## Phase 9 Public Self-Serve Release Trust - 2026-05-08
 

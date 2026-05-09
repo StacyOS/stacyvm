@@ -141,8 +141,8 @@ func TestSystemRoutes_Diagnostics(t *testing.T) {
 		t.Fatalf("worker total = %v, want 0 before server registration", workers["total"])
 	}
 	leases := body["leases"].(map[string]interface{})
-	if leases["total"].(float64) != 0 {
-		t.Fatalf("lease total = %v, want 0", leases["total"])
+	if leases["total"].(float64) != 1 || leases["active"].(float64) != 1 {
+		t.Fatalf("lease summary = %#v, want total=1 active=1", leases)
 	}
 	remediation := body["remediation"].(map[string]interface{})
 	if remediation["runtime_certification"] != "docs/runtime-certification.md" {

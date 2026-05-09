@@ -55,6 +55,15 @@ This is not a full distributed runtime yet. It is the first production-aligned c
 - Lease renewals require the current holder and an unexpired lease.
 - Diagnostics and Prometheus now expose lease totals so operators can inspect active and expired lease state.
 
+### Lease Enforcement
+
+- Local spawns now acquire a sandbox lease before persisting the sandbox record.
+- Runtime adoption during reconciliation now acquires a sandbox lease before adopting unknown provider runtimes.
+- Pool VM and pooled logical sandbox creation now acquire leases.
+- Destroy now acquires or renews the local worker lease before mutating provider/runtime/store state.
+- Successful destroy releases the sandbox lease.
+- Wrong-holder lease tests now prevent local destroy from mutating a sandbox owned by another worker.
+
 ### Diagnostics And Metrics
 
 - Diagnostics now include worker totals, online count, stale count, unhealthy count, and worker items.
@@ -92,7 +101,7 @@ This is not a full distributed runtime yet. It is the first production-aligned c
 ## Remaining Phase 10 Direction
 
 - Add worker RPC so selected remote workers can execute assigned spawns.
-- Enforce leases around lifecycle operations before multiple workers can manage the same sandbox pool.
+- Enforce leases across remote worker RPC once remote workers can execute lifecycle operations.
 - Add remote worker authentication and RPC.
 - Add Postgres-backed worker registry semantics for production clusters.
 - Add CI coverage for remote worker RPC and distributed leases once those slices land.

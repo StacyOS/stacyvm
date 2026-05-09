@@ -50,7 +50,7 @@ This checklist tracks the Phase 7 release-candidate hardening work needed before
 - Sandbox records persist their owning worker ID and diagnostics expose sandbox counts by worker. Done in Phase 10 slice 2.
 - Scheduler placement policy is worker-aware. Initial admission placement is done; remote dispatch is pending worker RPC.
 - Sandbox ownership is tied to worker IDs. Initial local ownership is done; remote ownership enforcement is pending.
-- Distributed leases prevent duplicate worker ownership. Initial durable lease store and diagnostics are done; lifecycle enforcement is pending worker RPC.
+- Distributed leases prevent duplicate worker ownership. Initial durable lease store, diagnostics, and local lifecycle enforcement are done; remote lifecycle enforcement is pending worker RPC.
 - Remote worker authentication and RPC are implemented. Pending.
 
 ## Current Release-Candidate Gates

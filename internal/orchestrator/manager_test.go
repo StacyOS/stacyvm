@@ -1167,6 +1167,58 @@ func TestManager_Destroy(t *testing.T) {
 	}
 }
 
+func TestManager_SpawnCreatesAndDestroyReleasesLease(t *testing.T) {
+	m := setupManager(t)
+	ctx := context.Background()
+
+	sb, err := m.Spawn(ctx, SpawnRequest{Image: "alpine:latest"})
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	lease, err := m.store.GetLease(ctx, sb.ID)
+	if err != nil {
+		t.Fatalf("get lease: %v", err)
+	}
+	if lease.HolderID != "local" || lease.ResourceType != "sandbox" {
+		t.Fatalf("unexpected lease: %+v", lease)
+	}
+
+	if err := m.Destroy(ctx, sb.ID); err != nil {
+		t.Fatalf("destroy: %v", err)
+	}
+	if _, err := m.store.GetLease(ctx, sb.ID); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("get released lease err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestManager_DestroyRequiresLease(t *testing.T) {
+	m := setupManager(t)
+	ctx := context.Background()
+
+	sb, err := m.Spawn(ctx, SpawnRequest{Image: "alpine:latest"})
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	if err := m.store.ReleaseLease(ctx, sb.ID, "local"); err != nil {
+		t.Fatalf("release local lease: %v", err)
+	}
+	if _, err := m.store.AcquireLease(ctx, sb.ID, "sandbox", "worker-b", time.Hour); err != nil {
+		t.Fatalf("acquire competing lease: %v", err)
+	}
+
+	err = m.Destroy(ctx, sb.ID)
+	if !errors.Is(err, store.ErrConflict) {
+		t.Fatalf("destroy err = %v, want ErrConflict", err)
+	}
+	got, err := m.Get(ctx, sb.ID)
+	if err != nil {
+		t.Fatalf("get sandbox after failed destroy: %v", err)
+	}
+	if got.State != StateRunning {
+		t.Fatalf("sandbox state = %s, want running", got.State)
+	}
+}
+
 func TestManager_TTLExpiry(t *testing.T) {
 	m := setupManager(t)
 	ctx := context.Background()
