@@ -92,7 +92,7 @@ This is now suitable for internal two-process staging with the mock provider. It
 - `scripts/ci-upgrade-migration.sh`
 - `scripts/ci-public-release-sanity.sh`
 
-## Remaining Phase 11 Direction
+## Next Phase Direction
 
 - Extend worker routing beyond spawn/status/destroy to exec, files, logs, and previews.
 - Add production-grade drain handoff/reassignment across workers.
