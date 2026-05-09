@@ -19,6 +19,9 @@ echo "==> Running worker identity and worker route auth checks"
 go test ./internal/api/middleware ./internal/api \
   -run 'TestWorkerAuth|TestWorkerHeartbeatUsesPerWorkerToken|TestWorkerRenewLeaseUsesWorkerToken'
 
+echo "==> Running worker RPC mTLS conformance"
+go test ./internal/worker -run TestRPCClientMTLSConformance -count=1
+
 cluster_config="$tmpdir/stacyvm.cluster.yaml"
 cat >"$cluster_config" <<YAML
 server:

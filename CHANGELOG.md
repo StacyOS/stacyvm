@@ -19,6 +19,7 @@ This checkpoint starts hardening remote worker identity for public and enterpris
 - Worker RPC mTLS config under `worker.rpc_tls`.
 - TLS server support for inbound worker RPC.
 - TLS client support for control-plane calls to remote worker RPC.
+- Worker RPC mTLS conformance test with generated CA, server, and client certificates.
 - Config lint checks for worker RPC TLS certificate and CA settings.
 - Phase 14 release notes under `docs/releases/phase-14-worker-identity-hardening.md`.
 

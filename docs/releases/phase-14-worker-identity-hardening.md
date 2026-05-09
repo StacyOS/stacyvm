@@ -48,6 +48,7 @@ Phase 14 begins the worker identity hardening lane for production multi-worker S
 - Added `worker.rpc_tls` configuration for enterprise worker RPC networks.
 - Added TLS server support for `stacyvm worker --listen`.
 - Added mTLS client support for control-plane calls to worker RPC.
+- Added worker RPC mTLS conformance that completes a real RPC call with generated CA, server, and client certificates.
 - Added config lint checks for worker server certificates, client CA verification, control-plane client certificates, worker CA verification, and unsafe `insecure_skip_verify`.
 - Documented how worker-side and control-plane-side certificate settings are used.
 
