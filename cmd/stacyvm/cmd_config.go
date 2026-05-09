@@ -127,6 +127,16 @@ func lintRateLimitConfig(cfg *config.Config, production bool) []doctorCheck {
 }
 
 func lintDatabaseConfig(cfg *config.Config, production bool) []doctorCheck {
+	driver := strings.ToLower(strings.TrimSpace(cfg.Database.Driver))
+	if driver == "" {
+		driver = "sqlite"
+	}
+	if driver == "postgres" || driver == "postgresql" {
+		if cfg.Database.DSN == "" {
+			return []doctorCheck{{Name: "database.dsn", Status: doctorFail, Message: "postgres DSN is required"}}
+		}
+		return []doctorCheck{{Name: "database.driver", Status: doctorWarn, Message: "postgres configured, but this build does not link a postgres store driver yet", Remediation: "Use sqlite for this build or deploy a build that includes the postgres store driver."}}
+	}
 	if filepath.IsAbs(cfg.Database.Path) {
 		return []doctorCheck{{Name: "database.path", Status: doctorPass, Message: cfg.Database.Path}}
 	}

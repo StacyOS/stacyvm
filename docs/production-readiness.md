@@ -51,7 +51,7 @@ This checklist tracks the Phase 7 release-candidate hardening work needed before
 - Sandbox records persist their owning worker ID and diagnostics expose sandbox counts by worker. Done in Phase 10 slice 2.
 - Scheduler placement policy is worker-aware. Remote spawn, status, destroy, live exec streaming, files, logs, preview metadata, and conservative drain/offline ownership policy are available for workers that advertise `rpc_url`.
 - Sandbox ownership is tied to worker IDs. Remote spawn/status/destroy ownership is enforced through worker RPC and persisted runtime IDs.
-- Distributed leases prevent duplicate worker ownership. Remote spawn, renew, and destroy now carry lease tokens; production still needs Postgres-grade lease semantics.
+- Distributed leases prevent duplicate worker ownership. Remote spawn, renew, and destroy now carry lease tokens; persistence now has an explicit driver seam, and production still needs a Postgres store implementation with Postgres-grade lease semantics.
 - Remote worker authentication and RPC contract are implemented for heartbeat, lease renewal, spawn, status, destroy, exec, files, logs, preview metadata, and drain/offline ownership reconciliation using a shared worker token suitable for staging.
 
 ## Current Release-Candidate Gates
@@ -95,7 +95,7 @@ This checklist tracks the Phase 7 release-candidate hardening work needed before
 
 ## Required Before Enterprise/Multi-Worker
 
-- Postgres store implementation.
+- Postgres store implementation. The driver config/factory seam exists; the real Postgres implementation remains pending.
 - Worker registration and heartbeat model. Initial SQLite-backed version exists; production distributed mode still needs remote worker auth and ownership semantics.
 - Scheduler abstraction with placement policy.
 - Durable queue/pub-sub for lifecycle events.

@@ -36,6 +36,7 @@ auth:
   admin_fallback_enabled: false
 
 database:
+  driver: "sqlite"
   path: "/tmp/stacyvm-remote-worker-staging.db"
 ```
 

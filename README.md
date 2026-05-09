@@ -558,7 +558,9 @@ rate_limit:
   cleanup_interval: "1m"
 
 database:
+  driver: "sqlite"        # sqlite; postgres config is reserved for cluster builds
   path: "stacyvm.db"
+  dsn: ""                 # required for future postgres-backed cluster mode
 
 logging:
   level: "info"           # debug | info | warn | error

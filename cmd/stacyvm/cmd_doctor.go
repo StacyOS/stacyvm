@@ -101,15 +101,23 @@ func checkConfig(cfg *config.Config, production bool) []doctorCheck {
 		checks = append(checks, doctorCheck{Name: "auth.admin_fallback_enabled", Status: doctorPass, Message: "disabled"})
 	}
 
-	dbDir := filepath.Dir(cfg.Database.Path)
-	if dbDir == "." || dbDir == "" {
-		checks = append(checks, doctorCheck{Name: "database.path", Status: doctorWarn, Message: "database path is relative; production should use persistent storage", Remediation: "Use an absolute database.path on durable disk and test backup/restore."})
-	} else if info, err := os.Stat(dbDir); err != nil {
-		checks = append(checks, doctorCheck{Name: "database.path", Status: severityForProduction(production), Message: fmt.Sprintf("database directory unavailable: %v", err), Remediation: "Create the database parent directory and ensure the StacyVM process can write to it."})
-	} else if !info.IsDir() {
-		checks = append(checks, doctorCheck{Name: "database.path", Status: doctorFail, Message: "database parent path is not a directory", Remediation: "Point database.path at a file whose parent is a real directory."})
+	driver := strings.ToLower(strings.TrimSpace(cfg.Database.Driver))
+	if driver == "" {
+		driver = "sqlite"
+	}
+	if driver == "postgres" || driver == "postgresql" {
+		checks = append(checks, doctorCheck{Name: "database.driver", Status: doctorWarn, Message: "postgres configured, but this build does not link a postgres store driver yet", Remediation: "Use sqlite for this build or deploy a build that includes the postgres store driver."})
 	} else {
-		checks = append(checks, doctorCheck{Name: "database.path", Status: doctorPass, Message: dbDir})
+		dbDir := filepath.Dir(cfg.Database.Path)
+		if dbDir == "." || dbDir == "" {
+			checks = append(checks, doctorCheck{Name: "database.path", Status: doctorWarn, Message: "database path is relative; production should use persistent storage", Remediation: "Use an absolute database.path on durable disk and test backup/restore."})
+		} else if info, err := os.Stat(dbDir); err != nil {
+			checks = append(checks, doctorCheck{Name: "database.path", Status: severityForProduction(production), Message: fmt.Sprintf("database directory unavailable: %v", err), Remediation: "Create the database parent directory and ensure the StacyVM process can write to it."})
+		} else if !info.IsDir() {
+			checks = append(checks, doctorCheck{Name: "database.path", Status: doctorFail, Message: "database parent path is not a directory", Remediation: "Point database.path at a file whose parent is a real directory."})
+		} else {
+			checks = append(checks, doctorCheck{Name: "database.path", Status: doctorPass, Message: dbDir})
+		}
 	}
 
 	return checks

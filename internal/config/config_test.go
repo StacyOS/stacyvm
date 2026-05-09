@@ -64,6 +64,42 @@ defaults:
 	}
 }
 
+func TestLoadRejectsUnsupportedDatabaseDriver(t *testing.T) {
+	t.Chdir(t.TempDir())
+	if err := os.WriteFile("stacyvm.yaml", []byte(`
+database:
+  driver: "mysql"
+`), 0644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected unsupported database driver error")
+	}
+	if !strings.Contains(err.Error(), "database.driver") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestLoadRequiresPostgresDSN(t *testing.T) {
+	t.Chdir(t.TempDir())
+	if err := os.WriteFile("stacyvm.yaml", []byte(`
+database:
+  driver: "postgres"
+`), 0644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected postgres dsn error")
+	}
+	if !strings.Contains(err.Error(), "database.dsn") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestLoadAcceptsPhaseThreeConfig(t *testing.T) {
 	t.Chdir(t.TempDir())
 	if err := os.WriteFile("stacyvm.yaml", []byte(`

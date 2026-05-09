@@ -64,6 +64,22 @@ func TestLintConfigProductionCatchesUnsafeSettings(t *testing.T) {
 	}
 }
 
+func TestLintDatabaseConfigWarnsForPostgresUntilDriverLinked(t *testing.T) {
+	cfg := validProductionConfig()
+	cfg.Database = config.DatabaseConfig{
+		Driver: "postgres",
+		DSN:    "postgres://stacyvm@example/stacyvm",
+	}
+
+	checks := lintDatabaseConfig(cfg, true)
+	if len(checks) != 1 {
+		t.Fatalf("checks = %+v, want one check", checks)
+	}
+	if checks[0].Name != "database.driver" || checks[0].Status != doctorWarn {
+		t.Fatalf("unexpected check: %+v", checks[0])
+	}
+}
+
 func validProductionConfig() *config.Config {
 	return &config.Config{
 		Auth: config.AuthConfig{

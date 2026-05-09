@@ -163,7 +163,9 @@ type RateLimitConfig struct {
 }
 
 type DatabaseConfig struct {
-	Path string `mapstructure:"path"`
+	Driver string `mapstructure:"driver"`
+	Path   string `mapstructure:"path"`
+	DSN    string `mapstructure:"dsn"`
 }
 
 type LoggingConfig struct {
@@ -258,6 +260,8 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("rate_limit.cleanup_interval", "1m")
 
 	v.SetDefault("database.path", "stacyvm.db")
+	v.SetDefault("database.driver", "sqlite")
+	v.SetDefault("database.dsn", "")
 
 	v.SetDefault("logging.level", "info")
 	v.SetDefault("logging.format", "json")
@@ -355,6 +359,19 @@ func load(configPaths []string, requireConfig bool) (*Config, error) {
 }
 
 func (c *Config) Validate() error {
+	switch driver := strings.ToLower(strings.TrimSpace(c.Database.Driver)); driver {
+	case "", "sqlite", "sqlite3":
+		if strings.TrimSpace(c.Database.Path) == "" {
+			return fmt.Errorf("database.path is required for sqlite")
+		}
+	case "postgres", "postgresql":
+		if strings.TrimSpace(c.Database.DSN) == "" {
+			return fmt.Errorf("database.dsn is required for postgres")
+		}
+	default:
+		return fmt.Errorf("unsupported database.driver %q", c.Database.Driver)
+	}
+
 	durationFields := map[string]string{
 		"defaults.ttl":                    c.Defaults.TTL,
 		"defaults.max_ttl":                c.Defaults.MaxTTL,

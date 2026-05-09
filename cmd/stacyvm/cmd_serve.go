@@ -47,7 +47,11 @@ func runServe() error {
 	}
 
 	// Store
-	st, err := store.NewSQLiteStore(cfg.Database.Path)
+	st, err := store.Open(store.Config{
+		Driver: cfg.Database.Driver,
+		Path:   cfg.Database.Path,
+		DSN:    cfg.Database.DSN,
+	})
 	if err != nil {
 		return err
 	}

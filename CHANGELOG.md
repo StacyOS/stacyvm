@@ -1,5 +1,23 @@
 # Changelog
 
+## Phase 13 Cluster Store And Worker Identity - 2026-05-09
+
+This checkpoint starts the enterprise multi-worker production track after Phase 12 completed remote sandbox I/O routing.
+
+### Added
+
+- Driver-based store factory through `store.Open`.
+- `database.driver` config with SQLite as the default.
+- `database.dsn` config for future Postgres-backed cluster storage.
+- Explicit unsupported-driver errors for Postgres until a Postgres store implementation is linked.
+- Config validation for database driver selection and required Postgres DSN.
+- Phase 13 release notes under `docs/releases/phase-13-cluster-store-and-worker-identity.md`.
+
+### Changed
+
+- `stacyvm serve` now opens persistence through the driver-based store factory.
+- `stacyvm config lint` and `stacyvm doctor` now report clear warnings when Postgres is configured in a build without a linked Postgres store driver.
+
 ## Phase 12 Remote Sandbox I/O Routing - 2026-05-09
 
 This checkpoint starts extending remote worker routing beyond sandbox lifecycle operations.
