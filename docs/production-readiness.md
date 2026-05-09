@@ -44,6 +44,7 @@ This checklist tracks the Phase 7 release-candidate hardening work needed before
 
 - Worker registration and heartbeat records are stored durably. Done in Phase 10 slice 1.
 - Single-node servers self-register as the `local` worker with provider and capacity metadata. Done in Phase 10 slice 1.
+- Single-node servers refresh the `local` worker heartbeat while running. Done in Phase 10 heartbeat slice.
 - Read-only worker discovery is available through the normal API. Done in Phase 10 slice 1.
 - Worker heartbeat and deletion are protected by the admin namespace. Done in Phase 10 slice 1.
 - Diagnostics and Prometheus expose worker registry state. Done in Phase 10 slice 1.

@@ -20,6 +20,8 @@ This is not a full distributed runtime yet. It is the first production-aligned c
 ### Local Worker Registration
 
 - The API server now registers the current process as the `local` worker at startup.
+- The API server now refreshes the `local` worker heartbeat periodically while running.
+- Server shutdown stops the heartbeat loop cleanly.
 - The local record includes configured providers, single-node capabilities, and manager capacity limits.
 - Single-node deployments now appear in the same worker registry surface that future multi-worker deployments will use.
 
@@ -45,7 +47,7 @@ This is not a full distributed runtime yet. It is the first production-aligned c
 - Spawn admission now evaluates worker placement using worker status, heartbeat freshness, provider support, declared capacity, and active sandbox counts.
 - Scheduler status now reports the selected worker and number of eligible workers.
 - Local execution remains honest: if the scheduler would place work on a remote worker, admission reports `remote_worker_rpc_unavailable` until the worker RPC slice lands.
-- The current local worker remains eligible for local execution even if its registry heartbeat has gone stale between startup registration and the future heartbeat loop.
+- Stale local worker records are no longer special-cased; real server runs keep the local worker fresh through the heartbeat loop.
 
 ### Distributed Lease Foundation
 
@@ -88,7 +90,7 @@ This is not a full distributed runtime yet. It is the first production-aligned c
 
 - `internal/store`: worker model, lease model, migrations, SQLite CRUD, and sandbox `worker_id` persistence.
 - `internal/api/routes`: worker routes, diagnostics worker summary, and Prometheus worker metrics.
-- `internal/api/server.go`: local worker startup registration and route mounting.
+- `internal/api/server.go`: local worker startup registration, heartbeat refresh loop, and route mounting.
 - `docs`: API, README, changelog, production readiness, and release notes.
 
 ## Verification

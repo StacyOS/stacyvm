@@ -48,7 +48,7 @@ func (m *Manager) evaluateWorkerPlacement(ctx context.Context, provider string, 
 		if workerID == "" || !strings.EqualFold(worker.Status, "online") {
 			continue
 		}
-		if workerID != m.workerID && now.Sub(worker.LastHeartbeat) > workerHeartbeatStaleAfter {
+		if now.Sub(worker.LastHeartbeat) > workerHeartbeatStaleAfter {
 			continue
 		}
 		if provider != "" && !workerSupportsProvider(worker, provider) {

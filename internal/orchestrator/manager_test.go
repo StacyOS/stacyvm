@@ -680,6 +680,28 @@ func TestManager_EvaluateSpawnRequestAdmissionRejectsRemoteWorkerUntilRPC(t *tes
 	}
 }
 
+func TestManager_EvaluateSpawnRequestAdmissionRejectsStaleLocalWorker(t *testing.T) {
+	m := setupManager(t)
+	if err := m.store.SaveWorker(context.Background(), &store.WorkerRecord{
+		ID:            "local",
+		Status:        "online",
+		Providers:     `["mock"]`,
+		Capabilities:  `["spawn"]`,
+		Capacity:      `{"max_sandboxes":10}`,
+		LastHeartbeat: time.Now().UTC().Add(-10 * time.Minute),
+	}); err != nil {
+		t.Fatalf("save worker: %v", err)
+	}
+
+	decision, err := m.EvaluateSpawnRequestAdmission(context.Background(), SpawnRequest{Provider: "mock"})
+	if err != nil {
+		t.Fatalf("evaluate admission: %v", err)
+	}
+	if decision.Allowed || decision.Reason != "worker_unavailable" || decision.EligibleWorkers != 0 {
+		t.Fatalf("unexpected stale worker decision: %+v", decision)
+	}
+}
+
 func TestManager_SpawnAdmissionSerializesConcurrentCreates(t *testing.T) {
 	dir := t.TempDir()
 	st, err := store.NewSQLiteStore(filepath.Join(dir, "test.db"))

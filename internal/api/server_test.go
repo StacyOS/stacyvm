@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -278,6 +279,42 @@ func TestServerRegistersLocalWorkerAndExposesWorkers(t *testing.T) {
 	if workerSummary["total"].(float64) != 2 {
 		t.Fatalf("worker total = %v, want 2", workerSummary["total"])
 	}
+}
+
+func TestServerRefreshesLocalWorkerHeartbeat(t *testing.T) {
+	srv, st := setupTestServerWithStore(t, ServerConfig{
+		Version:         "test",
+		WorkerHeartbeat: 10 * time.Millisecond,
+	})
+	oldHeartbeat := time.Now().UTC().Add(-10 * time.Minute)
+	if err := st.SaveWorker(context.Background(), &store.WorkerRecord{
+		ID:            "local",
+		Hostname:      "stale-host",
+		Status:        "online",
+		Providers:     `["mock"]`,
+		Capabilities:  `["spawn"]`,
+		Capacity:      `{}`,
+		LastHeartbeat: oldHeartbeat,
+	}); err != nil {
+		t.Fatalf("save stale worker: %v", err)
+	}
+
+	srv.workerHeartbeat.start()
+	t.Cleanup(func() { srv.workerHeartbeat.stop() })
+
+	deadline := time.Now().Add(250 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		worker, err := st.GetWorker(context.Background(), "local")
+		if err != nil {
+			t.Fatalf("get local worker: %v", err)
+		}
+		if worker.LastHeartbeat.After(oldHeartbeat) && worker.Hostname != "stale-host" {
+			return
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
+	worker, _ := st.GetWorker(context.Background(), "local")
+	t.Fatalf("local worker heartbeat was not refreshed: %+v", worker)
 }
 
 func TestAdminRoutesPruneAuditLogWithRetention(t *testing.T) {

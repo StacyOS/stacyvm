@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/StacyOs/stacyvm/internal/api/middleware"
@@ -28,11 +29,13 @@ type ServerConfig struct {
 	AdminAuditRetention   time.Duration
 	Version               string
 	RateLimit             middleware.RateLimitConfig
+	WorkerHeartbeat       time.Duration
 }
 
 type Server struct {
-	httpServer *http.Server
-	logger     zerolog.Logger
+	httpServer      *http.Server
+	logger          zerolog.Logger
+	workerHeartbeat *localWorkerHeartbeat
 }
 
 //	@title			StacyVM API
@@ -48,7 +51,12 @@ type Server struct {
 
 func NewServer(cfg ServerConfig, registry *providers.Registry, manager *orchestrator.Manager, events *orchestrator.EventBus, templates *orchestrator.TemplateRegistry, pool *orchestrator.PoolManager, st store.Store, envBuild routes.BuildStarter, logger zerolog.Logger) *Server {
 	r := chi.NewRouter()
-	registerLocalWorker(registry, manager, st, logger)
+	heartbeatInterval := cfg.WorkerHeartbeat
+	if heartbeatInterval == 0 {
+		heartbeatInterval = 30 * time.Second
+	}
+	workerHeartbeat := newLocalWorkerHeartbeat(registry, manager, st, logger, heartbeatInterval)
+	workerHeartbeat.register(context.Background())
 
 	// Global middleware (applies to all routes including swagger)
 	r.Use(chimw.Recoverer)
@@ -132,12 +140,82 @@ func NewServer(cfg ServerConfig, registry *providers.Registry, manager *orchestr
 			WriteTimeout: 120 * time.Second,
 			IdleTimeout:  60 * time.Second,
 		},
-		logger: logger,
+		logger:          logger,
+		workerHeartbeat: workerHeartbeat,
 	}
 }
 
-func registerLocalWorker(registry *providers.Registry, manager *orchestrator.Manager, st store.Store, logger zerolog.Logger) {
-	if st == nil {
+type localWorkerHeartbeat struct {
+	registry *providers.Registry
+	manager  *orchestrator.Manager
+	store    store.Store
+	logger   zerolog.Logger
+	interval time.Duration
+
+	mu     sync.Mutex
+	cancel context.CancelFunc
+	done   chan struct{}
+}
+
+func newLocalWorkerHeartbeat(registry *providers.Registry, manager *orchestrator.Manager, st store.Store, logger zerolog.Logger, interval time.Duration) *localWorkerHeartbeat {
+	return &localWorkerHeartbeat{
+		registry: registry,
+		manager:  manager,
+		store:    st,
+		logger:   logger,
+		interval: interval,
+	}
+}
+
+func (h *localWorkerHeartbeat) start() {
+	if h == nil || h.store == nil || h.interval <= 0 {
+		return
+	}
+	h.mu.Lock()
+	if h.cancel != nil {
+		h.mu.Unlock()
+		return
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	h.cancel = cancel
+	h.done = done
+	h.mu.Unlock()
+
+	go func() {
+		defer close(done)
+		ticker := time.NewTicker(h.interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				h.register(ctx)
+			}
+		}
+	}()
+}
+
+func (h *localWorkerHeartbeat) stop() {
+	if h == nil {
+		return
+	}
+	h.mu.Lock()
+	cancel := h.cancel
+	done := h.done
+	h.cancel = nil
+	h.done = nil
+	h.mu.Unlock()
+	if cancel == nil {
+		return
+	}
+	cancel()
+	<-done
+}
+
+func (h *localWorkerHeartbeat) register(ctx context.Context) {
+	if h == nil || h.store == nil {
 		return
 	}
 	hostname, err := os.Hostname()
@@ -145,11 +223,11 @@ func registerLocalWorker(registry *providers.Registry, manager *orchestrator.Man
 		hostname = "local"
 	}
 	capabilities := []string{"api", "single_node", "spawn", "exec", "files"}
-	providerNames := registry.List()
+	providerNames := h.registry.List()
 	providersJSON, _ := json.Marshal(providerNames)
 	capabilitiesJSON, _ := json.Marshal(capabilities)
-	capacityJSON, _ := json.Marshal(manager.Limits())
-	if err := st.SaveWorker(context.Background(), &store.WorkerRecord{
+	capacityJSON, _ := json.Marshal(h.manager.Limits())
+	if err := h.store.SaveWorker(ctx, &store.WorkerRecord{
 		ID:            "local",
 		Hostname:      hostname,
 		Status:        "online",
@@ -158,13 +236,18 @@ func registerLocalWorker(registry *providers.Registry, manager *orchestrator.Man
 		Capacity:      string(capacityJSON),
 		LastHeartbeat: time.Now().UTC(),
 	}); err != nil {
-		logger.Warn().Err(err).Msg("failed to register local worker")
+		h.logger.Warn().Err(err).Msg("failed to register local worker")
 	}
 }
 
 func (s *Server) Start() error {
 	s.logger.Info().Str("addr", s.httpServer.Addr).Msg("starting HTTP server")
-	return s.httpServer.ListenAndServe()
+	s.workerHeartbeat.start()
+	err := s.httpServer.ListenAndServe()
+	if err != nil {
+		s.workerHeartbeat.stop()
+	}
+	return err
 }
 
 func (s *Server) Handler() http.Handler {
@@ -173,5 +256,6 @@ func (s *Server) Handler() http.Handler {
 
 func (s *Server) Shutdown(ctx context.Context) error {
 	s.logger.Info().Msg("shutting down HTTP server")
+	s.workerHeartbeat.stop()
 	return s.httpServer.Shutdown(ctx)
 }
