@@ -900,7 +900,7 @@ func (m *Manager) execStreamRemote(ctx context.Context, sb *Sandbox, req ExecReq
 	if runtimeID == "" {
 		runtimeID = sb.ID
 	}
-	result, err := client.ExecStream(ctx, "exec-stream-"+sb.ID, workerproto.ExecParams{
+	chunks, errs, err := client.ExecStreamLive(ctx, "exec-stream-"+sb.ID, workerproto.ExecParams{
 		SandboxID: sb.ID,
 		Provider:  sb.Provider,
 		RuntimeID: runtimeID,
@@ -914,11 +914,23 @@ func (m *Manager) execStreamRemote(ctx context.Context, sb *Sandbox, req ExecReq
 	if err != nil {
 		return nil, fmt.Errorf("remote worker exec stream: %w", err)
 	}
-	out := make(chan providers.StreamChunk, len(result.Chunks))
+	out := make(chan providers.StreamChunk, 64)
 	go func() {
 		defer close(out)
-		for _, chunk := range result.Chunks {
-			out <- providers.StreamChunk{Stream: chunk.Stream, Data: chunk.Data}
+		for chunk := range chunks {
+			select {
+			case out <- providers.StreamChunk{Stream: chunk.Stream, Data: chunk.Data}:
+			case <-ctx.Done():
+				return
+			}
+		}
+		for err := range errs {
+			if err != nil {
+				select {
+				case out <- providers.StreamChunk{Stream: "stderr", Data: err.Error()}:
+				case <-ctx.Done():
+				}
+			}
 		}
 	}()
 	return out, nil

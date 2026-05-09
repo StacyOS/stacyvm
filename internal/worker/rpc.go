@@ -78,7 +78,7 @@ func (s *RPCServer) handleRPC(w http.ResponseWriter, r *http.Request) {
 	case workerproto.MethodExec:
 		s.handleExec(w, r.Context(), req)
 	case workerproto.MethodExecStream:
-		s.handleExecStream(w, r.Context(), req)
+		s.handleExecStream(w, r, req)
 	case workerproto.MethodFileWrite, workerproto.MethodFileRead, workerproto.MethodFileList,
 		workerproto.MethodFileDelete, workerproto.MethodFileMove, workerproto.MethodFileChmod,
 		workerproto.MethodFileStat, workerproto.MethodFileGlob:
@@ -204,7 +204,8 @@ func (s *RPCServer) handleExec(w http.ResponseWriter, ctx context.Context, req w
 	httputil.WriteJSON(w, http.StatusOK, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Result: result})
 }
 
-func (s *RPCServer) handleExecStream(w http.ResponseWriter, ctx context.Context, req workerproto.Request) {
+func (s *RPCServer) handleExecStream(w http.ResponseWriter, r *http.Request, req workerproto.Request) {
+	ctx := r.Context()
 	var params workerproto.ExecParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
 		httputil.WriteJSON(w, http.StatusBadRequest, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Error: err.Error()})
@@ -251,6 +252,10 @@ func (s *RPCServer) handleExecStream(w http.ResponseWriter, ctx context.Context,
 		httputil.WriteJSON(w, code, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Error: err.Error()})
 		return
 	}
+	if strings.EqualFold(r.Header.Get("X-Worker-Stream"), "ndjson") {
+		s.streamExecChunks(w, execCtx, req, ch)
+		return
+	}
 	chunks := make([]workerproto.StreamChunk, 0, 8)
 	for chunk := range ch {
 		chunks = append(chunks, workerproto.StreamChunk{Stream: chunk.Stream, Data: chunk.Data})
@@ -264,6 +269,33 @@ func (s *RPCServer) handleExecStream(w http.ResponseWriter, ctx context.Context,
 		Chunks:    chunks,
 	})
 	httputil.WriteJSON(w, http.StatusOK, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Result: result})
+}
+
+func (s *RPCServer) streamExecChunks(w http.ResponseWriter, ctx context.Context, req workerproto.Request, ch <-chan providers.StreamChunk) {
+	w.Header().Set("Content-Type", "application/x-ndjson")
+	w.WriteHeader(http.StatusOK)
+	flusher, _ := w.(http.Flusher)
+	enc := json.NewEncoder(w)
+	for chunk := range ch {
+		_ = enc.Encode(workerproto.Response{
+			ID:       req.ID,
+			WorkerID: s.WorkerID,
+			Result:   mustJSONRaw(workerproto.StreamChunk{Stream: chunk.Stream, Data: chunk.Data}),
+		})
+		if flusher != nil {
+			flusher.Flush()
+		}
+	}
+	if ctx.Err() != nil {
+		_ = enc.Encode(workerproto.Response{
+			ID:       req.ID,
+			WorkerID: s.WorkerID,
+			Error:    ctx.Err().Error(),
+		})
+		if flusher != nil {
+			flusher.Flush()
+		}
+	}
 }
 
 func (s *RPCServer) handleFile(w http.ResponseWriter, ctx context.Context, req workerproto.Request) {
@@ -512,6 +544,11 @@ func validateLeaseToken(token *workerproto.LeaseToken, workerID string) error {
 		return errors.New("lease token is expired")
 	}
 	return nil
+}
+
+func mustJSONRaw(value interface{}) json.RawMessage {
+	data, _ := json.Marshal(value)
+	return data
 }
 
 func (s *RPCServer) authenticate(r *http.Request) bool {

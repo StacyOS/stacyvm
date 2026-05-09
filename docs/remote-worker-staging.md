@@ -128,7 +128,7 @@ curl -sS -X POST \
   http://127.0.0.1:7423/api/v1/sandboxes/<sandbox-id>/exec
 ```
 
-Run a streamed command. This routes through `worker.exec_stream` and returns buffered stdout/stderr chunks through the normal API streaming response:
+Run a streamed command. This routes through `worker.exec_stream` and forwards live stdout/stderr chunks through the normal API streaming response:
 
 ```bash
 curl -sS -X POST \
@@ -179,7 +179,7 @@ The script starts both processes, waits for worker registration, spawns a mock s
 ## Current Limits
 
 - Remote non-streaming exec is routed to remote workers.
-- Remote streaming exec is routed through buffered worker RPC responses, not a true live stream transport yet.
+- Remote streaming exec is routed through live NDJSON worker RPC responses.
 - Remote file APIs are routed to remote workers.
 - Remote logs are routed to remote workers.
 - Remote preview URL metadata is routed from worker heartbeat capacity. The actual preview ingress still depends on the worker/provider ingress setup, such as Docker plus Traefik on the worker host.

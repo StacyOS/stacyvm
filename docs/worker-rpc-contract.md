@@ -2,7 +2,7 @@
 
 Phase 10 defined the control-plane to worker contract. Phase 11 wired that contract into a real worker runtime: `stacyvm worker` can authenticate to the control plane, submit heartbeat state through a worker-only HTTP endpoint, and expose an optional inbound RPC server with `--listen`.
 
-Phase 12 starts remote sandbox I/O routing. Remote spawn, status, destroy, lease renewal, shutdown/drain, non-streaming exec, buffered exec-stream calls, file APIs, and console logs now use the worker RPC transport when the scheduler selects a non-local worker that advertises `rpc_url`.
+Phase 12 starts remote sandbox I/O routing. Remote spawn, status, destroy, lease renewal, shutdown/drain, non-streaming exec, live exec-stream calls, file APIs, and console logs now use the worker RPC transport when the scheduler selects a non-local worker that advertises `rpc_url`.
 
 ## Contract Package
 
@@ -34,7 +34,7 @@ Supported methods:
 | `worker.destroy` | control plane to worker | Yes | Assign sandbox teardown to the owning worker. |
 | `worker.status` | control plane to worker | No | Ask a worker for runtime state. |
 | `worker.exec` | control plane to worker | No | Run a non-streaming command in an owned runtime. |
-| `worker.exec_stream` | control plane to worker | No | Run a command and return buffered stdout/stderr chunks. |
+| `worker.exec_stream` | control plane to worker | No | Run a command and stream stdout/stderr chunks. |
 | `worker.file_write` | control plane to worker | No | Write file content in an owned runtime. |
 | `worker.file_read` | control plane to worker | No | Read file content from an owned runtime. |
 | `worker.file_list` | control plane to worker | No | List files in an owned runtime. |
@@ -133,7 +133,7 @@ Remote destroy uses the same persisted ownership tuple. The control plane fetche
 
 Remote non-streaming exec uses the same persisted ownership tuple without acquiring a new lifecycle lease. The control plane sends command, argv mode, environment, workdir, timeout, provider, sandbox ID, and provider runtime ID to `worker.exec`. The worker runs the command against its local provider registry and returns exit code, stdout, and stderr. The control plane still writes normal exec logs and emits the same audit, event, metric, and timeout behavior used by local exec.
 
-Remote exec stream currently uses `worker.exec_stream`, which buffers stdout/stderr chunks in the worker RPC response and then exposes them through the manager's existing stream channel API. This is enough for remote API parity in staging, but it is not yet a true live stream transport for large or long-running commands.
+Remote exec stream uses `worker.exec_stream` with `X-Worker-Stream: ndjson`. The worker flushes each stdout/stderr chunk as an NDJSON `workerproto.Response`, and the control plane exposes those chunks through the manager's existing stream channel API. Clients that do not request NDJSON can still receive the buffered `ExecStreamResult` response shape.
 
 Remote file APIs use the same ownership tuple. The control plane validates/scopes paths, then sends the provider runtime ID and requested file operation to the owning worker. Dedicated remote sandboxes are not treated as pool sandboxes just because `VMID` stores the provider runtime ID; pool workspace scoping remains local-pool only.
 
@@ -168,4 +168,4 @@ In Postgres terms, lease acquire should be implemented with a unique key on `res
 
 ## Current Limits
 
-Remote placement returns `remote_worker_rpc_unavailable` unless the selected worker advertises `rpc_url` and `auth.worker_token` is configured. True live remote streaming, Postgres-backed cluster storage, and production worker identity are still outside the current transport.
+Remote placement returns `remote_worker_rpc_unavailable` unless the selected worker advertises `rpc_url` and `auth.worker_token` is configured. Postgres-backed cluster storage and production worker identity are still outside the current transport.

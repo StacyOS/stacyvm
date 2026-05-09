@@ -10,9 +10,9 @@ This checkpoint starts extending remote worker routing beyond sandbox lifecycle 
 - Worker protocol exec request and result payloads.
 - `worker:exec` scope constant for future worker token scoping.
 - Worker-side non-streaming exec handling through the provider registry.
-- Worker-side buffered streaming exec handling through the provider registry.
+- Worker-side live NDJSON streaming exec handling through the provider registry.
 - Typed worker RPC client support for exec calls.
-- Typed worker RPC client support for buffered exec-stream calls.
+- Typed worker RPC client support for live exec-stream calls.
 - Worker RPC contract and client support for file write, read, list, delete, move, chmod, stat, and glob.
 - Worker RPC contract and client support for remote console logs.
 - Worker preview domain advertisement through heartbeat capacity.
@@ -27,7 +27,7 @@ This checkpoint starts extending remote worker routing beyond sandbox lifecycle 
 
 - Remote-owned sandbox exec now uses persisted worker ownership and provider runtime ID instead of the local provider.
 - Remote exec preserves existing event, audit, metric, timeout, and exec-log behavior.
-- Remote exec-stream keeps the manager streaming API shape while buffering chunks over worker RPC.
+- Remote exec-stream keeps the manager streaming API shape while forwarding live NDJSON chunks over worker RPC.
 - Remote file APIs now use persisted worker ownership and provider runtime ID instead of local provider state.
 - Remote console logs now use persisted worker ownership and provider runtime ID instead of local provider state.
 - Remote-owned sandbox responses now use the owning worker's preview domain when the worker advertises one.

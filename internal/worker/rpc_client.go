@@ -1,6 +1,7 @@
 package worker
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -87,6 +88,96 @@ func (c RPCClient) ExecStream(ctx context.Context, reqID string, params workerpr
 		return result, err
 	}
 	return result, nil
+}
+
+func (c RPCClient) ExecStreamLive(ctx context.Context, reqID string, params workerproto.ExecParams) (<-chan workerproto.StreamChunk, <-chan error, error) {
+	if strings.TrimSpace(c.BaseURL) == "" {
+		return nil, nil, fmt.Errorf("worker RPC URL is required")
+	}
+	if strings.TrimSpace(c.WorkerID) == "" {
+		return nil, nil, fmt.Errorf("worker id is required")
+	}
+	if strings.TrimSpace(c.Token) == "" {
+		return nil, nil, fmt.Errorf("worker token is required")
+	}
+	body, err := json.Marshal(workerproto.Request{
+		ID:       reqID,
+		Method:   workerproto.MethodExecStream,
+		WorkerID: c.WorkerID,
+		Params:   mustRawMessage(params),
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(c.BaseURL, "/")+"/rpc", bytes.NewReader(body))
+	if err != nil {
+		return nil, nil, err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Accept", "application/x-ndjson")
+	httpReq.Header.Set("X-Worker-Stream", "ndjson")
+	httpReq.Header.Set("X-Worker-ID", c.WorkerID)
+	httpReq.Header.Set("X-Worker-Token", c.Token)
+
+	client := c.HTTPClient
+	if client == nil {
+		client = &http.Client{}
+	}
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return nil, nil, err
+	}
+	if resp.StatusCode >= 300 {
+		defer resp.Body.Close()
+		data, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		var response workerproto.Response
+		if len(data) > 0 {
+			_ = json.Unmarshal(data, &response)
+		}
+		if response.Error != "" {
+			return nil, nil, fmt.Errorf("worker RPC failed: HTTP %d: %s", resp.StatusCode, response.Error)
+		}
+		return nil, nil, fmt.Errorf("worker RPC failed: HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(data)))
+	}
+
+	chunks := make(chan workerproto.StreamChunk, 64)
+	errs := make(chan error, 1)
+	go func() {
+		defer resp.Body.Close()
+		defer close(chunks)
+		defer close(errs)
+		scanner := bufio.NewScanner(resp.Body)
+		scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+		for scanner.Scan() {
+			var response workerproto.Response
+			if err := json.Unmarshal(scanner.Bytes(), &response); err != nil {
+				errs <- fmt.Errorf("decode worker stream response: %w", err)
+				return
+			}
+			if response.Error != "" {
+				errs <- fmt.Errorf("worker RPC stream failed: %s", response.Error)
+				return
+			}
+			if len(response.Result) == 0 {
+				continue
+			}
+			var chunk workerproto.StreamChunk
+			if err := json.Unmarshal(response.Result, &chunk); err != nil {
+				errs <- fmt.Errorf("decode worker stream chunk: %w", err)
+				return
+			}
+			select {
+			case chunks <- chunk:
+			case <-ctx.Done():
+				errs <- ctx.Err()
+				return
+			}
+		}
+		if err := scanner.Err(); err != nil {
+			errs <- err
+		}
+	}()
+	return chunks, errs, nil
 }
 
 func (c RPCClient) FileWrite(ctx context.Context, reqID string, params workerproto.FileParams) error {

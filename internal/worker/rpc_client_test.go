@@ -159,6 +159,57 @@ func TestRPCClientExecStream(t *testing.T) {
 	}
 }
 
+func TestRPCClientExecStreamLive(t *testing.T) {
+	registry := providers.NewRegistry()
+	base := providers.NewMockProvider()
+	runtimeID, err := base.Spawn(context.Background(), providers.SpawnOptions{Image: "alpine:latest"})
+	if err != nil {
+		t.Fatalf("spawn mock: %v", err)
+	}
+	release := make(chan struct{})
+	registry.Register(&liveStreamProvider{Provider: base, release: release})
+	if err := registry.SetDefault("mock"); err != nil {
+		t.Fatalf("set default: %v", err)
+	}
+	server := httptest.NewServer((&RPCServer{
+		WorkerID: "worker-a",
+		Token:    "worker-secret",
+		Registry: registry,
+	}).Handler())
+	defer server.Close()
+
+	client := RPCClient{
+		BaseURL:  server.URL,
+		WorkerID: "worker-a",
+		Token:    "worker-secret",
+	}
+	chunks, errs, err := client.ExecStreamLive(context.Background(), "req-1", workerproto.ExecParams{
+		SandboxID: "sb-control-plane",
+		RuntimeID: runtimeID,
+		Provider:  "mock",
+		Command:   "ignored",
+	})
+	if err != nil {
+		t.Fatalf("exec stream live: %v", err)
+	}
+	select {
+	case chunk := <-chunks:
+		if chunk.Data != "first\n" {
+			t.Fatalf("first chunk = %+v, want first", chunk)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for first live chunk")
+	}
+	close(release)
+	for range chunks {
+	}
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("stream error: %v", err)
+		}
+	}
+}
+
 func TestRPCClientFileOperations(t *testing.T) {
 	registry := providers.NewRegistry()
 	mock := providers.NewMockProvider()

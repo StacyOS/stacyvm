@@ -96,6 +96,25 @@ func (p *cancellableStreamProvider) ExecStream(ctx context.Context, sandboxID st
 	return ch, nil
 }
 
+type remoteLiveStreamProvider struct {
+	providers.Provider
+	release chan struct{}
+}
+
+func (p *remoteLiveStreamProvider) ExecStream(ctx context.Context, sandboxID string, opts providers.ExecOptions) (<-chan providers.StreamChunk, error) {
+	ch := make(chan providers.StreamChunk, 2)
+	go func() {
+		defer close(ch)
+		ch <- providers.StreamChunk{Stream: "stdout", Data: "remote first\n"}
+		select {
+		case <-ctx.Done():
+		case <-p.release:
+			ch <- providers.StreamChunk{Stream: "stdout", Data: "remote second\n"}
+		}
+	}()
+	return ch, nil
+}
+
 func TestManager_SpawnAndGet(t *testing.T) {
 	m := setupManager(t)
 	ctx := context.Background()
@@ -444,6 +463,74 @@ func TestManager_ExecStreamRoutesToRemoteWorker(t *testing.T) {
 	}
 	if stdout.String() != "remote stream\n" {
 		t.Fatalf("stdout = %q, want remote stream", stdout.String())
+	}
+}
+
+func TestManager_ExecStreamRoutesLiveRemoteChunks(t *testing.T) {
+	remoteRegistry := providers.NewRegistry()
+	remoteMock := providers.NewMockProvider()
+	release := make(chan struct{})
+	remoteRegistry.Register(&remoteLiveStreamProvider{Provider: remoteMock, release: release})
+	if err := remoteRegistry.SetDefault("mock"); err != nil {
+		t.Fatalf("set remote default: %v", err)
+	}
+	server := httptest.NewServer((&worker.RPCServer{
+		WorkerID: "worker-remote",
+		Token:    "worker-secret",
+		Registry: remoteRegistry,
+	}).Handler())
+	defer server.Close()
+
+	m := setupManagerWithConfig(t, ManagerConfig{
+		DefaultTTL:    5 * time.Minute,
+		DefaultImage:  "alpine:latest",
+		DefaultMemory: 512,
+		DefaultVCPUs:  1,
+		WorkerToken:   "worker-secret",
+	})
+	providersJSON, _ := json.Marshal([]string{"mock"})
+	capacityJSON, _ := json.Marshal(map[string]interface{}{
+		"max_sandboxes": 10,
+		"rpc_url":       server.URL,
+	})
+	now := time.Now().UTC()
+	if err := m.store.SaveWorker(context.Background(), &store.WorkerRecord{
+		ID:            "worker-remote",
+		Hostname:      "remote-host",
+		Status:        "online",
+		Providers:     string(providersJSON),
+		Capabilities:  `["remote_worker","spawn","status","exec","exec_stream"]`,
+		Capacity:      string(capacityJSON),
+		LastHeartbeat: now,
+	}); err != nil {
+		t.Fatalf("save worker: %v", err)
+	}
+	sb, err := m.Spawn(context.Background(), SpawnRequest{Image: "alpine:latest"})
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+
+	ch, err := m.ExecStream(context.Background(), sb.ID, ExecRequest{Command: "ignored"})
+	if err != nil {
+		t.Fatalf("exec stream: %v", err)
+	}
+	select {
+	case chunk := <-ch:
+		if chunk.Data != "remote first\n" {
+			t.Fatalf("first remote chunk = %+v, want remote first", chunk)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for first remote chunk")
+	}
+	close(release)
+	var rest strings.Builder
+	for chunk := range ch {
+		if chunk.Stream == "stdout" {
+			rest.WriteString(chunk.Data)
+		}
+	}
+	if !strings.Contains(rest.String(), "remote second") {
+		t.Fatalf("remaining stdout = %q, want remote second", rest.String())
 	}
 }
 

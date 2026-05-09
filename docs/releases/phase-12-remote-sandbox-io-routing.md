@@ -7,7 +7,7 @@ Branch: `phase-12-remote-sandbox-io-routing`
 
 Phase 12 starts extending the Phase 11 remote worker runtime beyond lifecycle operations. This checkpoint adds exec routing for remote-owned sandboxes, so the control plane can run commands through the owning worker instead of trying to execute against the local provider.
 
-This is the first remote sandbox I/O slice. Non-streaming exec, buffered exec-stream calls, file APIs, console logs, and remote preview metadata are routed. True live worker stream transport and production-grade drain handoff remain future Phase 12 work.
+This is the first remote sandbox I/O slice. Non-streaming exec, live exec-stream calls, file APIs, console logs, and remote preview metadata are routed. Production-grade drain handoff remains future Phase 12 work.
 
 ## What Changed
 
@@ -15,6 +15,7 @@ This is the first remote sandbox I/O slice. Non-streaming exec, buffered exec-st
 
 - Added the `worker.exec` method to the worker RPC contract.
 - Added the `worker.exec_stream` method to the worker RPC contract.
+- Added NDJSON stream transport for `worker.exec_stream`.
 - Added `workerproto.ExecParams` for command, argv mode, environment, workdir, timeout, provider, sandbox ID, and provider runtime ID.
 - Added `workerproto.ExecResult` for exit code, stdout, and stderr.
 - Added `workerproto.ExecStreamResult` for stdout/stderr chunk delivery.
@@ -31,18 +32,19 @@ This is the first remote sandbox I/O slice. Non-streaming exec, buffered exec-st
 - Implemented worker-side `worker.exec` handling in the inbound RPC server.
 - Implemented worker-side `worker.exec_stream` handling in the inbound RPC server.
 - Worker exec resolves the provider runtime ID, runs through the worker's provider registry, and returns a typed RPC result.
-- Worker exec and buffered exec stream honor the provided timeout string as a worker-side context deadline when present.
+- Worker exec and live exec stream honor the provided timeout string as a worker-side context deadline when present.
 - Implemented worker-side file read/write/list/delete/move/chmod/stat/glob handling in the inbound RPC server.
 - Implemented worker-side console log handling in the inbound RPC server.
 - Added typed `RPCClient.Exec` support for control-plane calls.
 - Added typed `RPCClient.ExecStream` support for control-plane calls.
+- Added typed `RPCClient.ExecStreamLive` support for live NDJSON control-plane calls.
 - Added typed file RPC client helpers for control-plane calls.
 - Added typed logs RPC client support for control-plane calls.
 
 ### Control Plane Routing
 
 - `Manager.Exec` now detects remote-owned sandboxes and routes non-streaming exec to the owning worker RPC endpoint.
-- `Manager.ExecStream` now detects remote-owned sandboxes and routes buffered exec streams to the owning worker RPC endpoint.
+- `Manager.ExecStream` now detects remote-owned sandboxes and routes live exec streams to the owning worker RPC endpoint.
 - File APIs now detect remote-owned sandboxes and route through the owning worker RPC endpoint.
 - Console logs now detect remote-owned sandboxes and route through the owning worker RPC endpoint.
 - Remote-owned sandboxes now return the owning worker's advertised preview domain when present.
@@ -51,14 +53,14 @@ This is the first remote sandbox I/O slice. Non-streaming exec, buffered exec-st
 - Remote logs use persisted `worker_id` and provider `runtime_id` instead of local provider state.
 - Remote preview URLs use persisted worker ownership plus worker heartbeat capacity.
 - Remote exec keeps the existing event, audit, metrics, timeout, and exec-log behavior.
-- Remote exec stream keeps the existing manager channel API, with chunks buffered by the worker RPC response.
+- Remote exec stream keeps the existing manager channel API while forwarding worker NDJSON chunks as they arrive.
 - Remote sandboxes no longer inherit pool-mode default workdir or file path scoping just because their provider runtime ID is stored in `VMID`.
 
 ## Code Areas
 
 - `internal/workerproto/protocol.go`: `worker.exec`, `worker.exec_stream`, file RPC, and logs RPC contract/result types.
 - `internal/worker/rpc.go`: worker-side exec, exec-stream, file, and logs RPC handlers.
-- `internal/worker/rpc_client.go`: typed exec, exec-stream, file, and logs RPC client methods.
+- `internal/worker/rpc_client.go`: typed exec, live exec-stream, file, and logs RPC client methods.
 - `internal/orchestrator/manager.go`: remote-owned sandbox exec, exec-stream, file, and logs routing.
 - `cmd/stacyvm/cmd_worker.go`: worker preview domain capacity advertisement and Docker preview-domain wiring.
 - `internal/config/config.go`: worker preview domain configuration.
@@ -74,6 +76,5 @@ This is the first remote sandbox I/O slice. Non-streaming exec, buffered exec-st
 
 ## Remaining Phase 12 Direction
 
-- Upgrade remote exec-stream from buffered RPC delivery to true live stream transport.
 - Add production-grade drain handoff/reassignment across workers.
 - Add drain handoff/reassignment semantics for remote-owned sandboxes.

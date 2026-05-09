@@ -4,14 +4,35 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/StacyOs/stacyvm/internal/providers"
 	"github.com/StacyOs/stacyvm/internal/workerproto"
 )
+
+type liveStreamProvider struct {
+	providers.Provider
+	release chan struct{}
+}
+
+func (p *liveStreamProvider) ExecStream(ctx context.Context, sandboxID string, opts providers.ExecOptions) (<-chan providers.StreamChunk, error) {
+	ch := make(chan providers.StreamChunk, 2)
+	go func() {
+		defer close(ch)
+		ch <- providers.StreamChunk{Stream: "stdout", Data: "first\n"}
+		select {
+		case <-ctx.Done():
+		case <-p.release:
+			ch <- providers.StreamChunk{Stream: "stdout", Data: "second\n"}
+		}
+	}()
+	return ch, nil
+}
 
 type fakeLeaseRenewer struct {
 	resourceID string
@@ -163,6 +184,71 @@ func TestRPCServerExecStream(t *testing.T) {
 	if result.SandboxID != "sb-control-plane" || len(result.Chunks) != 1 || result.Chunks[0].Data != "worker stream\n" {
 		t.Fatalf("unexpected result: %+v", result)
 	}
+}
+
+func TestRPCServerExecStreamNDJSONFlushesLiveChunks(t *testing.T) {
+	registry := providers.NewRegistry()
+	base := providers.NewMockProvider()
+	runtimeID, err := base.Spawn(t.Context(), providers.SpawnOptions{Image: "alpine:latest"})
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	release := make(chan struct{})
+	registry.Register(&liveStreamProvider{Provider: base, release: release})
+	if err := registry.SetDefault("mock"); err != nil {
+		t.Fatalf("set default: %v", err)
+	}
+	server := httptest.NewServer((&RPCServer{WorkerID: "worker-a", Token: "worker-secret", Registry: registry}).Handler())
+	defer server.Close()
+
+	params, _ := json.Marshal(workerproto.ExecParams{
+		SandboxID: "sb-control-plane",
+		Provider:  "mock",
+		RuntimeID: runtimeID,
+		Command:   "ignored",
+	})
+	reqBody, _ := json.Marshal(workerproto.Request{
+		ID:       "req-1",
+		Method:   workerproto.MethodExecStream,
+		WorkerID: "worker-a",
+		Params:   params,
+	})
+	req, err := http.NewRequest(http.MethodPost, server.URL+"/rpc", bytes.NewReader(reqBody))
+	if err != nil {
+		t.Fatalf("new request: %v", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Worker-ID", "worker-a")
+	req.Header.Set("X-Worker-Token", "worker-secret")
+	req.Header.Set("X-Worker-Stream", "ndjson")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("do request: %v", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d", resp.StatusCode)
+	}
+
+	lineCh := make(chan string, 2)
+	go func() {
+		buf := make([]byte, 4096)
+		n, err := resp.Body.Read(buf)
+		if err != nil {
+			lineCh <- fmt.Sprintf("read error: %v", err)
+			return
+		}
+		lineCh <- string(buf[:n])
+	}()
+	select {
+	case line := <-lineCh:
+		if !strings.Contains(line, "first") {
+			t.Fatalf("first streamed line = %q, want first chunk", line)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for first live chunk")
+	}
+	close(release)
 }
 
 func TestRPCServerRenewLease(t *testing.T) {
