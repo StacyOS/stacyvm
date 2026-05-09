@@ -32,7 +32,7 @@ This threat model is the Phase 7 baseline. It focuses on StacyVM as a self-hoste
 | Shell command injection | Explicit shell/argv execution modes; argv mode avoids shell interpolation | Expand SDK examples and conformance tests for every provider |
 | Docker container escape | Dropped caps/seccomp/resource config supported | Harden defaults and certify gVisor/Kata |
 | Stale runtime after restart | Startup reconciliation | Distributed leases for multi-worker |
-| Worker impersonation | Worker RPC contract separates worker identity from user/admin identity | Signed worker tokens or mTLS transport enforcement |
+| Worker impersonation | Worker RPC contract separates worker identity from user/admin identity; signed worker tokens enforce worker ID, token ID, audience, expiry, revocation, and worker-only scopes; worker RPC mTLS is wired for transport identity | Target-network mTLS smoke with deployment-issued certificates and centralized token issuer for hardened enterprise deployments |
 | Audit gaps | Admin audit and operation audit persisted for sandbox lifecycle, exec, and file operations | Extend operation audit to every env/registry mutation route |
 | Live preview exposure | Traefik label routing and docs | Host allowlist and preview auth options |
 | Secret leakage in diagnostics | Redaction in diagnostics | Support bundle redaction tests |

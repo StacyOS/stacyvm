@@ -47,6 +47,7 @@ This checkpoint starts hardening remote worker identity for public and enterpris
 - Public support matrix now describes multi-worker as preview with signed identity, worker RPC routing, mTLS wiring, and explicit certification evidence.
 - Cluster conformance documentation now treats signed worker tokens as the production-aligned worker identity path.
 - API and worker RPC docs now describe signed worker token behavior, signing-key rotation, and worker RPC mTLS.
+- Threat model and remote-worker staging docs now treat signed worker tokens as implemented Phase 14 identity controls instead of future work.
 
 ## Phase 13 Cluster Store And Worker Identity - 2026-05-09
 

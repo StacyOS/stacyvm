@@ -2,14 +2,14 @@
 
 This guide runs StacyVM as two local processes: one control plane and one remote worker. Use the mock provider first so you can verify worker registration, remote spawn, remote status refresh, remote exec, and remote destroy before introducing Docker, Firecracker, or a real network boundary.
 
-Remote worker mode can use a shared worker token for internal staging or per-worker tokens for production-aligned staging. It is not the full enterprise production target yet because SQLite store semantics are still single-node oriented.
+Remote worker mode can use a shared worker token for internal staging, per-worker static tokens for migration, or signed worker tokens for production-aligned staging. It is not the full enterprise production target yet because SQLite store semantics are still single-node oriented.
 
 ## Prerequisites
 
 - Built `stacyvm` binary.
 - One terminal for `stacyvm serve`.
 - One terminal for `stacyvm worker`.
-- A random worker token shared by both processes, or a per-worker token configured under `auth.worker_tokens`.
+- A random worker token shared by both processes, a per-worker token configured under `auth.worker_tokens`, or a signed-token setup using `auth.worker_signing_key`.
 
 ## Control Plane Config
 
@@ -186,6 +186,6 @@ The script starts both processes, waits for worker registration, spawns a mock s
 - Remote file APIs are routed to remote workers.
 - Remote logs are routed to remote workers.
 - Remote preview URL metadata is routed from worker heartbeat capacity. The actual preview ingress still depends on the worker/provider ingress setup, such as Docker plus Traefik on the worker host.
-- Worker auth is a shared token suitable for staging; production enterprise mode should move to signed worker identity or mTLS.
+- Shared worker auth is suitable for local/internal staging only. Production-aligned workers should use signed worker identity, secret-file inputs, worker identity certification output, and mTLS when worker RPC crosses a host or network boundary.
 - SQLite remains a staging/single-node store. Enterprise multi-worker mode still needs Postgres-grade lease semantics.
 - Worker shutdown enters drain mode and rejects new spawns. Fresh draining workers keep existing sandbox ownership; stale/offline remote owners are marked `unhealthy`, and expired remote-owned sandboxes become `expired` with their lease released.

@@ -82,6 +82,7 @@ Phase 14 begins the worker identity hardening lane for production multi-worker S
 - Updated production readiness notes to reflect signed worker tokens, worker identity certification reporting, worker RPC mTLS wiring, and the remaining target-network/runtime signoff work.
 - Added cluster conformance coverage for signed-token migration lint warnings.
 - Added cluster conformance coverage for worker identity certification report generation.
+- Updated the threat model and remote-worker staging guide so worker impersonation controls and staging guidance reflect the implemented signed-token and mTLS paths.
 
 ## Code Areas Changed
 
