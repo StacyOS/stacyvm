@@ -5,9 +5,9 @@ Branch: `phase-12-remote-sandbox-io-routing`
 
 ## Summary
 
-Phase 12 starts extending the Phase 11 remote worker runtime beyond lifecycle operations. This checkpoint adds exec routing for remote-owned sandboxes, so the control plane can run commands through the owning worker instead of trying to execute against the local provider.
+Phase 12 extends the Phase 11 remote worker runtime beyond lifecycle operations into sandbox I/O routing and conservative remote ownership handling.
 
-This is the first remote sandbox I/O slice. Non-streaming exec, live exec-stream calls, file APIs, console logs, and remote preview metadata are routed. Production-grade drain handoff remains future Phase 12 work.
+Non-streaming exec, live exec-stream calls, file APIs, console logs, preview metadata, and drain/offline ownership policy are now routed through remote worker ownership.
 
 ## What Changed
 
@@ -23,6 +23,7 @@ This is the first remote sandbox I/O slice. Non-streaming exec, live exec-stream
 - Added worker file result payloads for content, file listings, stat entries, and glob matches.
 - Added `worker.logs` for remote console log retrieval.
 - Added `worker.preview_domain` config and heartbeat capacity advertisement for worker-specific preview ingress.
+- Added `unhealthy` and `expired` sandbox states for remote ownership reconciliation.
 - Added the `worker:exec` scope constant for future token-scoped worker identity.
 - Added the `worker:files` scope constant for future token-scoped worker identity.
 - Added the `worker:logs` scope constant for future token-scoped worker identity.
@@ -48,6 +49,10 @@ This is the first remote sandbox I/O slice. Non-streaming exec, live exec-stream
 - File APIs now detect remote-owned sandboxes and route through the owning worker RPC endpoint.
 - Console logs now detect remote-owned sandboxes and route through the owning worker RPC endpoint.
 - Remote-owned sandboxes now return the owning worker's advertised preview domain when present.
+- Startup reconciliation now applies a remote worker ownership policy:
+  - fresh draining workers keep existing sandbox ownership and remain unavailable for new placement.
+  - stale, offline, or missing worker ownership marks non-expired sandboxes `unhealthy`.
+  - expired remote-owned sandboxes become `expired` and release their durable lease.
 - Remote exec uses persisted `worker_id` and provider `runtime_id` instead of local provider state.
 - Remote file APIs use persisted `worker_id` and provider `runtime_id` instead of local provider state.
 - Remote logs use persisted `worker_id` and provider `runtime_id` instead of local provider state.
@@ -62,6 +67,7 @@ This is the first remote sandbox I/O slice. Non-streaming exec, live exec-stream
 - `internal/worker/rpc.go`: worker-side exec, exec-stream, file, and logs RPC handlers.
 - `internal/worker/rpc_client.go`: typed exec, live exec-stream, file, and logs RPC client methods.
 - `internal/orchestrator/manager.go`: remote-owned sandbox exec, exec-stream, file, and logs routing.
+- `internal/orchestrator/scheduler.go`: expired sandbox ownership exclusion from placement capacity.
 - `cmd/stacyvm/cmd_worker.go`: worker preview domain capacity advertisement and Docker preview-domain wiring.
 - `internal/config/config.go`: worker preview domain configuration.
 - `internal/worker/rpc_test.go`: worker exec and exec-stream RPC handler coverage.
@@ -74,7 +80,6 @@ This is the first remote sandbox I/O slice. Non-streaming exec, live exec-stream
 - `go test ./...`
 - `git diff --check`
 
-## Remaining Phase 12 Direction
+## Remaining Direction
 
-- Add production-grade drain handoff/reassignment across workers.
-- Add drain handoff/reassignment semantics for remote-owned sandboxes.
+- Real stateful runtime migration is still provider-dependent and should be implemented per provider through snapshot or migration capabilities rather than simulated by the control plane.

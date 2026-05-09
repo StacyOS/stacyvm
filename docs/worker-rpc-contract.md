@@ -141,7 +141,14 @@ Remote console logs use `worker.logs` with the persisted provider runtime ID, so
 
 Remote preview metadata uses `capacity.preview_domain` from the owning worker. The control plane returns that domain on remote-owned sandboxes so SDKs and the dashboard build URLs for the worker or cluster ingress that can actually reach the runtime. If a worker does not advertise a preview domain, the control plane falls back to `server.preview_domain`.
 
-`worker.shutdown` is a drain signal. After receiving it, the worker rejects new `worker.spawn` assignments and reports `draining` in future heartbeats, which keeps it out of scheduler placement. Existing sandboxes are not reassigned automatically in Phase 11.
+`worker.shutdown` is a drain signal. After receiving it, the worker rejects new `worker.spawn` assignments and reports `draining` in future heartbeats, which keeps it out of scheduler placement. Existing sandboxes keep their worker ownership while the worker is fresh and draining.
+
+Startup reconciliation applies a conservative remote ownership policy:
+
+- Fresh draining workers keep existing sandbox ownership.
+- Stale, offline, or missing workers cause non-expired remote-owned sandboxes to become `unhealthy`.
+- Expired remote-owned sandboxes become `expired` and release their durable lease.
+- The control plane does not pretend to migrate a stateful runtime to another worker. Real reassignment requires provider-level snapshot or migration support.
 
 Current Phase 11 control-plane lease renewal endpoint:
 

@@ -16,6 +16,7 @@ This checkpoint starts extending remote worker routing beyond sandbox lifecycle 
 - Worker RPC contract and client support for file write, read, list, delete, move, chmod, stat, and glob.
 - Worker RPC contract and client support for remote console logs.
 - Worker preview domain advertisement through heartbeat capacity.
+- Remote worker drain/offline reconciliation policy for owned sandboxes.
 - Control-plane routing for non-streaming exec on remote-owned sandboxes.
 - Control-plane routing for exec-stream calls on remote-owned sandboxes.
 - Control-plane routing for remote-owned sandbox file APIs.
@@ -31,6 +32,8 @@ This checkpoint starts extending remote worker routing beyond sandbox lifecycle 
 - Remote file APIs now use persisted worker ownership and provider runtime ID instead of local provider state.
 - Remote console logs now use persisted worker ownership and provider runtime ID instead of local provider state.
 - Remote-owned sandbox responses now use the owning worker's preview domain when the worker advertises one.
+- Remote-owned sandboxes on stale/offline workers are marked `unhealthy`; expired remote-owned sandboxes are marked `expired` and release their lease.
+- Draining workers keep existing ownership but stay out of new placement.
 - Pool-mode default workdir is no longer applied to remote sandboxes just because their provider runtime ID is stored in `VMID`.
 
 ## Phase 11 Remote Worker Runtime - 2026-05-09

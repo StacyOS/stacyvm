@@ -175,6 +175,12 @@ func (m *Manager) Reconcile(ctx context.Context) error {
 		if SandboxState(rec.State) == StateDestroyed {
 			continue
 		}
+		if handled, err := m.reconcileRemoteOwnedSandbox(ctx, rec); handled || err != nil {
+			if err != nil {
+				return err
+			}
+			continue
+		}
 
 		prov, err := m.registry.Get(rec.Provider)
 		if err != nil {
@@ -248,6 +254,77 @@ func (m *Manager) Reconcile(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (m *Manager) reconcileRemoteOwnedSandbox(ctx context.Context, rec *store.SandboxRecord) (bool, error) {
+	if rec == nil || strings.TrimSpace(rec.WorkerID) == "" || rec.WorkerID == m.workerID {
+		return false, nil
+	}
+	workerRec, err := m.store.GetWorker(ctx, rec.WorkerID)
+	reason := ""
+	if err != nil {
+		reason = "worker_missing"
+	} else if time.Since(workerRec.LastHeartbeat) > workerHeartbeatStaleAfter {
+		reason = "worker_stale"
+	} else if strings.EqualFold(workerRec.Status, "draining") {
+		m.publishRemoteOwnershipEvent(rec, "worker_draining", "worker is draining; keeping existing ownership")
+		sb := recordToSandbox(rec)
+		if refreshed, refreshErr := m.refreshRemoteSandboxStatus(ctx, sb); refreshErr == nil {
+			m.mu.Lock()
+			m.sandboxes[rec.ID] = refreshed
+			m.mu.Unlock()
+		}
+		return true, nil
+	} else if !strings.EqualFold(workerRec.Status, "online") {
+		reason = "worker_" + strings.TrimSpace(workerRec.Status)
+	}
+	if reason == "" {
+		sb := recordToSandbox(rec)
+		refreshed, refreshErr := m.refreshRemoteSandboxStatus(ctx, sb)
+		if refreshErr != nil {
+			reason = "worker_rpc_unavailable"
+		} else {
+			m.mu.Lock()
+			m.sandboxes[rec.ID] = refreshed
+			m.mu.Unlock()
+			return true, nil
+		}
+	}
+
+	state := StateUnhealthy
+	action := "marked_unhealthy"
+	if !rec.ExpiresAt.IsZero() && time.Now().UTC().After(rec.ExpiresAt) {
+		state = StateExpired
+		action = "marked_expired"
+		_ = m.store.ReleaseLease(ctx, rec.ID, rec.WorkerID)
+	}
+	if SandboxState(rec.State) != state {
+		if err := m.store.UpdateSandboxState(ctx, rec.ID, string(state)); err != nil {
+			return true, fmt.Errorf("marking remote sandbox %s %s: %w", rec.ID, state, err)
+		}
+	}
+	sb := recordToSandbox(rec)
+	sb.State = state
+	m.applyPreviewDomain(ctx, sb)
+	m.mu.Lock()
+	m.sandboxes[rec.ID] = sb
+	m.mu.Unlock()
+	m.publishRemoteOwnershipEvent(rec, action, reason)
+	return true, nil
+}
+
+func (m *Manager) publishRemoteOwnershipEvent(rec *store.SandboxRecord, action, reason string) {
+	m.logger.Info().
+		Str("sandbox", rec.ID).
+		Str("worker", rec.WorkerID).
+		Str("action", action).
+		Str("reason", reason).
+		Msg("reconcile: remote sandbox ownership policy applied")
+	m.publishOperationalEvent(EventReconcileAction, rec.ID, map[string]interface{}{
+		"action": action,
+		"reason": reason,
+		"worker": rec.WorkerID,
+	})
 }
 
 func (m *Manager) reconcileProviderRuntimes(ctx context.Context, known map[string]struct{}) error {

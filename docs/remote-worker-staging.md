@@ -185,4 +185,4 @@ The script starts both processes, waits for worker registration, spawns a mock s
 - Remote preview URL metadata is routed from worker heartbeat capacity. The actual preview ingress still depends on the worker/provider ingress setup, such as Docker plus Traefik on the worker host.
 - Worker auth is a shared token suitable for staging; production enterprise mode should move to signed worker identity or mTLS.
 - SQLite remains a staging/single-node store. Enterprise multi-worker mode still needs Postgres-grade lease semantics.
-- Worker shutdown enters drain mode and rejects new spawns; full assignment handoff to another worker is still pending.
+- Worker shutdown enters drain mode and rejects new spawns. Fresh draining workers keep existing sandbox ownership; stale/offline remote owners are marked `unhealthy`, and expired remote-owned sandboxes become `expired` with their lease released.

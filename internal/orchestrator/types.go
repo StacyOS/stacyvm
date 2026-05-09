@@ -8,6 +8,8 @@ const (
 	StateCreating  SandboxState = "creating"
 	StateRunning   SandboxState = "running"
 	StateIdle      SandboxState = "idle"
+	StateUnhealthy SandboxState = "unhealthy"
+	StateExpired   SandboxState = "expired"
 	StateDestroyed SandboxState = "destroyed"
 	StateError     SandboxState = "error"
 )

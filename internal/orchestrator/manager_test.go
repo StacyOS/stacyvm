@@ -739,6 +739,102 @@ func TestManager_ReconcileMarksMissingRuntimeDestroyed(t *testing.T) {
 	assertEventType(t, m.events.History(10), EventReconcileAction)
 }
 
+func TestManager_ReconcileMarksStaleRemoteWorkerUnhealthy(t *testing.T) {
+	m := setupManager(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	if err := m.store.SaveWorker(ctx, &store.WorkerRecord{
+		ID:            "worker-remote",
+		Hostname:      "remote-host",
+		Status:        "online",
+		Providers:     `["mock"]`,
+		Capabilities:  `["remote_worker","spawn"]`,
+		Capacity:      `{"max_sandboxes":10}`,
+		LastHeartbeat: now.Add(-10 * time.Minute),
+	}); err != nil {
+		t.Fatalf("save worker: %v", err)
+	}
+	if err := m.store.CreateSandbox(ctx, &store.SandboxRecord{
+		ID:        "sb-remote-stale",
+		State:     string(StateRunning),
+		Provider:  "mock",
+		Image:     "alpine:latest",
+		MemoryMB:  512,
+		VCPUs:     1,
+		Metadata:  "{}",
+		WorkerID:  "worker-remote",
+		VMID:      "runtime-remote",
+		CreatedAt: now,
+		ExpiresAt: now.Add(time.Hour),
+		UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("create sandbox: %v", err)
+	}
+
+	if err := m.Reconcile(ctx); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	rec, err := m.store.GetSandbox(ctx, "sb-remote-stale")
+	if err != nil {
+		t.Fatalf("get sandbox: %v", err)
+	}
+	if rec.State != string(StateUnhealthy) {
+		t.Fatalf("state = %s, want unhealthy", rec.State)
+	}
+	assertEventType(t, m.events.History(10), EventReconcileAction)
+}
+
+func TestManager_ReconcileMarksExpiredRemoteWorkerSandboxExpiredAndReleasesLease(t *testing.T) {
+	m := setupManager(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+	if err := m.store.SaveWorker(ctx, &store.WorkerRecord{
+		ID:            "worker-remote",
+		Hostname:      "remote-host",
+		Status:        "offline",
+		Providers:     `["mock"]`,
+		Capabilities:  `["remote_worker","spawn"]`,
+		Capacity:      `{"max_sandboxes":10}`,
+		LastHeartbeat: now.Add(-10 * time.Minute),
+	}); err != nil {
+		t.Fatalf("save worker: %v", err)
+	}
+	if err := m.store.CreateSandbox(ctx, &store.SandboxRecord{
+		ID:        "sb-remote-expired",
+		State:     string(StateRunning),
+		Provider:  "mock",
+		Image:     "alpine:latest",
+		MemoryMB:  512,
+		VCPUs:     1,
+		Metadata:  "{}",
+		WorkerID:  "worker-remote",
+		VMID:      "runtime-remote",
+		CreatedAt: now.Add(-2 * time.Hour),
+		ExpiresAt: now.Add(-time.Hour),
+		UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("create sandbox: %v", err)
+	}
+	if _, err := m.store.AcquireLease(ctx, "sb-remote-expired", "sandbox", "worker-remote", time.Hour); err != nil {
+		t.Fatalf("acquire lease: %v", err)
+	}
+
+	if err := m.Reconcile(ctx); err != nil {
+		t.Fatalf("reconcile: %v", err)
+	}
+	rec, err := m.store.GetSandbox(ctx, "sb-remote-expired")
+	if err != nil {
+		t.Fatalf("get sandbox: %v", err)
+	}
+	if rec.State != string(StateExpired) {
+		t.Fatalf("state = %s, want expired", rec.State)
+	}
+	if _, err := m.store.GetLease(ctx, "sb-remote-expired"); !errors.Is(err, store.ErrNotFound) {
+		t.Fatalf("lease err = %v, want not found", err)
+	}
+	assertEventType(t, m.events.History(10), EventReconcileAction)
+}
+
 type runtimeListerProvider struct {
 	providers.Provider
 	runtimes []providers.RuntimeSandbox

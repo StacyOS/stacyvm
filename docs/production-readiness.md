@@ -49,10 +49,10 @@ This checklist tracks the Phase 7 release-candidate hardening work needed before
 - Worker heartbeat and deletion are protected by the admin namespace. Done in Phase 10 slice 1.
 - Diagnostics and Prometheus expose worker registry state. Done in Phase 10 slice 1.
 - Sandbox records persist their owning worker ID and diagnostics expose sandbox counts by worker. Done in Phase 10 slice 2.
-- Scheduler placement policy is worker-aware. Remote spawn, status, destroy, live exec streaming, files, logs, and preview metadata are available for workers that advertise `rpc_url`; production-grade drain handoff still needs hardening.
+- Scheduler placement policy is worker-aware. Remote spawn, status, destroy, live exec streaming, files, logs, preview metadata, and conservative drain/offline ownership policy are available for workers that advertise `rpc_url`.
 - Sandbox ownership is tied to worker IDs. Remote spawn/status/destroy ownership is enforced through worker RPC and persisted runtime IDs.
 - Distributed leases prevent duplicate worker ownership. Remote spawn, renew, and destroy now carry lease tokens; production still needs Postgres-grade lease semantics.
-- Remote worker authentication and RPC contract are implemented for heartbeat, lease renewal, spawn, status, destroy, exec, files, logs, and preview metadata using a shared worker token suitable for staging.
+- Remote worker authentication and RPC contract are implemented for heartbeat, lease renewal, spawn, status, destroy, exec, files, logs, preview metadata, and drain/offline ownership reconciliation using a shared worker token suitable for staging.
 
 ## Current Release-Candidate Gates
 

@@ -13,6 +13,8 @@
  *
  * - `creating` -- the sandbox is being provisioned
  * - `running`  -- the sandbox is up and accepting commands
+ * - `unhealthy` -- the owning worker/runtime needs operator attention
+ * - `expired`  -- the sandbox TTL elapsed before cleanup could complete
  * - `stopped`  -- the sandbox has been gracefully stopped
  * - `destroyed` -- the sandbox has been torn down
  * - `error`    -- the sandbox encountered a fatal error
@@ -20,6 +22,8 @@
 export type SandboxState =
   | "creating"
   | "running"
+  | "unhealthy"
+  | "expired"
   | "stopped"
   | "destroyed"
   | "error";

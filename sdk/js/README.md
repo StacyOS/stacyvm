@@ -369,7 +369,7 @@ import {
   Sandbox,
   TemplateManager,
   // Types
-  SandboxState,        // "creating" | "running" | "stopped" | "destroyed" | "error"
+  SandboxState,        // "creating" | "running" | "unhealthy" | "expired" | "stopped" | "destroyed" | "error"
   SandboxInfo,
   SpawnOptions,
   ExecOptions,

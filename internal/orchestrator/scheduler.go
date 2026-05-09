@@ -31,7 +31,8 @@ func (m *Manager) evaluateWorkerPlacement(ctx context.Context, provider string, 
 
 	activeByWorker := make(map[string]int)
 	for _, sb := range sandboxes {
-		if SandboxState(sb.State) == StateDestroyed {
+		state := SandboxState(sb.State)
+		if state == StateDestroyed || state == StateExpired {
 			continue
 		}
 		workerID := strings.TrimSpace(sb.WorkerID)
