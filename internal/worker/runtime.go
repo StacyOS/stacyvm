@@ -22,6 +22,7 @@ type Runtime struct {
 	Providers         []string
 	Capacity          map[string]interface{}
 	Registry          *providers.Registry
+	RPCTLS            TLSConfig
 }
 
 func (r Runtime) Run(ctx context.Context) error {
@@ -35,10 +36,19 @@ func (r Runtime) Run(ctx context.Context) error {
 			Registry:     r.Registry,
 			LeaseRenewer: r.Client,
 		}
-		server = NewHTTPServer(r.ListenAddr, rpcServer.Handler())
+		var err error
+		server, err = NewHTTPServerWithTLS(r.ListenAddr, rpcServer.Handler(), r.RPCTLS)
+		if err != nil {
+			return err
+		}
 		go func() {
 			r.Logger.Info().Str("addr", r.ListenAddr).Msg("starting worker RPC server")
-			err := server.ListenAndServe()
+			var err error
+			if r.RPCTLS.Enabled {
+				err = server.ListenAndServeTLS("", "")
+			} else {
+				err = server.ListenAndServe()
+			}
 			if errors.Is(err, http.ErrServerClosed) {
 				err = nil
 			}

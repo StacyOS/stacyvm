@@ -154,6 +154,15 @@ worker:
   listen_addr: "127.0.0.1:7430"
   heartbeat_interval: "5s"
   shutdown_timeout: "15s"
+  rpc_tls:
+    enabled: true
+    server_cert_file: "/etc/stacyvm/tls/worker.crt"
+    server_key_file: "/etc/stacyvm/tls/worker.key"
+    client_ca_file: "/etc/stacyvm/tls/control-plane-ca.crt"
+    ca_file: "/etc/stacyvm/tls/worker-ca.crt"
+    client_cert_file: "/etc/stacyvm/tls/control-plane.crt"
+    client_key_file: "/etc/stacyvm/tls/control-plane.key"
+    server_name: "worker-a.internal"
 auth:
   worker_token: "worker-secret"
   worker_signing_key: "0123456789abcdef0123456789abcdef"
@@ -177,6 +186,9 @@ auth:
 	}
 	if cfg.Worker.ListenAddr != "127.0.0.1:7430" {
 		t.Fatalf("listen addr = %q", cfg.Worker.ListenAddr)
+	}
+	if !cfg.Worker.RPCTLS.Enabled || cfg.Worker.RPCTLS.ServerName != "worker-a.internal" {
+		t.Fatalf("worker rpc tls = %+v, want enabled worker-a.internal config", cfg.Worker.RPCTLS)
 	}
 	if cfg.Auth.WorkerToken != "worker-secret" {
 		t.Fatalf("worker token = %q, want worker-secret", cfg.Auth.WorkerToken)

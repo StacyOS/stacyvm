@@ -16,13 +16,17 @@ This checkpoint starts hardening remote worker identity for public and enterpris
 - `stacyvm worker token <worker-id>` for issuing signed worker tokens.
 - Config loading and defaults for `auth.worker_signing_key` and `auth.worker_signing_keys`.
 - Config lint awareness for signed worker credentials.
+- Worker RPC mTLS config under `worker.rpc_tls`.
+- TLS server support for inbound worker RPC.
+- TLS client support for control-plane calls to remote worker RPC.
+- Config lint checks for worker RPC TLS certificate and CA settings.
 - Phase 14 release notes under `docs/releases/phase-14-worker-identity-hardening.md`.
 
 ### Changed
 
 - Worker auth now accepts signed tokens, per-worker static tokens, or the shared staging token while preserving existing compatibility.
 - Cluster conformance documentation now treats signed worker tokens as the production-aligned worker identity path.
-- API and worker RPC docs now describe signed worker token behavior and signing-key rotation.
+- API and worker RPC docs now describe signed worker token behavior, signing-key rotation, and worker RPC mTLS.
 
 ## Phase 13 Cluster Store And Worker Identity - 2026-05-09
 

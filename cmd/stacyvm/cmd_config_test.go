@@ -99,6 +99,47 @@ func TestLintAuthConfigAcceptsWorkerSigningKey(t *testing.T) {
 	}
 }
 
+func TestLintWorkerRPCConfigChecksMTLSInputs(t *testing.T) {
+	cfg := validProductionConfig()
+	cfg.Worker.RPCTLS.Enabled = true
+
+	checks := lintWorkerRPCConfig(cfg, true)
+	statuses := map[string]doctorStatus{}
+	for _, check := range checks {
+		statuses[check.Name] = check.Status
+	}
+	for _, name := range []string{
+		"worker.rpc_tls.server_cert",
+		"worker.rpc_tls.client_ca",
+		"worker.rpc_tls.ca",
+		"worker.rpc_tls.client_cert",
+	} {
+		if statuses[name] != doctorFail {
+			t.Fatalf("%s status = %s, want %s", name, statuses[name], doctorFail)
+		}
+	}
+}
+
+func TestLintWorkerRPCConfigPassesCompleteMTLSInputs(t *testing.T) {
+	cfg := validProductionConfig()
+	cfg.Worker.RPCTLS = config.WorkerRPCTLSConfig{
+		Enabled:        true,
+		ServerCertFile: "/etc/stacyvm/tls/worker.crt",
+		ServerKeyFile:  "/etc/stacyvm/tls/worker.key",
+		ClientCAFile:   "/etc/stacyvm/tls/control-plane-ca.crt",
+		CAFile:         "/etc/stacyvm/tls/worker-ca.crt",
+		ClientCertFile: "/etc/stacyvm/tls/control-plane.crt",
+		ClientKeyFile:  "/etc/stacyvm/tls/control-plane.key",
+	}
+
+	checks := lintWorkerRPCConfig(cfg, true)
+	for _, check := range checks {
+		if check.Status == doctorFail {
+			t.Fatalf("%s failed: %s", check.Name, check.Message)
+		}
+	}
+}
+
 func validProductionConfig() *config.Config {
 	return &config.Config{
 		Auth: config.AuthConfig{

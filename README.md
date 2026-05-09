@@ -486,6 +486,16 @@ worker:
   listen_addr: ""                 # set to enable inbound worker RPC
   heartbeat_interval: "30s"
   shutdown_timeout: "10s"
+  rpc_tls:
+    enabled: false
+    server_cert_file: ""
+    server_key_file: ""
+    client_ca_file: ""
+    ca_file: ""
+    client_cert_file: ""
+    client_key_file: ""
+    server_name: ""
+    insecure_skip_verify: false
 
 providers:
   default: "docker"

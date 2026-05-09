@@ -108,6 +108,33 @@ No-downtime signing-key rotation uses a two-key window:
 4. Wait until all old worker tokens have expired.
 5. Remove the old key from `auth.worker_signing_keys`.
 
+## Worker RPC mTLS
+
+Signed worker tokens authenticate the worker identity at the application layer. Enterprise deployments should also protect worker RPC transport with mTLS when worker RPC crosses a host or network boundary.
+
+Worker RPC TLS is opt-in through `worker.rpc_tls`:
+
+```yaml
+worker:
+  listen_addr: "0.0.0.0:7430"
+  rpc_tls:
+    enabled: true
+    server_cert_file: "/etc/stacyvm/tls/worker.crt"
+    server_key_file: "/etc/stacyvm/tls/worker.key"
+    client_ca_file: "/etc/stacyvm/tls/control-plane-ca.crt"
+    ca_file: "/etc/stacyvm/tls/worker-ca.crt"
+    client_cert_file: "/etc/stacyvm/tls/control-plane.crt"
+    client_key_file: "/etc/stacyvm/tls/control-plane.key"
+    server_name: "worker-a.internal"
+    insecure_skip_verify: false
+```
+
+On worker nodes, `server_cert_file` and `server_key_file` serve the inbound `/rpc` endpoint. When `client_ca_file` is set, the worker requires and verifies a client certificate from the control plane.
+
+On control-plane nodes, `ca_file` verifies worker server certificates, `client_cert_file` and `client_key_file` present the control-plane client identity, and `server_name` pins the expected worker certificate name when DNS or advertised `rpc_url` hostnames differ.
+
+`insecure_skip_verify` exists only for throwaway local tests and should fail production config lint.
+
 Current Phase 11 heartbeat endpoint:
 
 ```text

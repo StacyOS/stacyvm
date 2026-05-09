@@ -42,6 +42,7 @@ type Manager struct {
 	limits        OperationalLimits
 	workerID      string
 	workerToken   string
+	workerRPCTLS  worker.TLSConfig
 
 	vmPoolMgr  *VMPoolManager
 	poolConfig config.PoolConfig
@@ -73,6 +74,7 @@ type ManagerConfig struct {
 	Limits        OperationalLimits
 	WorkerID      string
 	WorkerToken   string
+	WorkerRPCTLS  worker.TLSConfig
 }
 
 func NewManager(registry *providers.Registry, st store.Store, events *EventBus, logger zerolog.Logger, cfg ManagerConfig) *Manager {
@@ -92,6 +94,7 @@ func NewManager(registry *providers.Registry, st store.Store, events *EventBus, 
 		limits:        cfg.Limits,
 		workerID:      strings.TrimSpace(cfg.WorkerID),
 		workerToken:   strings.TrimSpace(cfg.WorkerToken),
+		workerRPCTLS:  cfg.WorkerRPCTLS,
 		poolConfig:    cfg.Pool,
 		previewDomain: cfg.PreviewDomain,
 		ctx:           ctx,
@@ -2086,6 +2089,7 @@ func (m *Manager) remoteWorkerRPCClient(ctx context.Context, workerID string) (w
 		BaseURL:  rpcURL,
 		WorkerID: workerID,
 		Token:    m.workerToken,
+		RPCTLS:   m.workerRPCTLS,
 	}, nil
 }
 

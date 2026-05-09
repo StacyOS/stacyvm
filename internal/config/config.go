@@ -44,12 +44,25 @@ func (s ServerConfig) Addr() string {
 }
 
 type WorkerConfig struct {
-	ID                string `mapstructure:"id"`
-	ControlPlaneURL   string `mapstructure:"control_plane_url"`
-	ListenAddr        string `mapstructure:"listen_addr"`
-	PreviewDomain     string `mapstructure:"preview_domain"`
-	HeartbeatInterval string `mapstructure:"heartbeat_interval"`
-	ShutdownTimeout   string `mapstructure:"shutdown_timeout"`
+	ID                string             `mapstructure:"id"`
+	ControlPlaneURL   string             `mapstructure:"control_plane_url"`
+	ListenAddr        string             `mapstructure:"listen_addr"`
+	PreviewDomain     string             `mapstructure:"preview_domain"`
+	HeartbeatInterval string             `mapstructure:"heartbeat_interval"`
+	ShutdownTimeout   string             `mapstructure:"shutdown_timeout"`
+	RPCTLS            WorkerRPCTLSConfig `mapstructure:"rpc_tls"`
+}
+
+type WorkerRPCTLSConfig struct {
+	Enabled            bool   `mapstructure:"enabled"`
+	ServerCertFile     string `mapstructure:"server_cert_file"`
+	ServerKeyFile      string `mapstructure:"server_key_file"`
+	ClientCAFile       string `mapstructure:"client_ca_file"`
+	CAFile             string `mapstructure:"ca_file"`
+	ClientCertFile     string `mapstructure:"client_cert_file"`
+	ClientKeyFile      string `mapstructure:"client_key_file"`
+	ServerName         string `mapstructure:"server_name"`
+	InsecureSkipVerify bool   `mapstructure:"insecure_skip_verify"`
 }
 
 type ProvidersConfig struct {
@@ -186,6 +199,15 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("worker.preview_domain", "")
 	v.SetDefault("worker.heartbeat_interval", "30s")
 	v.SetDefault("worker.shutdown_timeout", "10s")
+	v.SetDefault("worker.rpc_tls.enabled", false)
+	v.SetDefault("worker.rpc_tls.server_cert_file", "")
+	v.SetDefault("worker.rpc_tls.server_key_file", "")
+	v.SetDefault("worker.rpc_tls.client_ca_file", "")
+	v.SetDefault("worker.rpc_tls.ca_file", "")
+	v.SetDefault("worker.rpc_tls.client_cert_file", "")
+	v.SetDefault("worker.rpc_tls.client_key_file", "")
+	v.SetDefault("worker.rpc_tls.server_name", "")
+	v.SetDefault("worker.rpc_tls.insecure_skip_verify", false)
 
 	v.SetDefault("providers.default", "docker")
 	v.SetDefault("providers.mock.enabled", false)

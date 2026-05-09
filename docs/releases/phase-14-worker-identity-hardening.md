@@ -43,6 +43,14 @@ Phase 14 begins the worker identity hardening lane for production multi-worker S
   - wait for old token TTLs to expire
   - remove the old key from `auth.worker_signing_keys`
 
+### Worker RPC mTLS
+
+- Added `worker.rpc_tls` configuration for enterprise worker RPC networks.
+- Added TLS server support for `stacyvm worker --listen`.
+- Added mTLS client support for control-plane calls to worker RPC.
+- Added config lint checks for worker server certificates, client CA verification, control-plane client certificates, worker CA verification, and unsafe `insecure_skip_verify`.
+- Documented how worker-side and control-plane-side certificate settings are used.
+
 ### Documentation
 
 - Updated the README configuration example.
@@ -56,7 +64,8 @@ Phase 14 begins the worker identity hardening lane for production multi-worker S
 - `internal/api/middleware`: signed token creation, verification, worker scope filtering, and worker auth config.
 - `internal/api`: server worker auth wiring for `auth.worker_signing_key`.
 - `internal/config`: config schema and defaults for primary and rotation worker signing keys.
-- `internal/worker`: dynamic token callback support for worker heartbeat and lease renewal.
+- `internal/worker`: dynamic token callback support for worker heartbeat and lease renewal, plus worker RPC TLS client/server helpers.
+- `internal/orchestrator`: worker RPC client TLS wiring for remote worker calls.
 - `cmd/stacyvm`: `serve`, `worker`, `worker token`, and `config lint` wiring.
 - `docs`: worker identity and conformance documentation.
 
@@ -68,7 +77,8 @@ The new signed-token path is additive:
 - Existing `auth.worker_tokens.<worker_id>` deployments continue to work.
 - Signed tokens can be introduced gradually by setting `auth.worker_signing_key`.
 - Key rotation can be introduced gradually by adding old keys to `auth.worker_signing_keys`.
+- Worker RPC mTLS is opt-in; local HTTP worker RPC remains available for local development and internal staging.
 
 ## Remaining Phase 14 Direction
 
-- Add mTLS guidance for enterprise worker-to-control-plane and control-plane-to-worker networks.
+- Run worker RPC mTLS smoke tests with real certificates in the target enterprise network.

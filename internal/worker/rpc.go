@@ -575,3 +575,13 @@ func NewHTTPServer(addr string, handler http.Handler) *http.Server {
 		IdleTimeout:       60 * time.Second,
 	}
 }
+
+func NewHTTPServerWithTLS(addr string, handler http.Handler, tlsConfig TLSConfig) (*http.Server, error) {
+	server := NewHTTPServer(addr, handler)
+	cfg, err := tlsConfig.ServerConfig()
+	if err != nil {
+		return nil, err
+	}
+	server.TLSConfig = cfg
+	return server, nil
+}

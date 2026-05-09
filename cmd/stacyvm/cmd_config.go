@@ -59,6 +59,7 @@ func lintConfig(cfg *config.Config, production bool) []doctorCheck {
 	checks = append(checks, lintDatabaseConfig(cfg, production)...)
 	checks = append(checks, lintRuntimeLimits(cfg, production)...)
 	checks = append(checks, lintLoggingConfig(cfg, production)...)
+	checks = append(checks, lintWorkerRPCConfig(cfg, production)...)
 	checks = append(checks, lintProviderConfig(cfg, production)...)
 	return checks
 }
@@ -193,6 +194,41 @@ func lintLoggingConfig(cfg *config.Config, production bool) []doctorCheck {
 		return []doctorCheck{{Name: "logging.format", Status: severityForProduction(production), Message: "logs are not JSON formatted", Remediation: "Set logging.format=json so production log collectors can parse records reliably."}}
 	}
 	return []doctorCheck{{Name: "logging.format", Status: doctorPass, Message: "json"}}
+}
+
+func lintWorkerRPCConfig(cfg *config.Config, production bool) []doctorCheck {
+	rpcTLS := cfg.Worker.RPCTLS
+	if !rpcTLS.Enabled {
+		return []doctorCheck{{Name: "worker.rpc_tls.enabled", Status: doctorWarn, Message: "worker RPC TLS is disabled", Remediation: "Enable worker.rpc_tls.enabled with server, client, and CA certificates before exposing worker RPC across a network."}}
+	}
+	var checks []doctorCheck
+	checks = append(checks, doctorCheck{Name: "worker.rpc_tls.enabled", Status: doctorPass, Message: "enabled"})
+	if rpcTLS.ServerCertFile == "" || rpcTLS.ServerKeyFile == "" {
+		checks = append(checks, doctorCheck{Name: "worker.rpc_tls.server_cert", Status: severityForProduction(production), Message: "server cert and key are required", Remediation: "Set worker.rpc_tls.server_cert_file and worker.rpc_tls.server_key_file on worker nodes."})
+	} else {
+		checks = append(checks, doctorCheck{Name: "worker.rpc_tls.server_cert", Status: doctorPass, Message: "configured"})
+	}
+	if rpcTLS.ClientCAFile == "" {
+		checks = append(checks, doctorCheck{Name: "worker.rpc_tls.client_ca", Status: severityForProduction(production), Message: "client CA is not configured", Remediation: "Set worker.rpc_tls.client_ca_file so worker RPC servers require trusted control-plane client certificates."})
+	} else {
+		checks = append(checks, doctorCheck{Name: "worker.rpc_tls.client_ca", Status: doctorPass, Message: "configured"})
+	}
+	if rpcTLS.CAFile == "" {
+		checks = append(checks, doctorCheck{Name: "worker.rpc_tls.ca", Status: severityForProduction(production), Message: "server CA is not configured", Remediation: "Set worker.rpc_tls.ca_file so control planes verify worker RPC server certificates."})
+	} else {
+		checks = append(checks, doctorCheck{Name: "worker.rpc_tls.ca", Status: doctorPass, Message: "configured"})
+	}
+	if rpcTLS.ClientCertFile == "" || rpcTLS.ClientKeyFile == "" {
+		checks = append(checks, doctorCheck{Name: "worker.rpc_tls.client_cert", Status: severityForProduction(production), Message: "client cert and key are required", Remediation: "Set worker.rpc_tls.client_cert_file and worker.rpc_tls.client_key_file on control-plane nodes."})
+	} else {
+		checks = append(checks, doctorCheck{Name: "worker.rpc_tls.client_cert", Status: doctorPass, Message: "configured"})
+	}
+	if rpcTLS.InsecureSkipVerify {
+		checks = append(checks, doctorCheck{Name: "worker.rpc_tls.insecure_skip_verify", Status: severityForProduction(production), Message: "TLS certificate verification is disabled", Remediation: "Set worker.rpc_tls.insecure_skip_verify=false outside throwaway local tests."})
+	} else {
+		checks = append(checks, doctorCheck{Name: "worker.rpc_tls.insecure_skip_verify", Status: doctorPass, Message: "disabled"})
+	}
+	return checks
 }
 
 func lintProviderConfig(cfg *config.Config, production bool) []doctorCheck {

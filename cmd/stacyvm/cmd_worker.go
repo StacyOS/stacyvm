@@ -84,6 +84,7 @@ func newWorkerCmd() *cobra.Command {
 					"preview_domain":          previewDomain,
 				},
 				Registry: registry,
+				RPCTLS:   workerTLSConfig(cfg.Worker.RPCTLS),
 			}
 			if once {
 				return rt.RunOnce(cmd.Context())
@@ -191,6 +192,20 @@ func signedWorkerTokenFunc(workerID, signingKey string) func() (string, error) {
 			IssuedAt:  now.Unix(),
 			ExpiresAt: now.Add(5 * time.Minute).Unix(),
 		})
+	}
+}
+
+func workerTLSConfig(cfg config.WorkerRPCTLSConfig) worker.TLSConfig {
+	return worker.TLSConfig{
+		Enabled:            cfg.Enabled,
+		ServerCertFile:     cfg.ServerCertFile,
+		ServerKeyFile:      cfg.ServerKeyFile,
+		ClientCAFile:       cfg.ClientCAFile,
+		CAFile:             cfg.CAFile,
+		ClientCertFile:     cfg.ClientCertFile,
+		ClientKeyFile:      cfg.ClientKeyFile,
+		ServerName:         cfg.ServerName,
+		InsecureSkipVerify: cfg.InsecureSkipVerify,
 	}
 }
 

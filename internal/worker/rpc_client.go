@@ -19,6 +19,7 @@ type RPCClient struct {
 	WorkerID   string
 	Token      string
 	HTTPClient *http.Client
+	RPCTLS     TLSConfig
 }
 
 func (c RPCClient) Spawn(ctx context.Context, reqID string, lease workerproto.LeaseToken, params workerproto.SpawnParams) (workerproto.SpawnResult, error) {
@@ -119,9 +120,9 @@ func (c RPCClient) ExecStreamLive(ctx context.Context, reqID string, params work
 	httpReq.Header.Set("X-Worker-ID", c.WorkerID)
 	httpReq.Header.Set("X-Worker-Token", c.Token)
 
-	client := c.HTTPClient
-	if client == nil {
-		client = &http.Client{}
+	client, err := c.httpClient(&http.Client{})
+	if err != nil {
+		return nil, nil, err
 	}
 	resp, err := client.Do(httpReq)
 	if err != nil {
@@ -348,9 +349,9 @@ func (c RPCClient) call(ctx context.Context, request workerproto.Request) (worke
 	httpReq.Header.Set("X-Worker-ID", c.WorkerID)
 	httpReq.Header.Set("X-Worker-Token", c.Token)
 
-	client := c.HTTPClient
-	if client == nil {
-		client = &http.Client{Timeout: 30 * time.Second}
+	client, err := c.httpClient(&http.Client{Timeout: 30 * time.Second})
+	if err != nil {
+		return zero, err
 	}
 	httpResp, err := client.Do(httpReq)
 	if err != nil {
@@ -374,6 +375,13 @@ func (c RPCClient) call(ctx context.Context, request workerproto.Request) (worke
 		return zero, fmt.Errorf("worker RPC failed: %s", response.Error)
 	}
 	return response, nil
+}
+
+func (c RPCClient) httpClient(defaultClient *http.Client) (*http.Client, error) {
+	if c.HTTPClient != nil {
+		return c.HTTPClient, nil
+	}
+	return c.RPCTLS.HTTPClient(defaultClient)
 }
 
 func mustRawMessage(value interface{}) json.RawMessage {

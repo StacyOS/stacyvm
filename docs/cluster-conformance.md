@@ -41,7 +41,7 @@ Postgres must not be marked production-ready for a deployment until it runs the 
 | `auth.worker_tokens.<worker_id>` | Supported | Production-aligned staging with individually rotatable worker credentials |
 | `auth.worker_signing_key` | Supported | Public or enterprise deployments that need short-lived signed worker credentials |
 | `auth.worker_signing_keys` | Supported | No-downtime signing-key rotation window for old verification keys |
-| mTLS | Planned | Enterprise deployments that require network-level worker identity |
+| Worker RPC mTLS | Supported | Enterprise deployments that require network-level worker transport identity |
 
 When `auth.worker_tokens` contains a worker ID, that worker must authenticate with its own token. The shared token is rejected for that worker ID.
 
@@ -85,10 +85,11 @@ Phase 14 starts worker identity hardening on top of that foundation:
 - HMAC-signed worker tokens.
 - Signed-token config lint awareness.
 - Worker runtime token derivation for heartbeat and lease renewal.
+- Worker RPC mTLS config, transport wiring, and production lint checks.
 
 Remaining cluster-storage and identity work after Phase 14:
 
 - Extend multi-worker conformance beyond the mock provider into certified Docker, gVisor/Kata, and Firecracker hosts.
 - Add backup/restore-specific Postgres migration rehearsal before enterprise production rollout.
 - Add token issuer and rotation workflows so workers do not need direct access to the signing key in hardened deployments.
-- Add mTLS guidance for enterprise worker networks.
+- Run worker RPC mTLS smoke tests with real certificates in the target enterprise network.
