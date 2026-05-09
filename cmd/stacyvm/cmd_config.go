@@ -73,12 +73,17 @@ func lintAuthConfig(cfg *config.Config, production bool) []doctorCheck {
 
 	checks = append(checks, lintSecret("auth.api_key", cfg.Auth.APIKey, production, "Set STACYVM_AUTH_API_KEY or auth.api_key to a random 32+ byte secret."))
 	checks = append(checks, lintSecret("auth.admin_api_key", cfg.Auth.AdminAPIKey, production, "Set STACYVM_AUTH_ADMIN_API_KEY or auth.admin_api_key to a separate random 32+ byte secret."))
-	if len(cfg.Auth.WorkerTokens) > 0 {
+	if cfg.Auth.WorkerSigningKey != "" {
+		checks = append(checks, lintSecret("auth.worker_signing_key", cfg.Auth.WorkerSigningKey, production, "Set STACYVM_AUTH_WORKER_SIGNING_KEY or auth.worker_signing_key to a random 32+ byte secret used to verify signed worker tokens."))
+		if len(cfg.Auth.WorkerTokens) > 0 {
+			checks = append(checks, doctorCheck{Name: "auth.worker_tokens", Status: doctorWarn, Message: fmt.Sprintf("%d static per-worker token(s) still configured", len(cfg.Auth.WorkerTokens)), Remediation: "Prefer short-lived signed worker tokens for production workers; keep static worker tokens only during migration."})
+		}
+	} else if len(cfg.Auth.WorkerTokens) > 0 {
 		checks = append(checks, doctorCheck{Name: "auth.worker_tokens", Status: doctorPass, Message: fmt.Sprintf("%d per-worker token(s) configured", len(cfg.Auth.WorkerTokens))})
 	} else if cfg.Auth.WorkerToken != "" {
 		checks = append(checks, doctorCheck{Name: "auth.worker_tokens", Status: doctorWarn, Message: "using shared worker token", Remediation: "Configure auth.worker_tokens for production workers so each worker has an individually rotatable credential."})
 	} else {
-		checks = append(checks, doctorCheck{Name: "auth.worker_tokens", Status: doctorWarn, Message: "no worker credentials configured", Remediation: "Set auth.worker_token for staging or auth.worker_tokens for production worker identity when remote workers are enabled."})
+		checks = append(checks, doctorCheck{Name: "auth.worker_tokens", Status: doctorWarn, Message: "no worker credentials configured", Remediation: "Set auth.worker_token for staging, auth.worker_tokens for migration, or auth.worker_signing_key for production signed worker identity."})
 	}
 	if cfg.Auth.APIKey != "" && cfg.Auth.APIKey == cfg.Auth.AdminAPIKey {
 		checks = append(checks, doctorCheck{Name: "auth.key_separation", Status: severityForProduction(production), Message: "regular and admin API keys match", Remediation: "Use separate keys so admin endpoints can be rotated and restricted independently."})

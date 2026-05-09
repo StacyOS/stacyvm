@@ -29,6 +29,7 @@ type ServerConfig struct {
 	AdminAuditRetention   time.Duration
 	WorkerToken           string
 	WorkerTokens          map[string]string
+	WorkerSigningKey      string
 	Version               string
 	RateLimit             middleware.RateLimitConfig
 	WorkerHeartbeat       time.Duration
@@ -73,7 +74,11 @@ func NewServer(cfg ServerConfig, registry *providers.Registry, manager *orchestr
 
 	workerRoutes := routes.NewWorkerRoutes(st)
 	r.Route("/api/v1/worker", func(r chi.Router) {
-		r.Use(middleware.WorkerAuthWithTokens(cfg.WorkerToken, cfg.WorkerTokens))
+		r.Use(middleware.WorkerAuthWithConfig(middleware.WorkerAuthConfig{
+			SharedToken:  cfg.WorkerToken,
+			WorkerTokens: cfg.WorkerTokens,
+			SigningKey:   cfg.WorkerSigningKey,
+		}))
 		r.With(middleware.RequireScope(middleware.ScopeWorkerHeartbeat)).Post("/{workerID}/heartbeat", workerRoutes.Heartbeat)
 		r.With(middleware.RequireScope(middleware.ScopeWorkerLease)).Post("/{workerID}/leases/{resourceID}/renew", workerRoutes.RenewLease)
 	})

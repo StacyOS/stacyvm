@@ -15,8 +15,9 @@ It currently verifies:
 - SQLite passes the reusable store contract harness.
 - Worker route authentication accepts per-worker credentials.
 - Worker-specific credentials override the shared staging token.
+- Worker route authentication accepts short-lived signed worker tokens.
 - Worker lease renewal is guarded by `worker:lease`.
-- A production-aligned cluster config with `auth.worker_tokens` passes `stacyvm config lint --production`.
+- A production-aligned cluster config with `auth.worker_tokens` or `auth.worker_signing_key` passes `stacyvm config lint --production`.
 - Postgres configuration with a valid DSN passes `stacyvm config lint --production`.
 - Live Postgres passes the reusable store contract when `STACYVM_POSTGRES_TEST_DSN` is set.
 - Live Postgres proves one active lease holder under concurrent acquire and expired takeover attempts.
@@ -38,9 +39,12 @@ Postgres must not be marked production-ready for a deployment until it runs the 
 |---|---|---|
 | `auth.worker_token` | Supported | Local development and internal staging with a shared worker token |
 | `auth.worker_tokens.<worker_id>` | Supported | Production-aligned staging with individually rotatable worker credentials |
-| Signed worker tokens or mTLS | Planned | Public multi-worker and enterprise deployments |
+| `auth.worker_signing_key` | Supported | Public or enterprise deployments that need short-lived signed worker credentials |
+| mTLS | Planned | Enterprise deployments that require network-level worker identity |
 
 When `auth.worker_tokens` contains a worker ID, that worker must authenticate with its own token. The shared token is rejected for that worker ID.
+
+Signed worker tokens must use the `stacyvm-worker-v1` HMAC-SHA256 format. The signed subject must match `X-Worker-ID`, the `exp` claim must be in the future, and only worker scopes are granted.
 
 ## Runtime Matrix
 
@@ -75,7 +79,15 @@ Phase 13 has completed:
 - Per-worker token authentication.
 - Cluster conformance CI scaffolding.
 
-Remaining cluster-storage work after Phase 13:
+Phase 14 starts worker identity hardening on top of that foundation:
+
+- HMAC-signed worker tokens.
+- Signed-token config lint awareness.
+- Worker runtime token derivation for heartbeat and lease renewal.
+
+Remaining cluster-storage and identity work after Phase 14:
 
 - Extend multi-worker conformance beyond the mock provider into certified Docker, gVisor/Kata, and Firecracker hosts.
 - Add backup/restore-specific Postgres migration rehearsal before enterprise production rollout.
+- Add token issuer and rotation workflows so workers do not need direct access to the signing key in hardened deployments.
+- Add mTLS guidance for enterprise worker networks.

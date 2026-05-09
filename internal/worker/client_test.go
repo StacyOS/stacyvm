@@ -58,6 +58,30 @@ func TestClientHeartbeatRejectsMissingConfig(t *testing.T) {
 	}
 }
 
+func TestClientHeartbeatUsesTokenFunc(t *testing.T) {
+	var gotToken string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotToken = r.Header.Get("X-Worker-Token")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	client := Client{
+		BaseURL:  server.URL,
+		WorkerID: "worker-a",
+		Token:    "static-token",
+		TokenFunc: func() (string, error) {
+			return "signed-token", nil
+		},
+	}
+	if err := client.Heartbeat(context.Background(), workerproto.HeartbeatParams{}); err != nil {
+		t.Fatalf("heartbeat: %v", err)
+	}
+	if gotToken != "signed-token" {
+		t.Fatalf("worker token = %q, want token from TokenFunc", gotToken)
+	}
+}
+
 func TestClientRenewLeaseSendsWorkerCredentials(t *testing.T) {
 	expiresAt := time.Now().UTC().Add(time.Minute)
 	var gotPath string

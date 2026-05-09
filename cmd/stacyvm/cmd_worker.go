@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/StacyOs/stacyvm/internal/api/middleware"
 	"github.com/StacyOs/stacyvm/internal/config"
 	"github.com/StacyOs/stacyvm/internal/providers"
 	"github.com/StacyOs/stacyvm/internal/worker"
@@ -62,11 +63,16 @@ func newWorkerCmd() *cobra.Command {
 			}
 			logger := newCommandLogger(cfg)
 			registry := buildWorkerRegistry(cfg, logger, previewDomain)
+			tokenFunc := signedWorkerTokenFunc(id, cfg.Auth.WorkerSigningKey)
+			if token != "" {
+				tokenFunc = nil
+			}
 			rt := worker.Runtime{
 				Client: worker.Client{
-					BaseURL:  strings.TrimRight(controlPlaneURL, "/"),
-					WorkerID: id,
-					Token:    token,
+					BaseURL:   strings.TrimRight(controlPlaneURL, "/"),
+					WorkerID:  id,
+					Token:     token,
+					TokenFunc: tokenFunc,
 				},
 				HeartbeatInterval: interval,
 				ListenAddr:        listenAddr,
@@ -96,6 +102,22 @@ func newWorkerCmd() *cobra.Command {
 	cmd.Flags().StringVar(&previewDomain, "preview-domain", "", "worker preview domain; defaults to worker.preview_domain or server.preview_domain")
 	cmd.Flags().BoolVar(&once, "once", false, "send one heartbeat and exit")
 	return cmd
+}
+
+func signedWorkerTokenFunc(workerID, signingKey string) func() (string, error) {
+	signingKey = strings.TrimSpace(signingKey)
+	workerID = strings.TrimSpace(workerID)
+	if signingKey == "" || workerID == "" {
+		return nil
+	}
+	return func() (string, error) {
+		now := time.Now().UTC()
+		return middleware.SignWorkerToken(signingKey, middleware.WorkerTokenClaims{
+			WorkerID:  workerID,
+			IssuedAt:  now.Unix(),
+			ExpiresAt: now.Add(5 * time.Minute).Unix(),
+		})
+	}
 }
 
 func newCommandLogger(cfg *config.Config) zerolog.Logger {

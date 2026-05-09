@@ -99,6 +99,15 @@ YAML
 echo "==> Linting production-aligned cluster config"
 go run ./cmd/stacyvm config lint --production --file "$cluster_config"
 
+echo "==> Linting signed-token worker identity config"
+signed_worker_config="$tmpdir/stacyvm.signed-worker.yaml"
+sed \
+  -e '/worker_tokens:/,/admin_fallback_enabled:/c\
+  worker_signing_key: "worker-signing-key-with-at-least-32-bytes"\
+  admin_fallback_enabled: false' \
+  "$cluster_config" >"$signed_worker_config"
+go run ./cmd/stacyvm config lint --production --file "$signed_worker_config"
+
 echo "==> Linting production-aligned Postgres cluster config"
 postgres_config="$tmpdir/stacyvm.postgres.yaml"
 sed \

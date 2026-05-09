@@ -97,7 +97,7 @@ This checklist tracks the Phase 7 release-candidate hardening work needed before
 ## Required Before Enterprise/Multi-Worker
 
 - Postgres store implementation. Driver, migrations, contract path, migration rehearsal, lease race coverage, and mock-provider remote worker smoke exist; production distributed mode still needs backup/restore-specific migration rehearsal.
-- Worker registration and heartbeat model. Durable registry and per-worker token auth exist; production distributed mode still needs signed-token or mTLS hardening for public/enterprise deployments.
+- Worker registration and heartbeat model. Durable registry, per-worker token auth, and signed worker tokens exist; production distributed mode still needs issuer/rotation workflows and mTLS guidance for public/enterprise deployments.
 - Scheduler abstraction with placement policy.
 - Durable queue/pub-sub for lifecycle events.
 - Distributed leases to prevent double ownership.

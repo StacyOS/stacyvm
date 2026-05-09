@@ -1,5 +1,27 @@
 # Changelog
 
+## Phase 14 Worker Identity Hardening - 2026-05-09
+
+This checkpoint starts hardening remote worker identity for public and enterprise multi-worker deployments.
+
+### Added
+
+- HMAC-SHA256 signed worker token format with `stacyvm-worker-v1` prefix.
+- Signed worker token claims for `worker_id`, optional worker scopes, `iat`, and `exp`.
+- Worker auth verification for signed tokens through `auth.worker_signing_key`.
+- Signed-token worker ID matching and expiry enforcement.
+- Worker scope filtering so signed tokens cannot grant non-worker scopes.
+- Worker runtime token derivation for heartbeat and lease-renewal calls when `auth.worker_signing_key` is configured and no static worker token is provided.
+- Config loading and defaults for `auth.worker_signing_key`.
+- Config lint awareness for signed worker credentials.
+- Phase 14 release notes under `docs/releases/phase-14-worker-identity-hardening.md`.
+
+### Changed
+
+- Worker auth now accepts signed tokens, per-worker static tokens, or the shared staging token while preserving existing compatibility.
+- Cluster conformance documentation now treats signed worker tokens as the production-aligned worker identity path.
+- API and worker RPC docs now describe signed worker token behavior.
+
 ## Phase 13 Cluster Store And Worker Identity - 2026-05-09
 
 This checkpoint starts the enterprise multi-worker production track after Phase 12 completed remote sandbox I/O routing.

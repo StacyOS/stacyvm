@@ -17,6 +17,7 @@ type Client struct {
 	BaseURL    string
 	WorkerID   string
 	Token      string
+	TokenFunc  func() (string, error)
 	HTTPClient *http.Client
 }
 
@@ -27,8 +28,9 @@ func (c Client) Heartbeat(ctx context.Context, params workerproto.HeartbeatParam
 	if strings.TrimSpace(c.WorkerID) == "" {
 		return fmt.Errorf("worker id is required")
 	}
-	if strings.TrimSpace(c.Token) == "" {
-		return fmt.Errorf("worker token is required")
+	token, err := c.authToken()
+	if err != nil {
+		return err
 	}
 	body, err := json.Marshal(params)
 	if err != nil {
@@ -41,7 +43,7 @@ func (c Client) Heartbeat(ctx context.Context, params workerproto.HeartbeatParam
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Worker-ID", c.WorkerID)
-	req.Header.Set("X-Worker-Token", c.Token)
+	req.Header.Set("X-Worker-Token", token)
 
 	client := c.HTTPClient
 	if client == nil {
@@ -67,8 +69,9 @@ func (c Client) RenewLease(ctx context.Context, resourceID, ttl string) (workerp
 	if strings.TrimSpace(c.WorkerID) == "" {
 		return zero, fmt.Errorf("worker id is required")
 	}
-	if strings.TrimSpace(c.Token) == "" {
-		return zero, fmt.Errorf("worker token is required")
+	token, err := c.authToken()
+	if err != nil {
+		return zero, err
 	}
 	if strings.TrimSpace(resourceID) == "" {
 		return zero, fmt.Errorf("lease resource id is required")
@@ -84,7 +87,7 @@ func (c Client) RenewLease(ctx context.Context, resourceID, ttl string) (workerp
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Worker-ID", c.WorkerID)
-	req.Header.Set("X-Worker-Token", c.Token)
+	req.Header.Set("X-Worker-Token", token)
 
 	client := c.HTTPClient
 	if client == nil {
@@ -104,4 +107,21 @@ func (c Client) RenewLease(ctx context.Context, resourceID, ttl string) (workerp
 		return zero, err
 	}
 	return result.Lease, nil
+}
+
+func (c Client) authToken() (string, error) {
+	if c.TokenFunc != nil {
+		token, err := c.TokenFunc()
+		if err != nil {
+			return "", err
+		}
+		if strings.TrimSpace(token) == "" {
+			return "", fmt.Errorf("worker token is required")
+		}
+		return token, nil
+	}
+	if strings.TrimSpace(c.Token) == "" {
+		return "", fmt.Errorf("worker token is required")
+	}
+	return c.Token, nil
 }

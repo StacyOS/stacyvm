@@ -93,8 +93,11 @@ Current control-plane worker authentication accepts either:
 
 - `auth.worker_token` as a shared staging token.
 - `auth.worker_tokens.<worker_id>` as a per-worker token map for production-aligned staging.
+- `auth.worker_signing_key` for HMAC-SHA256 signed worker tokens using the `stacyvm-worker-v1.<payload>.<signature>` format.
 
 When a worker has an entry in `auth.worker_tokens`, that worker-specific token takes precedence and the shared token is rejected for that worker ID. This keeps legacy staging configs compatible while giving production deployments individually rotatable worker credentials.
+
+Signed worker token payloads are base64url JSON claims with `worker_id`, optional worker scopes, `iat`, and `exp`. The authenticated `X-Worker-ID` must match the signed `worker_id`, expired tokens are rejected, and any non-worker scopes are ignored. `stacyvm worker` can derive short-lived heartbeat and lease-renewal tokens from `auth.worker_signing_key` when no static `--worker-token` or `auth.worker_token` is provided.
 
 Current Phase 11 heartbeat endpoint:
 

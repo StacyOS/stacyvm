@@ -2,10 +2,15 @@ package middleware
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
 	"crypto/subtle"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
+	"time"
 )
 
 type AuthRole string
@@ -36,6 +41,24 @@ type AuthIdentity struct {
 }
 
 type authIdentityContextKey struct{}
+
+const workerSignedTokenPrefix = "stacyvm-worker-v1"
+
+var errInvalidWorkerTokenClaims = errors.New("invalid worker token claims")
+
+type WorkerAuthConfig struct {
+	SharedToken  string
+	WorkerTokens map[string]string
+	SigningKey   string
+	Now          func() time.Time
+}
+
+type WorkerTokenClaims struct {
+	WorkerID  string   `json:"worker_id"`
+	Scopes    []string `json:"scopes,omitempty"`
+	ExpiresAt int64    `json:"exp"`
+	IssuedAt  int64    `json:"iat,omitempty"`
+}
 
 func Auth(apiKey string) func(http.Handler) http.Handler {
 	return AuthAny(apiKey)
@@ -109,10 +132,23 @@ func WorkerAuth(workerToken string) func(http.Handler) http.Handler {
 }
 
 func WorkerAuthWithTokens(sharedWorkerToken string, workerTokens map[string]string) func(http.Handler) http.Handler {
-	cleanWorkerTokens := normalizeWorkerTokens(workerTokens)
+	return WorkerAuthWithConfig(WorkerAuthConfig{
+		SharedToken:  sharedWorkerToken,
+		WorkerTokens: workerTokens,
+	})
+}
+
+func WorkerAuthWithConfig(cfg WorkerAuthConfig) func(http.Handler) http.Handler {
+	cleanWorkerTokens := normalizeWorkerTokens(cfg.WorkerTokens)
+	sharedWorkerToken := strings.TrimSpace(cfg.SharedToken)
+	signingKey := strings.TrimSpace(cfg.SigningKey)
+	now := cfg.Now
+	if now == nil {
+		now = time.Now
+	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if strings.TrimSpace(sharedWorkerToken) == "" && len(cleanWorkerTokens) == 0 {
+			if sharedWorkerToken == "" && len(cleanWorkerTokens) == 0 && signingKey == "" {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusServiceUnavailable)
 				json.NewEncoder(w).Encode(map[string]string{
@@ -123,7 +159,8 @@ func WorkerAuthWithTokens(sharedWorkerToken string, workerTokens map[string]stri
 			}
 			workerID := strings.TrimSpace(r.Header.Get("X-Worker-ID"))
 			token, header := workerTokenFromRequest(r)
-			if workerID == "" || !validWorkerToken(workerID, token, sharedWorkerToken, cleanWorkerTokens) {
+			scopes, ok := validateWorkerCredentials(workerID, token, sharedWorkerToken, cleanWorkerTokens, signingKey, now)
+			if workerID == "" || !ok {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusUnauthorized)
 				json.NewEncoder(w).Encode(map[string]string{
@@ -136,7 +173,7 @@ func WorkerAuthWithTokens(sharedWorkerToken string, workerTokens map[string]stri
 				Role:     AuthRoleWorker,
 				Header:   header,
 				WorkerID: workerID,
-				Scopes:   scopesForRole(AuthRoleWorker),
+				Scopes:   scopes,
 			}))
 			next.ServeHTTP(w, r)
 		})
@@ -242,6 +279,96 @@ func workerTokenFromRequest(r *http.Request) (string, string) {
 		return strings.TrimSpace(authz[len(prefix):]), "Authorization"
 	}
 	return "", ""
+}
+
+func SignWorkerToken(signingKey string, claims WorkerTokenClaims) (string, error) {
+	signingKey = strings.TrimSpace(signingKey)
+	claims.WorkerID = strings.TrimSpace(claims.WorkerID)
+	if signingKey == "" || claims.WorkerID == "" || claims.ExpiresAt <= 0 {
+		return "", errInvalidWorkerTokenClaims
+	}
+	payload, err := json.Marshal(claims)
+	if err != nil {
+		return "", err
+	}
+	payloadB64 := base64.RawURLEncoding.EncodeToString(payload)
+	signedPart := workerSignedTokenPrefix + "." + payloadB64
+	signature := signWorkerToken(signingKey, signedPart)
+	return signedPart + "." + signature, nil
+}
+
+func VerifyWorkerToken(signingKey, token string, now time.Time) (WorkerTokenClaims, bool) {
+	signingKey = strings.TrimSpace(signingKey)
+	token = strings.TrimSpace(token)
+	if signingKey == "" || token == "" {
+		return WorkerTokenClaims{}, false
+	}
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 || parts[0] != workerSignedTokenPrefix {
+		return WorkerTokenClaims{}, false
+	}
+	signedPart := parts[0] + "." + parts[1]
+	expectedSignature := signWorkerToken(signingKey, signedPart)
+	if subtle.ConstantTimeCompare([]byte(parts[2]), []byte(expectedSignature)) != 1 {
+		return WorkerTokenClaims{}, false
+	}
+	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
+	if err != nil {
+		return WorkerTokenClaims{}, false
+	}
+	var claims WorkerTokenClaims
+	if err := json.Unmarshal(payload, &claims); err != nil {
+		return WorkerTokenClaims{}, false
+	}
+	claims.WorkerID = strings.TrimSpace(claims.WorkerID)
+	if claims.WorkerID == "" || claims.ExpiresAt <= 0 || !now.Before(time.Unix(claims.ExpiresAt, 0)) {
+		return WorkerTokenClaims{}, false
+	}
+	return claims, true
+}
+
+func validateWorkerCredentials(workerID, token, sharedWorkerToken string, workerTokens map[string]string, signingKey string, now func() time.Time) ([]string, bool) {
+	if token == "" || workerID == "" {
+		return nil, false
+	}
+	if claims, ok := VerifyWorkerToken(signingKey, token, now().UTC()); ok {
+		if claims.WorkerID != workerID {
+			return nil, false
+		}
+		scopes := normalizeScopes(claims.Scopes)
+		if len(scopes) == 0 {
+			scopes = scopesForRole(AuthRoleWorker)
+		}
+		return scopes, true
+	}
+	if validWorkerToken(workerID, token, sharedWorkerToken, workerTokens) {
+		return scopesForRole(AuthRoleWorker), true
+	}
+	return nil, false
+}
+
+func signWorkerToken(signingKey, signedPart string) string {
+	mac := hmac.New(sha256.New, []byte(signingKey))
+	mac.Write([]byte(signedPart))
+	return base64.RawURLEncoding.EncodeToString(mac.Sum(nil))
+}
+
+func normalizeScopes(scopes []string) []string {
+	if len(scopes) == 0 {
+		return nil
+	}
+	allowed := map[string]struct{}{}
+	for _, scope := range scopesForRole(AuthRoleWorker) {
+		allowed[scope] = struct{}{}
+	}
+	cleaned := make([]string, 0, len(scopes))
+	for _, scope := range scopes {
+		scope = strings.TrimSpace(scope)
+		if _, ok := allowed[scope]; ok {
+			cleaned = append(cleaned, scope)
+		}
+	}
+	return cleaned
 }
 
 func validWorkerToken(workerID, token, sharedWorkerToken string, workerTokens map[string]string) bool {

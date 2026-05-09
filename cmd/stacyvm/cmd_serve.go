@@ -233,6 +233,7 @@ func runServe() error {
 		AdminAuditRetention:   adminAuditRetention,
 		WorkerToken:           cfg.Auth.WorkerToken,
 		WorkerTokens:          cfg.Auth.WorkerTokens,
+		WorkerSigningKey:      cfg.Auth.WorkerSigningKey,
 		Version:               version,
 		RateLimit: middleware.RateLimitConfig{
 			Enabled:           cfg.RateLimit.Enabled,

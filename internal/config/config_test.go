@@ -156,6 +156,7 @@ worker:
   shutdown_timeout: "15s"
 auth:
   worker_token: "worker-secret"
+  worker_signing_key: "0123456789abcdef0123456789abcdef"
   worker_tokens:
     worker-a: "worker-a-secret"
 `), 0644); err != nil {
@@ -177,6 +178,9 @@ auth:
 	}
 	if cfg.Auth.WorkerToken != "worker-secret" {
 		t.Fatalf("worker token = %q, want worker-secret", cfg.Auth.WorkerToken)
+	}
+	if cfg.Auth.WorkerSigningKey != "0123456789abcdef0123456789abcdef" {
+		t.Fatalf("worker signing key = %q, want configured key", cfg.Auth.WorkerSigningKey)
 	}
 	if cfg.Auth.WorkerTokens["worker-a"] != "worker-a-secret" {
 		t.Fatalf("worker-a token = %q, want worker-a-secret", cfg.Auth.WorkerTokens["worker-a"])

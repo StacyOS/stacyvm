@@ -80,6 +80,25 @@ func TestLintDatabaseConfigPassesForPostgresWithDSN(t *testing.T) {
 	}
 }
 
+func TestLintAuthConfigAcceptsWorkerSigningKey(t *testing.T) {
+	cfg := validProductionConfig()
+	cfg.Auth.WorkerSigningKey = "worker-signing-key-with-at-least-32-bytes"
+	cfg.Auth.WorkerTokens = map[string]string{"worker-a": "legacy-token"}
+
+	checks := lintAuthConfig(cfg, true)
+	statuses := map[string]doctorStatus{}
+	for _, check := range checks {
+		statuses[check.Name] = check.Status
+	}
+
+	if statuses["auth.worker_signing_key"] != doctorPass {
+		t.Fatalf("auth.worker_signing_key status = %s, want %s", statuses["auth.worker_signing_key"], doctorPass)
+	}
+	if statuses["auth.worker_tokens"] != doctorWarn {
+		t.Fatalf("auth.worker_tokens status = %s, want migration warning", statuses["auth.worker_tokens"])
+	}
+}
+
 func validProductionConfig() *config.Config {
 	return &config.Config{
 		Auth: config.AuthConfig{

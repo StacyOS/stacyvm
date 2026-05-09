@@ -678,7 +678,7 @@ Required headers:
 
 ```text
 X-Worker-ID: worker-a
-X-Worker-Token: <auth.worker_tokens.worker-a or auth.worker_token>
+X-Worker-Token: <signed worker token, auth.worker_tokens.worker-a, or auth.worker_token>
 ```
 
 **Request**:
@@ -706,10 +706,10 @@ Required headers:
 
 ```text
 X-Worker-ID: worker-a
-X-Worker-Token: <auth.worker_tokens.worker-a or auth.worker_token>
+X-Worker-Token: <signed worker token, auth.worker_tokens.worker-a, or auth.worker_token>
 ```
 
-`auth.worker_token` is the shared staging token. For production-aligned worker identity, configure `auth.worker_tokens.<workerID>` so each worker has an individually rotatable credential.
+`auth.worker_token` is the shared staging token. For production-aligned worker identity, configure `auth.worker_signing_key` for short-lived signed worker tokens or `auth.worker_tokens.<workerID>` for individually rotatable static credentials during migration.
 
 **Request**:
 ```json

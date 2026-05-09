@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 )
 
 func TestAuthAnyAcceptsPrimaryOrAdminKey(t *testing.T) {
@@ -181,6 +182,127 @@ func TestWorkerAuthFallsBackToSharedTokenForUnmappedWorker(t *testing.T) {
 
 	if w.Code != http.StatusOK {
 		t.Fatalf("status = %d, want %d for unmapped worker using shared token: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+}
+
+func TestWorkerAuthAcceptsSignedWorkerToken(t *testing.T) {
+	now := time.Date(2026, 5, 9, 10, 0, 0, 0, time.UTC)
+	token, err := SignWorkerToken("0123456789abcdef0123456789abcdef", WorkerTokenClaims{
+		WorkerID:  "worker-a",
+		Scopes:    []string{ScopeWorkerHeartbeat, ScopeWorkerLease, "admin:*"},
+		ExpiresAt: now.Add(time.Minute).Unix(),
+		IssuedAt:  now.Add(-time.Minute).Unix(),
+	})
+	if err != nil {
+		t.Fatalf("sign worker token: %v", err)
+	}
+
+	var got AuthIdentity
+	handler := WorkerAuthWithConfig(WorkerAuthConfig{
+		SigningKey: "0123456789abcdef0123456789abcdef",
+		Now:        func() time.Time { return now },
+	})(identityHandler(&got))
+
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	req.Header.Set("X-Worker-ID", "worker-a")
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if got.Role != AuthRoleWorker || got.WorkerID != "worker-a" || got.Header != "Authorization" {
+		t.Fatalf("identity = %+v, want signed worker-a identity from Authorization", got)
+	}
+	if !got.HasScope(ScopeWorkerHeartbeat) || !got.HasScope(ScopeWorkerLease) {
+		t.Fatalf("worker identity scopes = %#v, want signed worker scopes", got.Scopes)
+	}
+	if got.HasScope(ScopeAdmin) {
+		t.Fatalf("worker identity scopes = %#v, signed token should not grant non-worker scopes", got.Scopes)
+	}
+}
+
+func TestWorkerAuthRejectsSignedWorkerTokenForWrongWorker(t *testing.T) {
+	now := time.Date(2026, 5, 9, 10, 0, 0, 0, time.UTC)
+	token, err := SignWorkerToken("0123456789abcdef0123456789abcdef", WorkerTokenClaims{
+		WorkerID:  "worker-a",
+		ExpiresAt: now.Add(time.Minute).Unix(),
+	})
+	if err != nil {
+		t.Fatalf("sign worker token: %v", err)
+	}
+	handler := WorkerAuthWithConfig(WorkerAuthConfig{
+		SigningKey: "0123456789abcdef0123456789abcdef",
+		Now:        func() time.Time { return now },
+	})(okHandler())
+
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	req.Header.Set("X-Worker-ID", "worker-b")
+	req.Header.Set("X-Worker-Token", token)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d for signed worker token with mismatched worker ID: %s", w.Code, http.StatusUnauthorized, w.Body.String())
+	}
+}
+
+func TestWorkerAuthRejectsExpiredSignedWorkerToken(t *testing.T) {
+	now := time.Date(2026, 5, 9, 10, 0, 0, 0, time.UTC)
+	token, err := SignWorkerToken("0123456789abcdef0123456789abcdef", WorkerTokenClaims{
+		WorkerID:  "worker-a",
+		ExpiresAt: now.Add(-time.Second).Unix(),
+	})
+	if err != nil {
+		t.Fatalf("sign worker token: %v", err)
+	}
+	handler := WorkerAuthWithConfig(WorkerAuthConfig{
+		SigningKey: "0123456789abcdef0123456789abcdef",
+		Now:        func() time.Time { return now },
+	})(okHandler())
+
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	req.Header.Set("X-Worker-ID", "worker-a")
+	req.Header.Set("X-Worker-Token", token)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d for expired signed worker token: %s", w.Code, http.StatusUnauthorized, w.Body.String())
+	}
+}
+
+func TestWorkerAuthKeepsStaticTokenFallbackWithSigningKey(t *testing.T) {
+	handler := WorkerAuthWithConfig(WorkerAuthConfig{
+		SharedToken: "shared-token",
+		SigningKey:  "0123456789abcdef0123456789abcdef",
+	})(okHandler())
+
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	req.Header.Set("X-Worker-ID", "worker-a")
+	req.Header.Set("X-Worker-Token", "shared-token")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d for static fallback with signing key configured: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+}
+
+func TestWorkerAuthSigningKeyCountsAsConfiguredCredentials(t *testing.T) {
+	handler := WorkerAuthWithConfig(WorkerAuthConfig{
+		SigningKey: "0123456789abcdef0123456789abcdef",
+	})(okHandler())
+
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	req.Header.Set("X-Worker-ID", "worker-a")
+	req.Header.Set("X-Worker-Token", "invalid-token")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d when signing key is configured but token is invalid: %s", w.Code, http.StatusUnauthorized, w.Body.String())
 	}
 }
 
