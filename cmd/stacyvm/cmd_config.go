@@ -76,11 +76,12 @@ func lintAuthConfig(cfg *config.Config, production bool) []doctorCheck {
 	checks = append(checks, lintSecret("auth.admin_api_key", cfg.Auth.AdminAPIKey, production, "Set STACYVM_AUTH_ADMIN_API_KEY or auth.admin_api_key to a separate random 32+ byte secret."))
 	if cfg.Auth.WorkerSigningKey != "" {
 		checks = append(checks, lintSecret("auth.worker_signing_key", cfg.Auth.WorkerSigningKey, production, "Set STACYVM_AUTH_WORKER_SIGNING_KEY or auth.worker_signing_key to a random 32+ byte secret used to verify signed worker tokens."))
-		if len(cfg.Auth.WorkerSigningKeys) > 0 {
-			checks = append(checks, doctorCheck{Name: "auth.worker_signing_keys", Status: doctorPass, Message: fmt.Sprintf("%d additional verification key(s) configured", len(cfg.Auth.WorkerSigningKeys))})
-		}
+		checks = append(checks, lintWorkerSigningKeyRotation(cfg.Auth.WorkerSigningKey, cfg.Auth.WorkerSigningKeys)...)
 		if len(cfg.Auth.WorkerRevokedTokenIDs) > 0 {
 			checks = append(checks, doctorCheck{Name: "auth.worker_revoked_token_ids", Status: doctorPass, Message: fmt.Sprintf("%d revoked worker token id(s) configured", len(cfg.Auth.WorkerRevokedTokenIDs))})
+		}
+		if cfg.Auth.WorkerToken != "" {
+			checks = append(checks, doctorCheck{Name: "auth.worker_token", Status: doctorWarn, Message: "shared worker token still configured with signed worker tokens", Remediation: "Remove auth.worker_token after workers and worker RPC clients use short-lived signed worker tokens."})
 		}
 		if len(cfg.Auth.WorkerTokens) > 0 {
 			checks = append(checks, doctorCheck{Name: "auth.worker_tokens", Status: doctorWarn, Message: fmt.Sprintf("%d static per-worker token(s) still configured", len(cfg.Auth.WorkerTokens)), Remediation: "Prefer short-lived signed worker tokens for production workers; keep static worker tokens only during migration."})
@@ -127,6 +128,28 @@ func lintWorkerRevokedTokenIDsWithoutSigningKey(tokenIDs []string) []doctorCheck
 		Message:     fmt.Sprintf("%d revoked worker token id(s) configured without signed worker tokens", len(tokenIDs)),
 		Remediation: "Keep auth.worker_revoked_token_ids only alongside auth.worker_signing_key during an incident-response window.",
 	}}
+}
+
+func lintWorkerSigningKeyRotation(primary string, keys []string) []doctorCheck {
+	if len(keys) == 0 {
+		return nil
+	}
+	primary = strings.TrimSpace(primary)
+	seen := map[string]struct{}{}
+	for _, key := range keys {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		if key == primary {
+			return []doctorCheck{{Name: "auth.worker_signing_keys", Status: doctorWarn, Message: "rotation keys include the active worker signing key", Remediation: "Keep only previous verification keys in auth.worker_signing_keys; auth.worker_signing_key is already accepted."}}
+		}
+		if _, ok := seen[key]; ok {
+			return []doctorCheck{{Name: "auth.worker_signing_keys", Status: doctorWarn, Message: "duplicate worker signing rotation key configured", Remediation: "Remove duplicate entries from auth.worker_signing_keys so rotation state is unambiguous."}}
+		}
+		seen[key] = struct{}{}
+	}
+	return []doctorCheck{{Name: "auth.worker_signing_keys", Status: doctorPass, Message: fmt.Sprintf("%d additional verification key(s) configured", len(seen))}}
 }
 
 func lintSecret(name, value string, production bool, remediation string) doctorCheck {

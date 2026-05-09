@@ -38,6 +38,7 @@ Phase 14 begins the worker identity hardening lane for production multi-worker S
 - Kept `auth.worker_tokens` for per-worker static token migration paths.
 - Updated `stacyvm config lint --production` so a strong `auth.worker_signing_key` satisfies production-aligned worker credential checks.
 - Added config lint warnings when revoked signed-token IDs are configured without signed worker-token verification.
+- Added config lint warnings for shared worker tokens left enabled beside signed worker tokens, duplicate rotation keys, and rotation keys that repeat the active signing key.
 
 ### Worker runtime
 

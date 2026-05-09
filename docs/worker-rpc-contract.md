@@ -125,6 +125,8 @@ For production services, prefer `--worker-token-file`, `--worker-signing-key-fil
 4. Wait until all old worker tokens have expired.
 5. Remove the old key from `auth.worker_signing_keys`.
 
+`stacyvm config lint --production` warns when the active signing key is repeated in `auth.worker_signing_keys`, when duplicate rotation keys are configured, or when a shared `auth.worker_token` remains configured beside signed worker tokens.
+
 ## Worker RPC mTLS
 
 Signed worker tokens authenticate the worker identity at the application layer. Enterprise deployments should also protect worker RPC transport with mTLS when worker RPC crosses a host or network boundary.
@@ -188,7 +190,7 @@ Remote workers advertise their control-plane callback endpoint through heartbeat
 }
 ```
 
-When the scheduler selects a non-local worker with `rpc_url` and `auth.worker_token` is configured, the control plane acquires the sandbox lease for that worker, calls `worker.spawn`, persists the selected `worker_id`, and stores the returned provider runtime ID for later routing.
+When the scheduler selects a non-local worker with `rpc_url` and signed worker RPC tokens or a static worker token are configured, the control plane acquires the sandbox lease for that worker, calls `worker.spawn`, persists the selected `worker_id`, and stores the returned provider runtime ID for later routing.
 
 Sandbox reads use the persisted `worker_id` and provider `runtime_id` to call `worker.status` on the owning worker. If the worker reports a changed state, the control plane updates its stored sandbox state. If the worker is temporarily unreachable, the control plane keeps serving the cached record and logs the refresh failure at debug level.
 
@@ -238,4 +240,4 @@ In Postgres terms, lease acquire should be implemented with a unique key on `res
 
 ## Current Limits
 
-Remote placement returns `remote_worker_rpc_unavailable` unless the selected worker advertises `rpc_url` and `auth.worker_token` is configured. Postgres-backed cluster storage and production worker identity are still outside the current transport.
+Remote placement returns `remote_worker_rpc_unavailable` unless the selected worker advertises `rpc_url` and the control plane can authenticate to worker RPC with either short-lived signed RPC-audience tokens or a static worker token. Postgres-backed cluster storage and signed production worker identity are wired into the current transport; deployment certification still needs the target host/runtime conformance checks listed in [cluster-conformance.md](cluster-conformance.md).

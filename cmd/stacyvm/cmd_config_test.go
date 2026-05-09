@@ -114,6 +114,51 @@ func TestLintAuthConfigWarnsRevokedWorkerTokenIDsWithoutSigningKey(t *testing.T)
 	}
 }
 
+func TestLintAuthConfigWarnsSharedWorkerTokenWithSigningKey(t *testing.T) {
+	cfg := validProductionConfig()
+	cfg.Auth.WorkerSigningKey = "worker-signing-key-with-at-least-32-bytes"
+	cfg.Auth.WorkerToken = "shared-worker-token-with-at-least-32-bytes"
+
+	checks := lintAuthConfig(cfg, true)
+	statuses := map[string]doctorStatus{}
+	for _, check := range checks {
+		statuses[check.Name] = check.Status
+	}
+
+	if statuses["auth.worker_token"] != doctorWarn {
+		t.Fatalf("auth.worker_token status = %s, want %s", statuses["auth.worker_token"], doctorWarn)
+	}
+}
+
+func TestLintAuthConfigWarnsInvalidWorkerSigningKeyRotation(t *testing.T) {
+	cfg := validProductionConfig()
+	cfg.Auth.WorkerSigningKey = "worker-signing-key-with-at-least-32-bytes"
+	cfg.Auth.WorkerSigningKeys = []string{"worker-signing-key-with-at-least-32-bytes"}
+
+	checks := lintAuthConfig(cfg, true)
+	statuses := map[string]doctorStatus{}
+	for _, check := range checks {
+		statuses[check.Name] = check.Status
+	}
+
+	if statuses["auth.worker_signing_keys"] != doctorWarn {
+		t.Fatalf("auth.worker_signing_keys status = %s, want %s", statuses["auth.worker_signing_keys"], doctorWarn)
+	}
+
+	cfg.Auth.WorkerSigningKeys = []string{
+		"old-worker-signing-key-with-at-least-32-bytes",
+		"old-worker-signing-key-with-at-least-32-bytes",
+	}
+	checks = lintAuthConfig(cfg, true)
+	statuses = map[string]doctorStatus{}
+	for _, check := range checks {
+		statuses[check.Name] = check.Status
+	}
+	if statuses["auth.worker_signing_keys"] != doctorWarn {
+		t.Fatalf("auth.worker_signing_keys duplicate status = %s, want %s", statuses["auth.worker_signing_keys"], doctorWarn)
+	}
+}
+
 func TestLintWorkerRPCConfigChecksMTLSInputs(t *testing.T) {
 	cfg := validProductionConfig()
 	cfg.Worker.RPCTLS.Enabled = true
