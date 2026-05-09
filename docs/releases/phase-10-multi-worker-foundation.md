@@ -40,6 +40,13 @@ This is not a full distributed runtime yet. It is the first production-aligned c
 - Scheduler status now reports the current worker ID.
 - Sandbox API responses now include `worker_id` when ownership is known.
 
+### Worker-Aware Scheduler Placement
+
+- Spawn admission now evaluates worker placement using worker status, heartbeat freshness, provider support, declared capacity, and active sandbox counts.
+- Scheduler status now reports the selected worker and number of eligible workers.
+- Local execution remains honest: if the scheduler would place work on a remote worker, admission reports `remote_worker_rpc_unavailable` until the worker RPC slice lands.
+- The current local worker remains eligible for local execution even if its registry heartbeat has gone stale between startup registration and the future heartbeat loop.
+
 ### Diagnostics And Metrics
 
 - Diagnostics now include worker totals, online count, stale count, unhealthy count, and worker items.
@@ -74,9 +81,8 @@ This is not a full distributed runtime yet. It is the first production-aligned c
 
 ## Remaining Phase 10 Direction
 
-- Make scheduler placement worker-aware.
-- Add worker ownership to sandbox records.
+- Add worker RPC so selected remote workers can execute assigned spawns.
 - Add distributed leases before multiple workers can manage the same sandbox pool.
 - Add remote worker authentication and RPC.
 - Add Postgres-backed worker registry semantics for production clusters.
-- Add CI coverage for worker ownership and scheduler placement once those slices land.
+- Add CI coverage for remote worker RPC and distributed leases once those slices land.

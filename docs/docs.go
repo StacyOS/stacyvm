@@ -2126,8 +2126,14 @@ const docTemplate = `{
                 "admission_control": {
                     "type": "string"
                 },
+                "eligible_workers": {
+                    "type": "integer"
+                },
                 "max_spawn_queue": {
                     "type": "integer"
+                },
+                "selected_worker_id": {
+                    "type": "string"
                 },
                 "spawn_dequeued_total": {
                     "type": "integer"
@@ -2196,6 +2202,9 @@ const docTemplate = `{
                 "allowed": {
                     "type": "boolean"
                 },
+                "eligible_workers": {
+                    "type": "integer"
+                },
                 "max_owner_sandboxes": {
                     "type": "integer"
                 },
@@ -2209,6 +2218,12 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "reason": {
+                    "type": "string"
+                },
+                "selected_worker_id": {
+                    "type": "string"
+                },
+                "worker_reason": {
                     "type": "string"
                 }
             }

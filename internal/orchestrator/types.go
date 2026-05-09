@@ -129,6 +129,8 @@ type SchedulerStatus struct {
 	SpawnQueueTimeout     string `json:"spawn_queue_timeout"`
 	AdmissionControl      string `json:"admission_control"`
 	WorkerID              string `json:"worker_id"`
+	SelectedWorkerID      string `json:"selected_worker_id,omitempty"`
+	EligibleWorkers       int    `json:"eligible_workers"`
 	SpawnQueuedTotal      uint64 `json:"spawn_queued_total"`
 	SpawnDequeuedTotal    uint64 `json:"spawn_dequeued_total"`
 	SpawnQueueTimeouts    uint64 `json:"spawn_queue_timeouts"`
@@ -150,6 +152,9 @@ type SpawnAdmissionDecision struct {
 	ActiveOwnerSandboxes int    `json:"active_owner_sandboxes,omitempty"`
 	MaxOwnerSandboxes    int    `json:"max_owner_sandboxes,omitempty"`
 	MaxTTL               string `json:"max_ttl,omitempty"`
+	SelectedWorkerID     string `json:"selected_worker_id,omitempty"`
+	EligibleWorkers      int    `json:"eligible_workers,omitempty"`
+	WorkerReason         string `json:"worker_reason,omitempty"`
 }
 
 type OwnerQuota struct {

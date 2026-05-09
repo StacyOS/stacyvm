@@ -847,7 +847,7 @@ GET /api/v1/diagnostics
     "spawn_queue_depth": 3,
     "max_spawn_queue": 100,
     "spawn_queue_timeout": "30s",
-    "admission_control": "single_node",
+    "admission_control": "worker_aware_local",
     "spawn_queued_total": 18,
     "spawn_dequeued_total": 16,
     "spawn_queue_timeouts": 2,
@@ -858,7 +858,9 @@ GET /api/v1/diagnostics
     "spawn_queue_wait_total_ms": 102000,
     "spawn_queue_wait_max_ms": 12000,
     "spawn_queue_wait_avg_ms": 5666,
-    "worker_id": "local"
+    "worker_id": "local",
+    "selected_worker_id": "local",
+    "eligible_workers": 1
   },
   "quotas": {
     "total": 8,
@@ -1000,7 +1002,7 @@ GET /api/v1/metrics
     "spawn_queue_depth": 3,
     "max_spawn_queue": 100,
     "spawn_queue_timeout": "30s",
-    "admission_control": "single_node",
+    "admission_control": "worker_aware_local",
     "spawn_queued_total": 18,
     "spawn_dequeued_total": 16,
     "spawn_queue_timeouts": 2,
@@ -1011,7 +1013,9 @@ GET /api/v1/metrics
     "spawn_queue_wait_total_ms": 102000,
     "spawn_queue_wait_max_ms": 12000,
     "spawn_queue_wait_avg_ms": 5666,
-    "worker_id": "local"
+    "worker_id": "local",
+    "selected_worker_id": "local",
+    "eligible_workers": 1
   },
   "quotas": {
     "total": 8,

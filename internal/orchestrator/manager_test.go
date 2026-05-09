@@ -610,6 +610,76 @@ func TestManager_EvaluateSpawnAdmissionDeniesNonQueueableTTL(t *testing.T) {
 	}
 }
 
+func TestManager_EvaluateSpawnRequestAdmissionSelectsLocalWorker(t *testing.T) {
+	m := setupManager(t)
+	now := time.Now().UTC()
+	for _, worker := range []*store.WorkerRecord{
+		{
+			ID:            "local",
+			Status:        "online",
+			Providers:     `["mock"]`,
+			Capabilities:  `["spawn"]`,
+			Capacity:      `{"max_sandboxes":10}`,
+			LastHeartbeat: now,
+		},
+		{
+			ID:            "worker-b",
+			Status:        "online",
+			Providers:     `["mock"]`,
+			Capabilities:  `["spawn"]`,
+			Capacity:      `{"max_sandboxes":10}`,
+			LastHeartbeat: now,
+		},
+	} {
+		if err := m.store.SaveWorker(context.Background(), worker); err != nil {
+			t.Fatalf("save worker: %v", err)
+		}
+	}
+
+	decision, err := m.EvaluateSpawnRequestAdmission(context.Background(), SpawnRequest{Provider: "mock"})
+	if err != nil {
+		t.Fatalf("evaluate admission: %v", err)
+	}
+	if !decision.Allowed || decision.SelectedWorkerID != "local" || decision.EligibleWorkers != 2 {
+		t.Fatalf("unexpected worker placement: %+v", decision)
+	}
+}
+
+func TestManager_EvaluateSpawnRequestAdmissionRejectsRemoteWorkerUntilRPC(t *testing.T) {
+	m := setupManager(t)
+	now := time.Now().UTC()
+	for _, worker := range []*store.WorkerRecord{
+		{
+			ID:            "local",
+			Status:        "draining",
+			Providers:     `["mock"]`,
+			Capabilities:  `["spawn"]`,
+			Capacity:      `{"max_sandboxes":10}`,
+			LastHeartbeat: now,
+		},
+		{
+			ID:            "worker-b",
+			Status:        "online",
+			Providers:     `["mock"]`,
+			Capabilities:  `["spawn"]`,
+			Capacity:      `{"max_sandboxes":10}`,
+			LastHeartbeat: now,
+		},
+	} {
+		if err := m.store.SaveWorker(context.Background(), worker); err != nil {
+			t.Fatalf("save worker: %v", err)
+		}
+	}
+
+	decision, err := m.EvaluateSpawnRequestAdmission(context.Background(), SpawnRequest{Provider: "mock"})
+	if err != nil {
+		t.Fatalf("evaluate admission: %v", err)
+	}
+	if decision.Allowed || decision.Queueable || decision.SelectedWorkerID != "worker-b" || decision.Reason != "remote_worker_rpc_unavailable" {
+		t.Fatalf("unexpected remote worker decision: %+v", decision)
+	}
+}
+
 func TestManager_SpawnAdmissionSerializesConcurrentCreates(t *testing.T) {
 	dir := t.TempDir()
 	st, err := store.NewSQLiteStore(filepath.Join(dir, "test.db"))
@@ -850,7 +920,7 @@ func TestManager_SchedulerStatus(t *testing.T) {
 	})
 
 	status := m.SchedulerStatus()
-	if status.SpawnOverflow != "queue" || status.MaxSpawnQueue != 7 || status.SpawnQueueTimeout != "10s" || status.AdmissionControl != "single_node" || status.WorkerID != "local" {
+	if status.SpawnOverflow != "queue" || status.MaxSpawnQueue != 7 || status.SpawnQueueTimeout != "10s" || status.AdmissionControl != "worker_aware_local" || status.WorkerID != "local" || status.SelectedWorkerID != "local" || status.EligibleWorkers != 1 {
 		t.Fatalf("unexpected scheduler status: %+v", status)
 	}
 	if status.SpawnQueueDepth != 0 {

@@ -1167,27 +1167,41 @@ func (m *Manager) Limits() OperationalLimitsInfo {
 
 func (m *Manager) SchedulerStatus() SchedulerStatus {
 	m.queueMu.Lock()
-	defer m.queueMu.Unlock()
 	waitAvg := time.Duration(0)
 	if m.queueStats.waitCount > 0 {
 		waitAvg = time.Duration(int64(m.queueStats.waitTotal) / int64(m.queueStats.waitCount))
 	}
+	queueWaiters := m.queueWaiters
+	queuedTotal := m.queueStats.queuedTotal
+	dequeuedTotal := m.queueStats.dequeuedTotal
+	timeoutTotal := m.queueStats.timeoutTotal
+	waitCount := m.queueStats.waitCount
+	waitTotal := m.queueStats.waitTotal
+	waitMax := m.queueStats.waitMax
+	m.queueMu.Unlock()
+
+	placement := workerPlacement{SelectedID: m.workerID, Eligible: 1}
+	if records, err := m.store.ListSandboxes(context.Background()); err == nil {
+		placement = m.evaluateWorkerPlacement(context.Background(), m.registry.Default(), records)
+	}
 	return SchedulerStatus{
 		SpawnOverflow:         m.limits.SpawnOverflow,
-		SpawnQueueDepth:       m.queueWaiters,
+		SpawnQueueDepth:       queueWaiters,
 		MaxSpawnQueue:         m.limits.MaxSpawnQueue,
 		SpawnQueueTimeout:     m.limits.SpawnQueueTimeout.String(),
-		AdmissionControl:      "single_node",
+		AdmissionControl:      "worker_aware_local",
 		WorkerID:              m.workerID,
-		SpawnQueuedTotal:      m.queueStats.queuedTotal,
-		SpawnDequeuedTotal:    m.queueStats.dequeuedTotal,
-		SpawnQueueTimeouts:    m.queueStats.timeoutTotal,
-		SpawnQueueWaitCount:   m.queueStats.waitCount,
-		SpawnQueueWaitTotal:   m.queueStats.waitTotal.String(),
-		SpawnQueueWaitMax:     m.queueStats.waitMax.String(),
+		SelectedWorkerID:      placement.SelectedID,
+		EligibleWorkers:       placement.Eligible,
+		SpawnQueuedTotal:      queuedTotal,
+		SpawnDequeuedTotal:    dequeuedTotal,
+		SpawnQueueTimeouts:    timeoutTotal,
+		SpawnQueueWaitCount:   waitCount,
+		SpawnQueueWaitTotal:   waitTotal.String(),
+		SpawnQueueWaitMax:     waitMax.String(),
 		SpawnQueueWaitAvg:     waitAvg.String(),
-		SpawnQueueWaitTotalMS: m.queueStats.waitTotal.Milliseconds(),
-		SpawnQueueWaitMaxMS:   m.queueStats.waitMax.Milliseconds(),
+		SpawnQueueWaitTotalMS: waitTotal.Milliseconds(),
+		SpawnQueueWaitMaxMS:   waitMax.Milliseconds(),
 		SpawnQueueWaitAvgMS:   waitAvg.Milliseconds(),
 	}
 }
@@ -1371,7 +1385,7 @@ func (m *Manager) acquireSpawnAdmission(ctx context.Context, ownerID string, ttl
 		}
 
 		m.admissionMu.Lock()
-		decision, err := m.EvaluateSpawnAdmission(ctx, ownerID, ttl)
+		decision, err := m.evaluateSpawnAdmission(ctx, ownerID, ttl, provider)
 		if err != nil {
 			m.admissionMu.Unlock()
 			return err
@@ -1388,7 +1402,7 @@ func (m *Manager) acquireSpawnAdmission(ctx context.Context, ownerID string, ttl
 }
 
 func (m *Manager) waitForSpawnCapacity(ctx context.Context, ownerID string, ttl time.Duration, provider string) error {
-	decision, err := m.EvaluateSpawnAdmission(ctx, ownerID, ttl)
+	decision, err := m.evaluateSpawnAdmission(ctx, ownerID, ttl, provider)
 	if err != nil {
 		return err
 	}
@@ -1448,7 +1462,7 @@ func (m *Manager) waitForSpawnCapacity(ctx context.Context, ownerID string, ttl 
 			}
 			return waitCtx.Err()
 		case <-capacityCh:
-			decision, err = m.EvaluateSpawnAdmission(ctx, ownerID, ttl)
+			decision, err = m.evaluateSpawnAdmission(ctx, ownerID, ttl, provider)
 			if err != nil {
 				return err
 			}
@@ -1503,6 +1517,10 @@ func (m *Manager) notifySpawnCapacity() {
 }
 
 func (m *Manager) EvaluateSpawnAdmission(ctx context.Context, ownerID string, ttl time.Duration) (SpawnAdmissionDecision, error) {
+	return m.evaluateSpawnAdmission(ctx, ownerID, ttl, "")
+}
+
+func (m *Manager) evaluateSpawnAdmission(ctx context.Context, ownerID string, ttl time.Duration, provider string) (SpawnAdmissionDecision, error) {
 	maxTTL, maxPerOwner := m.ownerLimitOverrides(ctx, ownerID)
 	decision := SpawnAdmissionDecision{
 		Allowed:           true,
@@ -1518,14 +1536,26 @@ func (m *Manager) EvaluateSpawnAdmission(ctx context.Context, ownerID string, tt
 		return decision, nil
 	}
 
-	if m.limits.MaxSandboxes <= 0 && (ownerID == "" || maxPerOwner <= 0) {
-		return decision, nil
-	}
-
 	records, err := m.store.ListSandboxes(ctx)
 	if err != nil {
 		return SpawnAdmissionDecision{}, fmt.Errorf("checking sandbox limits: %w", err)
 	}
+	placement := m.evaluateWorkerPlacement(ctx, provider, records)
+	decision.SelectedWorkerID = placement.SelectedID
+	decision.EligibleWorkers = placement.Eligible
+	decision.WorkerReason = placement.Reason
+	if placement.SelectedID == "" {
+		decision.Allowed = false
+		decision.Reason = "worker_unavailable"
+		return decision, nil
+	}
+	if placement.SelectedID != m.workerID {
+		decision.Allowed = false
+		decision.Reason = "remote_worker_rpc_unavailable"
+		decision.WorkerReason = "remote_worker_selected"
+		return decision, nil
+	}
+
 	total := 0
 	ownerTotal := 0
 	for _, rec := range records {
@@ -1569,7 +1599,11 @@ func (m *Manager) EvaluateSpawnRequestAdmission(ctx context.Context, req SpawnRe
 	if err != nil {
 		return SpawnAdmissionDecision{}, err
 	}
-	decision, err := m.EvaluateSpawnAdmission(ctx, ownerID, ttl)
+	providerName := req.Provider
+	if providerName == "" {
+		providerName = m.registry.Default()
+	}
+	decision, err := m.evaluateSpawnAdmission(ctx, ownerID, ttl, providerName)
 	if err != nil {
 		return SpawnAdmissionDecision{}, err
 	}
@@ -1587,6 +1621,10 @@ func spawnAdmissionError(decision SpawnAdmissionDecision) error {
 		return providers.ResourceLimitError(fmt.Sprintf("max sandboxes reached (%d)", decision.MaxSandboxes))
 	case "max_sandboxes_per_owner":
 		return providers.ResourceLimitError(fmt.Sprintf("max sandboxes per owner reached (%d)", decision.MaxOwnerSandboxes))
+	case "worker_unavailable":
+		return providers.ResourceLimitError("no eligible worker available")
+	case "remote_worker_rpc_unavailable":
+		return providers.ResourceLimitError("selected worker requires remote worker RPC")
 	default:
 		return providers.ResourceLimitError("spawn admission denied")
 	}
