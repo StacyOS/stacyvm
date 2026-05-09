@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"encoding/json"
 	"net/http"
+	"strings"
 )
 
 type AuthRole string
@@ -18,6 +19,13 @@ const (
 	ScopeAPI             = "api:*"
 	ScopeAdmin           = "admin:*"
 	ScopeWorkerHeartbeat = "worker:heartbeat"
+	ScopeWorkerSpawn     = "worker:spawn"
+	ScopeWorkerDestroy   = "worker:destroy"
+	ScopeWorkerStatus    = "worker:status"
+	ScopeWorkerExec      = "worker:exec"
+	ScopeWorkerFiles     = "worker:files"
+	ScopeWorkerLogs      = "worker:logs"
+	ScopeWorkerLease     = "worker:lease"
 )
 
 type AuthIdentity struct {
@@ -97,9 +105,14 @@ func AdminAuth(adminAPIKey, fallbackAPIKey string, fallbackEnabled bool) func(ht
 }
 
 func WorkerAuth(workerToken string) func(http.Handler) http.Handler {
+	return WorkerAuthWithTokens(workerToken, nil)
+}
+
+func WorkerAuthWithTokens(sharedWorkerToken string, workerTokens map[string]string) func(http.Handler) http.Handler {
+	cleanWorkerTokens := normalizeWorkerTokens(workerTokens)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if workerToken == "" {
+			if strings.TrimSpace(sharedWorkerToken) == "" && len(cleanWorkerTokens) == 0 {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusServiceUnavailable)
 				json.NewEncoder(w).Encode(map[string]string{
@@ -108,16 +121,9 @@ func WorkerAuth(workerToken string) func(http.Handler) http.Handler {
 				})
 				return
 			}
-			workerID := r.Header.Get("X-Worker-ID")
-			token := r.Header.Get("X-Worker-Token")
-			if token == "" {
-				const prefix = "Bearer "
-				authz := r.Header.Get("Authorization")
-				if len(authz) > len(prefix) && authz[:len(prefix)] == prefix {
-					token = authz[len(prefix):]
-				}
-			}
-			if workerID == "" || subtle.ConstantTimeCompare([]byte(token), []byte(workerToken)) != 1 {
+			workerID := strings.TrimSpace(r.Header.Get("X-Worker-ID"))
+			token, header := workerTokenFromRequest(r)
+			if workerID == "" || !validWorkerToken(workerID, token, sharedWorkerToken, cleanWorkerTokens) {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusUnauthorized)
 				json.NewEncoder(w).Encode(map[string]string{
@@ -128,9 +134,9 @@ func WorkerAuth(workerToken string) func(http.Handler) http.Handler {
 			}
 			r = r.WithContext(WithAuthIdentity(r.Context(), AuthIdentity{
 				Role:     AuthRoleWorker,
-				Header:   "X-Worker-Token",
+				Header:   header,
 				WorkerID: workerID,
-				Scopes:   []string{ScopeWorkerHeartbeat},
+				Scopes:   scopesForRole(AuthRoleWorker),
 			}))
 			next.ServeHTTP(w, r)
 		})
@@ -211,10 +217,58 @@ func scopesForRole(role AuthRole) []string {
 	case AuthRoleAPI:
 		return []string{ScopeAPI}
 	case AuthRoleWorker:
-		return []string{ScopeWorkerHeartbeat}
+		return []string{
+			ScopeWorkerHeartbeat,
+			ScopeWorkerSpawn,
+			ScopeWorkerDestroy,
+			ScopeWorkerStatus,
+			ScopeWorkerExec,
+			ScopeWorkerFiles,
+			ScopeWorkerLogs,
+			ScopeWorkerLease,
+		}
 	default:
 		return nil
 	}
+}
+
+func workerTokenFromRequest(r *http.Request) (string, string) {
+	if token := strings.TrimSpace(r.Header.Get("X-Worker-Token")); token != "" {
+		return token, "X-Worker-Token"
+	}
+	const prefix = "Bearer "
+	authz := strings.TrimSpace(r.Header.Get("Authorization"))
+	if len(authz) > len(prefix) && strings.EqualFold(authz[:len(prefix)], prefix) {
+		return strings.TrimSpace(authz[len(prefix):]), "Authorization"
+	}
+	return "", ""
+}
+
+func validWorkerToken(workerID, token, sharedWorkerToken string, workerTokens map[string]string) bool {
+	if token == "" {
+		return false
+	}
+	if expected, ok := workerTokens[workerID]; ok {
+		return subtle.ConstantTimeCompare([]byte(token), []byte(expected)) == 1
+	}
+	sharedWorkerToken = strings.TrimSpace(sharedWorkerToken)
+	return sharedWorkerToken != "" && subtle.ConstantTimeCompare([]byte(token), []byte(sharedWorkerToken)) == 1
+}
+
+func normalizeWorkerTokens(workerTokens map[string]string) map[string]string {
+	if len(workerTokens) == 0 {
+		return nil
+	}
+	cleaned := make(map[string]string, len(workerTokens))
+	for workerID, token := range workerTokens {
+		workerID = strings.TrimSpace(workerID)
+		token = strings.TrimSpace(token)
+		if workerID == "" || token == "" {
+			continue
+		}
+		cleaned[workerID] = token
+	}
+	return cleaned
 }
 
 func nonEmptyKeys(apiKeys ...string) []string {

@@ -545,7 +545,8 @@ auth:
   enabled: false
   api_key: ""
   admin_api_key: ""       # optional separate key for /api/v1/admin/*
-  worker_token: ""         # required for stacyvm worker heartbeat
+  worker_token: ""         # shared staging worker token
+  worker_tokens: {}        # production map of worker_id: token
   admin_fallback_enabled: true  # false requires admin_api_key for admin routes
   admin_audit_retention: "0s"  # 0s disables native audit pruning
 

@@ -129,6 +129,61 @@ func TestAuthIdentityFromContextDefaultsToAnonymous(t *testing.T) {
 	}
 }
 
+func TestWorkerAuthWithPerWorkerToken(t *testing.T) {
+	var got AuthIdentity
+	handler := WorkerAuthWithTokens("shared-token", map[string]string{
+		"worker-a": "worker-a-token",
+	})(identityHandler(&got))
+
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	req.Header.Set("X-Worker-ID", "worker-a")
+	req.Header.Set("X-Worker-Token", "worker-a-token")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if got.Role != AuthRoleWorker || got.WorkerID != "worker-a" {
+		t.Fatalf("identity = %+v, want worker-a worker identity", got)
+	}
+	if !got.HasScope(ScopeWorkerHeartbeat) || !got.HasScope(ScopeWorkerLease) {
+		t.Fatalf("worker identity scopes = %#v, want heartbeat and lease scopes", got.Scopes)
+	}
+}
+
+func TestWorkerAuthPerWorkerTokenOverridesSharedToken(t *testing.T) {
+	handler := WorkerAuthWithTokens("shared-token", map[string]string{
+		"worker-a": "worker-a-token",
+	})(okHandler())
+
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	req.Header.Set("X-Worker-ID", "worker-a")
+	req.Header.Set("X-Worker-Token", "shared-token")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d when shared token is used for a worker-specific credential: %s", w.Code, http.StatusUnauthorized, w.Body.String())
+	}
+}
+
+func TestWorkerAuthFallsBackToSharedTokenForUnmappedWorker(t *testing.T) {
+	handler := WorkerAuthWithTokens("shared-token", map[string]string{
+		"worker-a": "worker-a-token",
+	})(okHandler())
+
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	req.Header.Set("X-Worker-ID", "worker-b")
+	req.Header.Set("Authorization", "Bearer shared-token")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d for unmapped worker using shared token: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+}
+
 func TestRequireScopeAllowsMatchingScope(t *testing.T) {
 	handler := RequireScope(ScopeAdmin)(okHandler())
 	req := httptest.NewRequest(http.MethodGet, "/", nil)

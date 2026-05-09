@@ -129,6 +129,38 @@ func TestWorkerHeartbeatRejectsWorkerIDMismatch(t *testing.T) {
 	}
 }
 
+func TestWorkerHeartbeatUsesPerWorkerToken(t *testing.T) {
+	srv, st := setupTestServerWithStore(t, ServerConfig{
+		WorkerToken: "shared-worker-secret",
+		WorkerTokens: map[string]string{
+			"worker-a": "worker-a-secret",
+		},
+		Version: "test",
+	})
+	body := []byte(`{"hostname":"worker-host","status":"online","providers":["mock"],"capabilities":["heartbeat"],"capacity":{"max_sandboxes":1}}`)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/worker/worker-a/heartbeat", bytes.NewReader(body))
+	req.Header.Set("X-Worker-ID", "worker-a")
+	req.Header.Set("X-Worker-Token", "worker-a-secret")
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if _, err := st.GetWorker(context.Background(), "worker-a"); err != nil {
+		t.Fatalf("get worker: %v", err)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/worker/worker-a/heartbeat", bytes.NewReader(body))
+	req.Header.Set("X-Worker-ID", "worker-a")
+	req.Header.Set("X-Worker-Token", "shared-worker-secret")
+	w = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("shared token status = %d, want %d for per-worker credential: %s", w.Code, http.StatusUnauthorized, w.Body.String())
+	}
+}
+
 func TestWorkerRenewLeaseUsesWorkerToken(t *testing.T) {
 	srv, st := setupTestServerWithStore(t, ServerConfig{
 		APIKey:      "client-key",

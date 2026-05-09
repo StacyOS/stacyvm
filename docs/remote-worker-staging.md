@@ -2,14 +2,14 @@
 
 This guide runs StacyVM as two local processes: one control plane and one remote worker. Use the mock provider first so you can verify worker registration, remote spawn, remote status refresh, remote exec, and remote destroy before introducing Docker, Firecracker, or a real network boundary.
 
-Phase 11 remote worker mode is for internal staging. It is not the enterprise production target yet because it still uses the configured shared worker token and SQLite store semantics.
+Remote worker mode can use a shared worker token for internal staging or per-worker tokens for production-aligned staging. It is not the full enterprise production target yet because SQLite store semantics are still single-node oriented.
 
 ## Prerequisites
 
 - Built `stacyvm` binary.
 - One terminal for `stacyvm serve`.
 - One terminal for `stacyvm worker`.
-- A random worker token shared by both processes.
+- A random worker token shared by both processes, or a per-worker token configured under `auth.worker_tokens`.
 
 ## Control Plane Config
 
@@ -33,6 +33,8 @@ auth:
   api_key: "dev-api-key-dev-api-key-dev-api-key"
   admin_api_key: "dev-admin-key-dev-admin-key-dev"
   worker_token: "dev-worker-token-dev-worker-token"
+  worker_tokens:
+    worker-a: "dev-worker-a-token-dev-worker-a-token"
   admin_fallback_enabled: false
 
 database:
@@ -68,7 +70,7 @@ providers:
     enabled: false
 
 auth:
-  worker_token: "dev-worker-token-dev-worker-token"
+  worker_token: "dev-worker-a-token-dev-worker-a-token"
 ```
 
 Start the worker:

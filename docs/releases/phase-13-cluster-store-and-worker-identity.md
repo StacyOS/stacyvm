@@ -40,14 +40,24 @@ Postgres is intentionally not marked production-ready in this checkpoint. Config
 
 - `stacyvm serve` now opens the store through the driver-based factory.
 - `stacyvm config lint` and `stacyvm doctor` report clear Postgres-driver warnings for this build.
+- `stacyvm config lint --production` now distinguishes shared staging worker tokens from production per-worker credentials.
+
+### Worker Identity
+
+- Added `auth.worker_tokens` as a map of `worker_id: token`.
+- Kept `auth.worker_token` for shared-token staging compatibility.
+- Per-worker credentials override the shared worker token for that worker ID.
+- Worker identities now receive explicit scopes for heartbeat, spawn, destroy, status, exec, files, logs, and leases.
+- Worker lease renewal now requires the dedicated `worker:lease` scope.
 
 ## Verification
 
 - `go test ./internal/store`
+- `go test ./internal/api/middleware ./internal/api ./internal/config ./cmd/stacyvm`
 
 ## Next Phase 13 Direction
 
 - Add a real Postgres store implementation with migration management.
 - Run the existing store contract tests against Postgres once the Postgres driver is implemented.
-- Add production-grade worker identity beyond shared worker tokens.
+- Continue worker identity hardening toward signed tokens or mTLS transport enforcement.
 - Add cluster conformance docs and CI paths for Postgres-backed multi-worker mode.

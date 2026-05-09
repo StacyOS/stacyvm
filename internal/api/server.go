@@ -28,6 +28,7 @@ type ServerConfig struct {
 	AdminFallbackDisabled bool
 	AdminAuditRetention   time.Duration
 	WorkerToken           string
+	WorkerTokens          map[string]string
 	Version               string
 	RateLimit             middleware.RateLimitConfig
 	WorkerHeartbeat       time.Duration
@@ -72,10 +73,9 @@ func NewServer(cfg ServerConfig, registry *providers.Registry, manager *orchestr
 
 	workerRoutes := routes.NewWorkerRoutes(st)
 	r.Route("/api/v1/worker", func(r chi.Router) {
-		r.Use(middleware.WorkerAuth(cfg.WorkerToken))
-		r.Use(middleware.RequireScope(middleware.ScopeWorkerHeartbeat))
-		r.Post("/{workerID}/heartbeat", workerRoutes.Heartbeat)
-		r.Post("/{workerID}/leases/{resourceID}/renew", workerRoutes.RenewLease)
+		r.Use(middleware.WorkerAuthWithTokens(cfg.WorkerToken, cfg.WorkerTokens))
+		r.With(middleware.RequireScope(middleware.ScopeWorkerHeartbeat)).Post("/{workerID}/heartbeat", workerRoutes.Heartbeat)
+		r.With(middleware.RequireScope(middleware.ScopeWorkerLease)).Post("/{workerID}/leases/{resourceID}/renew", workerRoutes.RenewLease)
 	})
 
 	// API routes — with auth and CORS

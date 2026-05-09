@@ -13,12 +13,16 @@ This checkpoint starts the enterprise multi-worker production track after Phase 
 - Config validation for database driver selection and required Postgres DSN.
 - Reusable store contract test harness wired to SQLite.
 - Cross-store contract coverage for sandbox lifecycle, workers, leases, audits, exec logs, quotas, provider configs, templates, environment builds, artifacts, and registry connections.
+- Per-worker token map support through `auth.worker_tokens`.
+- Worker auth scopes for heartbeat, spawn, destroy, status, exec, files, logs, and leases.
+- Config linting guidance for staging shared worker tokens versus production per-worker credentials.
 - Phase 13 release notes under `docs/releases/phase-13-cluster-store-and-worker-identity.md`.
 
 ### Changed
 
 - `stacyvm serve` now opens persistence through the driver-based store factory.
 - `stacyvm config lint` and `stacyvm doctor` now report clear warnings when Postgres is configured in a build without a linked Postgres store driver.
+- Worker lease renewal now checks the dedicated `worker:lease` scope instead of reusing heartbeat-only authorization.
 
 ## Phase 12 Remote Sandbox I/O Routing - 2026-05-09
 

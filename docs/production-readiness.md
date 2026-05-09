@@ -52,7 +52,7 @@ This checklist tracks the Phase 7 release-candidate hardening work needed before
 - Scheduler placement policy is worker-aware. Remote spawn, status, destroy, live exec streaming, files, logs, preview metadata, and conservative drain/offline ownership policy are available for workers that advertise `rpc_url`.
 - Sandbox ownership is tied to worker IDs. Remote spawn/status/destroy ownership is enforced through worker RPC and persisted runtime IDs.
 - Distributed leases prevent duplicate worker ownership. Remote spawn, renew, and destroy now carry lease tokens; persistence now has an explicit driver seam, and production still needs a Postgres store implementation with Postgres-grade lease semantics.
-- Remote worker authentication and RPC contract are implemented for heartbeat, lease renewal, spawn, status, destroy, exec, files, logs, preview metadata, and drain/offline ownership reconciliation using a shared worker token suitable for staging.
+- Remote worker authentication and RPC contract are implemented for heartbeat, lease renewal, spawn, status, destroy, exec, files, logs, preview metadata, and drain/offline ownership reconciliation. Shared worker tokens remain available for staging, and per-worker token mapping now supports individually rotatable worker credentials.
 
 ## Current Release-Candidate Gates
 
@@ -65,7 +65,7 @@ This checklist tracks the Phase 7 release-candidate hardening work needed before
 | Runtime conformance | Partial | Harness and host certification script exist; Firecracker/PRoot remain platform-gated. |
 | Security posture | Partial | Admin governance, operation audit, path traversal checks, and explicit exec modes are implemented; OIDC/JWT implementation remains. |
 | Release automation | Passing | Release workflow signs binaries, checksums, and GHCR image digests; public verifier and installer verification exist. |
-| Worker registry | Partial | Durable worker registration, heartbeat, diagnostics, metrics, placement, ownership, leases, and worker RPC contract exist; network worker transport remains. |
+| Worker registry | Partial | Durable worker registration, heartbeat, diagnostics, metrics, placement, ownership, leases, per-worker token auth, and worker RPC contract exist; network worker transport remains. |
 
 ## Required Before Single-Node Production
 

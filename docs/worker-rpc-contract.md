@@ -89,6 +89,13 @@ Initial scopes:
 
 Workers must not accept user API keys or admin API keys for worker RPC. Control-plane admin access and worker execution access are separate trust boundaries.
 
+Current control-plane worker authentication accepts either:
+
+- `auth.worker_token` as a shared staging token.
+- `auth.worker_tokens.<worker_id>` as a per-worker token map for production-aligned staging.
+
+When a worker has an entry in `auth.worker_tokens`, that worker-specific token takes precedence and the shared token is rejected for that worker ID. This keeps legacy staging configs compatible while giving production deployments individually rotatable worker credentials.
+
 Current Phase 11 heartbeat endpoint:
 
 ```text

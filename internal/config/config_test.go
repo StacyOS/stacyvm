@@ -156,6 +156,8 @@ worker:
   shutdown_timeout: "15s"
 auth:
   worker_token: "worker-secret"
+  worker_tokens:
+    worker-a: "worker-a-secret"
 `), 0644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
@@ -175,5 +177,8 @@ auth:
 	}
 	if cfg.Auth.WorkerToken != "worker-secret" {
 		t.Fatalf("worker token = %q, want worker-secret", cfg.Auth.WorkerToken)
+	}
+	if cfg.Auth.WorkerTokens["worker-a"] != "worker-a-secret" {
+		t.Fatalf("worker-a token = %q, want worker-a-secret", cfg.Auth.WorkerTokens["worker-a"])
 	}
 }
