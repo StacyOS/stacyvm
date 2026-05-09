@@ -151,6 +151,7 @@ type AuthConfig struct {
 	WorkerToken          string            `mapstructure:"worker_token"`
 	WorkerTokens         map[string]string `mapstructure:"worker_tokens"`
 	WorkerSigningKey     string            `mapstructure:"worker_signing_key"`
+	WorkerSigningKeys    []string          `mapstructure:"worker_signing_keys"`
 	AdminFallbackEnabled bool              `mapstructure:"admin_fallback_enabled"`
 	AdminAuditRetention  string            `mapstructure:"admin_audit_retention"`
 }
@@ -253,6 +254,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("auth.worker_token", "")
 	v.SetDefault("auth.worker_tokens", map[string]string{})
 	v.SetDefault("auth.worker_signing_key", "")
+	v.SetDefault("auth.worker_signing_keys", []string{})
 	v.SetDefault("auth.admin_fallback_enabled", true)
 	v.SetDefault("auth.admin_audit_retention", "0s")
 

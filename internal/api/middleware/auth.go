@@ -50,6 +50,7 @@ type WorkerAuthConfig struct {
 	SharedToken  string
 	WorkerTokens map[string]string
 	SigningKey   string
+	SigningKeys  []string
 	Now          func() time.Time
 }
 
@@ -141,14 +142,14 @@ func WorkerAuthWithTokens(sharedWorkerToken string, workerTokens map[string]stri
 func WorkerAuthWithConfig(cfg WorkerAuthConfig) func(http.Handler) http.Handler {
 	cleanWorkerTokens := normalizeWorkerTokens(cfg.WorkerTokens)
 	sharedWorkerToken := strings.TrimSpace(cfg.SharedToken)
-	signingKey := strings.TrimSpace(cfg.SigningKey)
+	signingKeys := normalizeSigningKeys(cfg.SigningKey, cfg.SigningKeys)
 	now := cfg.Now
 	if now == nil {
 		now = time.Now
 	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if sharedWorkerToken == "" && len(cleanWorkerTokens) == 0 && signingKey == "" {
+			if sharedWorkerToken == "" && len(cleanWorkerTokens) == 0 && len(signingKeys) == 0 {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusServiceUnavailable)
 				json.NewEncoder(w).Encode(map[string]string{
@@ -159,7 +160,7 @@ func WorkerAuthWithConfig(cfg WorkerAuthConfig) func(http.Handler) http.Handler 
 			}
 			workerID := strings.TrimSpace(r.Header.Get("X-Worker-ID"))
 			token, header := workerTokenFromRequest(r)
-			scopes, ok := validateWorkerCredentials(workerID, token, sharedWorkerToken, cleanWorkerTokens, signingKey, now)
+			scopes, ok := validateWorkerCredentials(workerID, token, sharedWorkerToken, cleanWorkerTokens, signingKeys, now)
 			if workerID == "" || !ok {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusUnauthorized)
@@ -327,11 +328,11 @@ func VerifyWorkerToken(signingKey, token string, now time.Time) (WorkerTokenClai
 	return claims, true
 }
 
-func validateWorkerCredentials(workerID, token, sharedWorkerToken string, workerTokens map[string]string, signingKey string, now func() time.Time) ([]string, bool) {
+func validateWorkerCredentials(workerID, token, sharedWorkerToken string, workerTokens map[string]string, signingKeys []string, now func() time.Time) ([]string, bool) {
 	if token == "" || workerID == "" {
 		return nil, false
 	}
-	if claims, ok := VerifyWorkerToken(signingKey, token, now().UTC()); ok {
+	if claims, ok := verifyWorkerTokenWithAnyKey(signingKeys, token, now().UTC()); ok {
 		if claims.WorkerID != workerID {
 			return nil, false
 		}
@@ -345,6 +346,15 @@ func validateWorkerCredentials(workerID, token, sharedWorkerToken string, worker
 		return scopesForRole(AuthRoleWorker), true
 	}
 	return nil, false
+}
+
+func verifyWorkerTokenWithAnyKey(signingKeys []string, token string, now time.Time) (WorkerTokenClaims, bool) {
+	for _, signingKey := range signingKeys {
+		if claims, ok := VerifyWorkerToken(signingKey, token, now); ok {
+			return claims, true
+		}
+	}
+	return WorkerTokenClaims{}, false
 }
 
 func signWorkerToken(signingKey, signedPart string) string {
@@ -369,6 +379,23 @@ func normalizeScopes(scopes []string) []string {
 		}
 	}
 	return cleaned
+}
+
+func normalizeSigningKeys(primary string, additional []string) []string {
+	seen := map[string]struct{}{}
+	keys := make([]string, 0, len(additional)+1)
+	for _, key := range append([]string{primary}, additional...) {
+		key = strings.TrimSpace(key)
+		if key == "" {
+			continue
+		}
+		if _, ok := seen[key]; ok {
+			continue
+		}
+		seen[key] = struct{}{}
+		keys = append(keys, key)
+	}
+	return keys
 }
 
 func validWorkerToken(workerID, token, sharedWorkerToken string, workerTokens map[string]string) bool {

@@ -16,10 +16,12 @@ Phase 14 begins the worker identity hardening lane for production multi-worker S
 - Enforced signed-token expiry before accepting worker requests.
 - Enforced that signed `worker_id` must match the `X-Worker-ID` request header.
 - Filtered signed-token scopes so tokens cannot grant user, API, or admin scopes.
+- Added `stacyvm worker token <worker-id>` to issue signed worker tokens from the CLI.
 
 ### Configuration
 
 - Added `auth.worker_signing_key`.
+- Added `auth.worker_signing_keys` for old verification keys during rotation.
 - Kept `auth.worker_token` for shared-token staging compatibility.
 - Kept `auth.worker_tokens` for per-worker static token migration paths.
 - Updated `stacyvm config lint --production` so a strong `auth.worker_signing_key` satisfies production-aligned worker credential checks.
@@ -29,6 +31,17 @@ Phase 14 begins the worker identity hardening lane for production multi-worker S
 - Added dynamic worker token generation for `stacyvm worker` heartbeat and lease-renewal calls.
 - When no static `--worker-token` or `auth.worker_token` is configured, a worker can derive short-lived signed control-plane tokens from `auth.worker_signing_key`.
 - Existing static token behavior is unchanged.
+
+### Rotation
+
+- New signed tokens are minted with `auth.worker_signing_key`.
+- Old tokens can continue verifying through `auth.worker_signing_keys` during a rotation window.
+- The documented rotation sequence is:
+  - promote the new key into `auth.worker_signing_key`
+  - move the old key into `auth.worker_signing_keys`
+  - restart or reload workers
+  - wait for old token TTLs to expire
+  - remove the old key from `auth.worker_signing_keys`
 
 ### Documentation
 
@@ -42,9 +55,9 @@ Phase 14 begins the worker identity hardening lane for production multi-worker S
 
 - `internal/api/middleware`: signed token creation, verification, worker scope filtering, and worker auth config.
 - `internal/api`: server worker auth wiring for `auth.worker_signing_key`.
-- `internal/config`: config schema and defaults for worker signing keys.
+- `internal/config`: config schema and defaults for primary and rotation worker signing keys.
 - `internal/worker`: dynamic token callback support for worker heartbeat and lease renewal.
-- `cmd/stacyvm`: `serve`, `worker`, and `config lint` wiring.
+- `cmd/stacyvm`: `serve`, `worker`, `worker token`, and `config lint` wiring.
 - `docs`: worker identity and conformance documentation.
 
 ## Compatibility
@@ -54,9 +67,8 @@ The new signed-token path is additive:
 - Existing `auth.worker_token` deployments continue to work.
 - Existing `auth.worker_tokens.<worker_id>` deployments continue to work.
 - Signed tokens can be introduced gradually by setting `auth.worker_signing_key`.
+- Key rotation can be introduced gradually by adding old keys to `auth.worker_signing_keys`.
 
 ## Remaining Phase 14 Direction
 
-- Add a dedicated worker token issuer command or admin endpoint so workers do not need direct access to the signing key.
-- Add explicit key rotation workflow documentation.
 - Add mTLS guidance for enterprise worker-to-control-plane and control-plane-to-worker networks.

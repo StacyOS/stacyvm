@@ -9,10 +9,12 @@ This checkpoint starts hardening remote worker identity for public and enterpris
 - HMAC-SHA256 signed worker token format with `stacyvm-worker-v1` prefix.
 - Signed worker token claims for `worker_id`, optional worker scopes, `iat`, and `exp`.
 - Worker auth verification for signed tokens through `auth.worker_signing_key`.
+- Additional signed-token verification keys through `auth.worker_signing_keys` for no-downtime key rotation.
 - Signed-token worker ID matching and expiry enforcement.
 - Worker scope filtering so signed tokens cannot grant non-worker scopes.
 - Worker runtime token derivation for heartbeat and lease-renewal calls when `auth.worker_signing_key` is configured and no static worker token is provided.
-- Config loading and defaults for `auth.worker_signing_key`.
+- `stacyvm worker token <worker-id>` for issuing signed worker tokens.
+- Config loading and defaults for `auth.worker_signing_key` and `auth.worker_signing_keys`.
 - Config lint awareness for signed worker credentials.
 - Phase 14 release notes under `docs/releases/phase-14-worker-identity-hardening.md`.
 
@@ -20,7 +22,7 @@ This checkpoint starts hardening remote worker identity for public and enterpris
 
 - Worker auth now accepts signed tokens, per-worker static tokens, or the shared staging token while preserving existing compatibility.
 - Cluster conformance documentation now treats signed worker tokens as the production-aligned worker identity path.
-- API and worker RPC docs now describe signed worker token behavior.
+- API and worker RPC docs now describe signed worker token behavior and signing-key rotation.
 
 ## Phase 13 Cluster Store And Worker Identity - 2026-05-09
 

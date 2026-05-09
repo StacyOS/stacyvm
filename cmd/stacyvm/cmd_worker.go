@@ -101,7 +101,81 @@ func newWorkerCmd() *cobra.Command {
 	cmd.Flags().StringVar(&listenAddr, "listen", "", "worker RPC listen address; defaults to worker.listen_addr")
 	cmd.Flags().StringVar(&previewDomain, "preview-domain", "", "worker preview domain; defaults to worker.preview_domain or server.preview_domain")
 	cmd.Flags().BoolVar(&once, "once", false, "send one heartbeat and exit")
+	cmd.AddCommand(newWorkerTokenCmd())
 	return cmd
+}
+
+func newWorkerTokenCmd() *cobra.Command {
+	var signingKey string
+	var ttl string
+	var scopes []string
+	cmd := &cobra.Command{
+		Use:   "token <worker-id>",
+		Short: "Issue a signed worker token",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			cfg, err := config.Load()
+			if err != nil {
+				return err
+			}
+			if signingKey == "" {
+				signingKey = cfg.Auth.WorkerSigningKey
+			}
+			token, err := issueWorkerToken(workerTokenIssueOptions{
+				WorkerID:   args[0],
+				SigningKey: signingKey,
+				TTL:        ttl,
+				Scopes:     scopes,
+				Now:        time.Now,
+			})
+			if err != nil {
+				return err
+			}
+			_, err = fmt.Fprintln(cmd.OutOrStdout(), token)
+			return err
+		},
+	}
+	cmd.Flags().StringVar(&signingKey, "signing-key", os.Getenv("STACYVM_AUTH_WORKER_SIGNING_KEY"), "worker signing key; defaults to auth.worker_signing_key")
+	cmd.Flags().StringVar(&ttl, "ttl", "5m", "token lifetime")
+	cmd.Flags().StringArrayVar(&scopes, "scope", nil, "worker scope to include; repeatable, defaults to all worker scopes")
+	return cmd
+}
+
+type workerTokenIssueOptions struct {
+	WorkerID   string
+	SigningKey string
+	TTL        string
+	Scopes     []string
+	Now        func() time.Time
+}
+
+func issueWorkerToken(opts workerTokenIssueOptions) (string, error) {
+	workerID := strings.TrimSpace(opts.WorkerID)
+	signingKey := strings.TrimSpace(opts.SigningKey)
+	if workerID == "" {
+		return "", fmt.Errorf("worker id is required")
+	}
+	if signingKey == "" {
+		return "", fmt.Errorf("worker signing key is required")
+	}
+	ttl, err := time.ParseDuration(opts.TTL)
+	if err != nil {
+		return "", fmt.Errorf("worker token ttl: %w", err)
+	}
+	if ttl <= 0 {
+		return "", fmt.Errorf("worker token ttl must be positive")
+	}
+	now := opts.Now
+	if now == nil {
+		now = time.Now
+	}
+	issuedAt := now().UTC()
+	return middleware.SignWorkerToken(signingKey, middleware.WorkerTokenClaims{
+		WorkerID:  workerID,
+		Scopes:    opts.Scopes,
+		IssuedAt:  issuedAt.Unix(),
+		ExpiresAt: issuedAt.Add(ttl).Unix(),
+	})
 }
 
 func signedWorkerTokenFunc(workerID, signingKey string) func() (string, error) {

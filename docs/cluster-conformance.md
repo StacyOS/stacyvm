@@ -40,6 +40,7 @@ Postgres must not be marked production-ready for a deployment until it runs the 
 | `auth.worker_token` | Supported | Local development and internal staging with a shared worker token |
 | `auth.worker_tokens.<worker_id>` | Supported | Production-aligned staging with individually rotatable worker credentials |
 | `auth.worker_signing_key` | Supported | Public or enterprise deployments that need short-lived signed worker credentials |
+| `auth.worker_signing_keys` | Supported | No-downtime signing-key rotation window for old verification keys |
 | mTLS | Planned | Enterprise deployments that require network-level worker identity |
 
 When `auth.worker_tokens` contains a worker ID, that worker must authenticate with its own token. The shared token is rejected for that worker ID.

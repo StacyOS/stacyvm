@@ -157,6 +157,8 @@ worker:
 auth:
   worker_token: "worker-secret"
   worker_signing_key: "0123456789abcdef0123456789abcdef"
+  worker_signing_keys:
+    - "old-worker-signing-key-with-at-least-32-bytes"
   worker_tokens:
     worker-a: "worker-a-secret"
 `), 0644); err != nil {
@@ -181,6 +183,9 @@ auth:
 	}
 	if cfg.Auth.WorkerSigningKey != "0123456789abcdef0123456789abcdef" {
 		t.Fatalf("worker signing key = %q, want configured key", cfg.Auth.WorkerSigningKey)
+	}
+	if len(cfg.Auth.WorkerSigningKeys) != 1 || cfg.Auth.WorkerSigningKeys[0] != "old-worker-signing-key-with-at-least-32-bytes" {
+		t.Fatalf("worker signing keys = %#v, want old rotation key", cfg.Auth.WorkerSigningKeys)
 	}
 	if cfg.Auth.WorkerTokens["worker-a"] != "worker-a-secret" {
 		t.Fatalf("worker-a token = %q, want worker-a-secret", cfg.Auth.WorkerTokens["worker-a"])

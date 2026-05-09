@@ -234,6 +234,7 @@ func runServe() error {
 		WorkerToken:           cfg.Auth.WorkerToken,
 		WorkerTokens:          cfg.Auth.WorkerTokens,
 		WorkerSigningKey:      cfg.Auth.WorkerSigningKey,
+		WorkerSigningKeys:     cfg.Auth.WorkerSigningKeys,
 		Version:               version,
 		RateLimit: middleware.RateLimitConfig{
 			Enabled:           cfg.RateLimit.Enabled,

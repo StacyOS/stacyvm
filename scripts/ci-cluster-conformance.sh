@@ -104,6 +104,7 @@ signed_worker_config="$tmpdir/stacyvm.signed-worker.yaml"
 sed \
   -e '/worker_tokens:/,/admin_fallback_enabled:/c\
   worker_signing_key: "worker-signing-key-with-at-least-32-bytes"\
+  worker_signing_keys: ["old-worker-signing-key-with-at-least-32-bytes"]\
   admin_fallback_enabled: false' \
   "$cluster_config" >"$signed_worker_config"
 go run ./cmd/stacyvm config lint --production --file "$signed_worker_config"

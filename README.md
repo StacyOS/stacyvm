@@ -548,6 +548,7 @@ auth:
   worker_token: ""         # shared staging worker token
   worker_tokens: {}        # production map of worker_id: token
   worker_signing_key: ""   # production signed worker token verification key
+  worker_signing_keys: []   # old verification keys accepted during rotation
   admin_fallback_enabled: true  # false requires admin_api_key for admin routes
   admin_audit_retention: "0s"  # 0s disables native audit pruning
 

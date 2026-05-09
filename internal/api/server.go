@@ -30,6 +30,7 @@ type ServerConfig struct {
 	WorkerToken           string
 	WorkerTokens          map[string]string
 	WorkerSigningKey      string
+	WorkerSigningKeys     []string
 	Version               string
 	RateLimit             middleware.RateLimitConfig
 	WorkerHeartbeat       time.Duration
@@ -78,6 +79,7 @@ func NewServer(cfg ServerConfig, registry *providers.Registry, manager *orchestr
 			SharedToken:  cfg.WorkerToken,
 			WorkerTokens: cfg.WorkerTokens,
 			SigningKey:   cfg.WorkerSigningKey,
+			SigningKeys:  cfg.WorkerSigningKeys,
 		}))
 		r.With(middleware.RequireScope(middleware.ScopeWorkerHeartbeat)).Post("/{workerID}/heartbeat", workerRoutes.Heartbeat)
 		r.With(middleware.RequireScope(middleware.ScopeWorkerLease)).Post("/{workerID}/leases/{resourceID}/renew", workerRoutes.RenewLease)

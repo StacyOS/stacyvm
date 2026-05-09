@@ -94,10 +94,19 @@ Current control-plane worker authentication accepts either:
 - `auth.worker_token` as a shared staging token.
 - `auth.worker_tokens.<worker_id>` as a per-worker token map for production-aligned staging.
 - `auth.worker_signing_key` for HMAC-SHA256 signed worker tokens using the `stacyvm-worker-v1.<payload>.<signature>` format.
+- `auth.worker_signing_keys` as additional verification keys accepted during signing-key rotation.
 
 When a worker has an entry in `auth.worker_tokens`, that worker-specific token takes precedence and the shared token is rejected for that worker ID. This keeps legacy staging configs compatible while giving production deployments individually rotatable worker credentials.
 
-Signed worker token payloads are base64url JSON claims with `worker_id`, optional worker scopes, `iat`, and `exp`. The authenticated `X-Worker-ID` must match the signed `worker_id`, expired tokens are rejected, and any non-worker scopes are ignored. `stacyvm worker` can derive short-lived heartbeat and lease-renewal tokens from `auth.worker_signing_key` when no static `--worker-token` or `auth.worker_token` is provided.
+Signed worker token payloads are base64url JSON claims with `worker_id`, optional worker scopes, `iat`, and `exp`. The authenticated `X-Worker-ID` must match the signed `worker_id`, expired tokens are rejected, and any non-worker scopes are ignored. `stacyvm worker` can derive short-lived heartbeat and lease-renewal tokens from `auth.worker_signing_key` when no static `--worker-token` or `auth.worker_token` is provided. Operators can also issue a token explicitly with `stacyvm worker token <worker-id> --ttl 5m`.
+
+No-downtime signing-key rotation uses a two-key window:
+
+1. Set the new key as `auth.worker_signing_key`.
+2. Move the previous key into `auth.worker_signing_keys`.
+3. Restart or reload workers so they mint with the new key.
+4. Wait until all old worker tokens have expired.
+5. Remove the old key from `auth.worker_signing_keys`.
 
 Current Phase 11 heartbeat endpoint:
 
