@@ -2,7 +2,9 @@ package orchestrator
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -11,6 +13,7 @@ import (
 
 	"github.com/StacyOs/stacyvm/internal/providers"
 	"github.com/StacyOs/stacyvm/internal/store"
+	"github.com/StacyOs/stacyvm/internal/worker"
 	"github.com/rs/zerolog"
 )
 
@@ -111,6 +114,74 @@ func TestManager_SpawnAndGet(t *testing.T) {
 	}
 	if got.ID != sb.ID {
 		t.Fatalf("ID mismatch")
+	}
+}
+
+func TestManager_RemoteSpawnUsesWorkerRPC(t *testing.T) {
+	remoteRegistry := providers.NewRegistry()
+	remoteMock := providers.NewMockProvider()
+	remoteRegistry.Register(remoteMock)
+	if err := remoteRegistry.SetDefault("mock"); err != nil {
+		t.Fatalf("set remote default: %v", err)
+	}
+	server := httptest.NewServer(worker.RPCServer{
+		WorkerID: "worker-remote",
+		Token:    "worker-secret",
+		Registry: remoteRegistry,
+	}.Handler())
+	defer server.Close()
+
+	m := setupManagerWithConfig(t, ManagerConfig{
+		DefaultTTL:    5 * time.Minute,
+		DefaultImage:  "alpine:latest",
+		DefaultMemory: 512,
+		DefaultVCPUs:  1,
+		WorkerToken:   "worker-secret",
+	})
+	providersJSON, _ := json.Marshal([]string{"mock"})
+	capacityJSON, _ := json.Marshal(map[string]interface{}{
+		"max_sandboxes": 10,
+		"rpc_url":       server.URL,
+	})
+	now := time.Now().UTC()
+	if err := m.store.SaveWorker(context.Background(), &store.WorkerRecord{
+		ID:            "worker-remote",
+		Hostname:      "remote-host",
+		Status:        "online",
+		Providers:     string(providersJSON),
+		Capabilities:  `["remote_worker","spawn"]`,
+		Capacity:      string(capacityJSON),
+		LastHeartbeat: now,
+	}); err != nil {
+		t.Fatalf("save worker: %v", err)
+	}
+
+	sb, err := m.Spawn(context.Background(), SpawnRequest{Image: "alpine:latest"})
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	if sb.WorkerID != "worker-remote" {
+		t.Fatalf("worker id = %q, want worker-remote", sb.WorkerID)
+	}
+	if sb.VMID == "" {
+		t.Fatal("expected remote runtime id in VMID")
+	}
+	if _, err := remoteMock.Status(context.Background(), sb.VMID); err != nil {
+		t.Fatalf("remote runtime status: %v", err)
+	}
+	rec, err := m.store.GetSandbox(context.Background(), sb.ID)
+	if err != nil {
+		t.Fatalf("get sandbox record: %v", err)
+	}
+	if rec.WorkerID != "worker-remote" || rec.VMID != sb.VMID {
+		t.Fatalf("unexpected record ownership: %+v", rec)
+	}
+	lease, err := m.store.GetLease(context.Background(), sb.ID)
+	if err != nil {
+		t.Fatalf("get lease: %v", err)
+	}
+	if lease.HolderID != "worker-remote" {
+		t.Fatalf("lease holder = %q, want worker-remote", lease.HolderID)
 	}
 }
 

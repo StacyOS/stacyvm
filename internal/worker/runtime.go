@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/StacyOs/stacyvm/internal/providers"
@@ -88,6 +89,16 @@ func (r Runtime) heartbeat(ctx context.Context) error {
 		Providers:    r.Providers,
 		Capabilities: []string{"remote_worker", "heartbeat"},
 		Capacity:     r.Capacity,
+	}
+	if r.ListenAddr != "" {
+		if params.Capacity == nil {
+			params.Capacity = map[string]interface{}{}
+		}
+		rpcURL := r.ListenAddr
+		if !strings.HasPrefix(rpcURL, "http://") && !strings.HasPrefix(rpcURL, "https://") {
+			rpcURL = "http://" + rpcURL
+		}
+		params.Capacity["rpc_url"] = rpcURL
 	}
 	return r.Client.Heartbeat(ctx, params)
 }

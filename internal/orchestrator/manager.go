@@ -15,6 +15,8 @@ import (
 	"github.com/StacyOs/stacyvm/internal/config"
 	"github.com/StacyOs/stacyvm/internal/providers"
 	"github.com/StacyOs/stacyvm/internal/store"
+	"github.com/StacyOs/stacyvm/internal/worker"
+	"github.com/StacyOs/stacyvm/internal/workerproto"
 	"github.com/rs/zerolog"
 )
 
@@ -39,6 +41,7 @@ type Manager struct {
 	defaultVCPUs  int
 	limits        OperationalLimits
 	workerID      string
+	workerToken   string
 
 	vmPoolMgr  *VMPoolManager
 	poolConfig config.PoolConfig
@@ -69,6 +72,7 @@ type ManagerConfig struct {
 	PreviewDomain string
 	Limits        OperationalLimits
 	WorkerID      string
+	WorkerToken   string
 }
 
 func NewManager(registry *providers.Registry, st store.Store, events *EventBus, logger zerolog.Logger, cfg ManagerConfig) *Manager {
@@ -87,6 +91,7 @@ func NewManager(registry *providers.Registry, st store.Store, events *EventBus, 
 		defaultVCPUs:  cfg.DefaultVCPUs,
 		limits:        cfg.Limits,
 		workerID:      strings.TrimSpace(cfg.WorkerID),
+		workerToken:   strings.TrimSpace(cfg.WorkerToken),
 		poolConfig:    cfg.Pool,
 		previewDomain: cfg.PreviewDomain,
 		ctx:           ctx,
@@ -402,6 +407,16 @@ func (m *Manager) Spawn(ctx context.Context, req SpawnRequest) (*Sandbox, error)
 		return sb, err
 	}
 
+	placement := m.currentSpawnPlacement(ctx, metricsProvider)
+	if placement.SelectedID != "" && placement.SelectedID != m.workerID {
+		sb, err := m.spawnRemote(ctx, placement.SelectedID, req, metricsProvider, image, memMB, vcpus, ttl, now)
+		metricsErr = err
+		if err != nil {
+			m.publishFailureForError("", OperationSpawn, metricsProvider, err)
+		}
+		return sb, err
+	}
+
 	sb := &Sandbox{
 		State:         StateCreating,
 		Provider:      prov.Name(),
@@ -477,6 +492,78 @@ func (m *Manager) Spawn(ctx context.Context, req SpawnRequest) (*Sandbox, error)
 	m.auditOperation(ctx, "sandbox.spawn", sb, sb.ID, sb.Image, "success", "state=running")
 
 	m.logger.Info().Str("sandbox", id).Str("provider", prov.Name()).Str("image", image).Msg("sandbox spawned")
+	return sb, nil
+}
+
+func (m *Manager) spawnRemote(ctx context.Context, workerID string, req SpawnRequest, providerName, image string, memMB, vcpus int, ttl time.Duration, now time.Time) (*Sandbox, error) {
+	client, err := m.remoteWorkerRPCClient(ctx, workerID)
+	if err != nil {
+		return nil, err
+	}
+	sandboxID := generateSandboxID()
+	expiresAt := now.Add(ttl)
+	lease, err := m.acquireSandboxLeaseFor(ctx, sandboxID, workerID, expiresAt)
+	if err != nil {
+		return nil, fmt.Errorf("acquiring remote sandbox lease: %w", err)
+	}
+	result, err := client.Spawn(ctx, "spawn-"+sandboxID, leaseTokenFromStore(lease), workerproto.SpawnParams{
+		SandboxID: sandboxID,
+		Image:     image,
+		Provider:  providerName,
+		MemoryMB:  memMB,
+		VCPUs:     vcpus,
+		OwnerID:   req.OwnerID,
+		TTL:       ttl.String(),
+		Metadata:  req.Metadata,
+	})
+	if err != nil {
+		_ = m.store.ReleaseLease(ctx, sandboxID, workerID)
+		return nil, fmt.Errorf("remote worker spawn: %w", err)
+	}
+	sb := &Sandbox{
+		ID:            sandboxID,
+		State:         StateRunning,
+		Provider:      result.Provider,
+		Image:         image,
+		MemoryMB:      memMB,
+		VCPUs:         vcpus,
+		OwnerID:       req.OwnerID,
+		VMID:          result.RuntimeID,
+		WorkerID:      workerID,
+		CreatedAt:     now,
+		ExpiresAt:     expiresAt,
+		Metadata:      req.Metadata,
+		PreviewDomain: m.previewDomain,
+	}
+	if sb.Provider == "" {
+		sb.Provider = providerName
+	}
+	metaJSON, _ := json.Marshal(sb.Metadata)
+	if err := m.store.CreateSandbox(ctx, &store.SandboxRecord{
+		ID:        sb.ID,
+		State:     string(sb.State),
+		Provider:  sb.Provider,
+		Image:     sb.Image,
+		MemoryMB:  sb.MemoryMB,
+		VCPUs:     sb.VCPUs,
+		Metadata:  string(metaJSON),
+		OwnerID:   sb.OwnerID,
+		VMID:      sb.VMID,
+		WorkerID:  sb.WorkerID,
+		CreatedAt: sb.CreatedAt,
+		ExpiresAt: sb.ExpiresAt,
+		UpdatedAt: now,
+	}); err != nil {
+		_ = m.store.ReleaseLease(ctx, sandboxID, workerID)
+		return nil, fmt.Errorf("persisting remote sandbox: %w", err)
+	}
+	m.mu.Lock()
+	m.sandboxes[sandboxID] = sb
+	m.mu.Unlock()
+	m.events.Publish(Event{Type: EventSandboxCreated, SandboxID: sandboxID})
+	m.events.Publish(Event{Type: EventSandboxRunning, SandboxID: sandboxID})
+	m.auditOperation(ctx, "sandbox.spawn", sb, sb.ID, sb.Image, "success", "state=running remote_worker="+workerID)
+	m.logger.Info().Str("sandbox", sandboxID).Str("runtime", sb.VMID).Str("worker", workerID).Str("provider", sb.Provider).Str("image", image).Msg("remote sandbox spawned")
 	return sb, nil
 }
 
@@ -1537,11 +1624,15 @@ func (m *Manager) notifySpawnCapacity() {
 }
 
 func (m *Manager) acquireSandboxLease(ctx context.Context, sandboxID string, expiresAt time.Time) (*store.LeaseRecord, error) {
+	return m.acquireSandboxLeaseFor(ctx, sandboxID, m.workerID, expiresAt)
+}
+
+func (m *Manager) acquireSandboxLeaseFor(ctx context.Context, sandboxID, workerID string, expiresAt time.Time) (*store.LeaseRecord, error) {
 	ttl := time.Until(expiresAt) + sandboxLeaseGrace
 	if ttl <= 0 {
 		ttl = sandboxLeaseGrace
 	}
-	return m.store.AcquireLease(ctx, sandboxID, "sandbox", m.workerID, ttl)
+	return m.store.AcquireLease(ctx, sandboxID, "sandbox", workerID, ttl)
 }
 
 func (m *Manager) releaseSandboxLease(ctx context.Context, sandboxID string) error {
@@ -1586,10 +1677,12 @@ func (m *Manager) evaluateSpawnAdmission(ctx context.Context, ownerID string, tt
 		return decision, nil
 	}
 	if placement.SelectedID != m.workerID {
-		decision.Allowed = false
-		decision.Reason = "remote_worker_rpc_unavailable"
 		decision.WorkerReason = "remote_worker_selected"
-		return decision, nil
+		if !m.canUseRemoteWorker(ctx, placement.SelectedID) {
+			decision.Allowed = false
+			decision.Reason = "remote_worker_rpc_unavailable"
+			return decision, nil
+		}
 	}
 
 	total := 0
@@ -1618,6 +1711,59 @@ func (m *Manager) evaluateSpawnAdmission(ctx context.Context, ownerID string, tt
 		return decision, nil
 	}
 	return decision, nil
+}
+
+func (m *Manager) currentSpawnPlacement(ctx context.Context, provider string) workerPlacement {
+	records, err := m.store.ListSandboxes(ctx)
+	if err != nil {
+		return workerPlacement{SelectedID: m.workerID, Eligible: 1, Reason: "local_fallback"}
+	}
+	return m.evaluateWorkerPlacement(ctx, provider, records)
+}
+
+func (m *Manager) canUseRemoteWorker(ctx context.Context, workerID string) bool {
+	_, err := m.remoteWorkerRPCClient(ctx, workerID)
+	return err == nil
+}
+
+func (m *Manager) remoteWorkerRPCClient(ctx context.Context, workerID string) (worker.RPCClient, error) {
+	var zero worker.RPCClient
+	if strings.TrimSpace(m.workerToken) == "" {
+		return zero, fmt.Errorf("worker token is required for remote worker RPC")
+	}
+	rec, err := m.store.GetWorker(ctx, workerID)
+	if err != nil {
+		return zero, err
+	}
+	rpcURL := workerRPCURL(rec)
+	if rpcURL == "" {
+		return zero, fmt.Errorf("worker %s has no rpc_url", workerID)
+	}
+	return worker.RPCClient{
+		BaseURL:  rpcURL,
+		WorkerID: workerID,
+		Token:    m.workerToken,
+	}, nil
+}
+
+func leaseTokenFromStore(rec *store.LeaseRecord) workerproto.LeaseToken {
+	if rec == nil {
+		return workerproto.LeaseToken{}
+	}
+	return workerproto.LeaseToken{
+		ResourceID: rec.ResourceID,
+		HolderID:   rec.HolderID,
+		Generation: rec.Generation,
+		ExpiresAt:  rec.ExpiresAt,
+	}
+}
+
+func generateSandboxID() string {
+	b := make([]byte, 4)
+	if _, err := rand.Read(b); err != nil {
+		return fmt.Sprintf("sb-%d", time.Now().UnixNano())
+	}
+	return fmt.Sprintf("sb-%08x", b)
 }
 
 // EvaluateSpawnRequestAdmission evaluates a spawn request against the current

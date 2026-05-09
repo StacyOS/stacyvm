@@ -99,6 +99,19 @@ The endpoint accepts `workerproto.Request` envelopes, requires the same worker h
 
 For `worker.spawn`, the request carries a control-plane `sandbox_id` and the response returns both that ID and the provider `runtime_id`. The control plane should persist that mapping before routing later status, exec, file, or destroy operations to the owning worker.
 
+Remote workers advertise their control-plane callback endpoint through heartbeat capacity:
+
+```json
+{
+  "capacity": {
+    "max_sandboxes": 10,
+    "rpc_url": "http://worker-a.internal:7430"
+  }
+}
+```
+
+When the scheduler selects a non-local worker with `rpc_url` and `auth.worker_token` is configured, the control plane acquires the sandbox lease for that worker, calls `worker.spawn`, persists the selected `worker_id`, and stores the returned provider runtime ID for later routing.
+
 Current Phase 11 control-plane lease renewal endpoint:
 
 ```text

@@ -18,7 +18,8 @@ type workerPlacement struct {
 }
 
 type workerCapacity struct {
-	MaxSandboxes int `json:"max_sandboxes"`
+	MaxSandboxes int    `json:"max_sandboxes"`
+	RPCURL       string `json:"rpc_url"`
 }
 
 func (m *Manager) evaluateWorkerPlacement(ctx context.Context, provider string, sandboxes []*store.SandboxRecord) workerPlacement {
@@ -93,9 +94,18 @@ func workerSupportsProvider(worker *store.WorkerRecord, provider string) bool {
 }
 
 func workerMaxSandboxes(worker *store.WorkerRecord) int {
+	return workerCapacityFromRecord(worker).MaxSandboxes
+}
+
+func workerRPCURL(worker *store.WorkerRecord) string {
+	return strings.TrimSpace(workerCapacityFromRecord(worker).RPCURL)
+}
+
+func workerCapacityFromRecord(worker *store.WorkerRecord) workerCapacity {
 	var capacity workerCapacity
-	if err := json.Unmarshal([]byte(worker.Capacity), &capacity); err != nil {
-		return 0
+	if worker == nil {
+		return capacity
 	}
-	return capacity.MaxSandboxes
+	_ = json.Unmarshal([]byte(worker.Capacity), &capacity)
+	return capacity
 }
