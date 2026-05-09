@@ -44,6 +44,7 @@ This checkpoint starts hardening remote worker identity for public and enterpris
 - Worker RPC docs now include a generated no-secret rotation-plan workflow for signed worker token keys.
 - Worker token runbooks now prefer secret-mounted files over shell history or environment variables for long-lived worker secrets.
 - Production readiness notes now reflect signed worker identity certification and the remaining target-network/runtime signoff gates.
+- Public support matrix now describes multi-worker as preview with signed identity, worker RPC routing, mTLS wiring, and explicit certification evidence.
 - Cluster conformance documentation now treats signed worker tokens as the production-aligned worker identity path.
 - API and worker RPC docs now describe signed worker token behavior, signing-key rotation, and worker RPC mTLS.
 
