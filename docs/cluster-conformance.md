@@ -17,8 +17,10 @@ It currently verifies:
 - Worker-specific credentials override the shared staging token.
 - Worker route authentication accepts short-lived signed worker tokens.
 - Worker route authentication rejects signed tokens scoped to the worker RPC audience.
+- Worker route authentication rejects revoked signed worker token IDs.
 - Worker RPC accepts short-lived signed control-plane-to-worker tokens.
 - Worker RPC rejects signed tokens scoped to the control-plane route audience.
+- Worker RPC rejects revoked signed worker token IDs.
 - Remote spawn can route through worker RPC using signed tokens without a shared worker token.
 - Worker RPC mTLS completes a real client-authenticated request using generated certificates.
 - Worker lease renewal is guarded by `worker:lease`.

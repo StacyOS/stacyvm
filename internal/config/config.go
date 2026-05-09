@@ -158,15 +158,16 @@ type DefaultsConfig struct {
 }
 
 type AuthConfig struct {
-	Enabled              bool              `mapstructure:"enabled"`
-	APIKey               string            `mapstructure:"api_key"`
-	AdminAPIKey          string            `mapstructure:"admin_api_key"`
-	WorkerToken          string            `mapstructure:"worker_token"`
-	WorkerTokens         map[string]string `mapstructure:"worker_tokens"`
-	WorkerSigningKey     string            `mapstructure:"worker_signing_key"`
-	WorkerSigningKeys    []string          `mapstructure:"worker_signing_keys"`
-	AdminFallbackEnabled bool              `mapstructure:"admin_fallback_enabled"`
-	AdminAuditRetention  string            `mapstructure:"admin_audit_retention"`
+	Enabled               bool              `mapstructure:"enabled"`
+	APIKey                string            `mapstructure:"api_key"`
+	AdminAPIKey           string            `mapstructure:"admin_api_key"`
+	WorkerToken           string            `mapstructure:"worker_token"`
+	WorkerTokens          map[string]string `mapstructure:"worker_tokens"`
+	WorkerSigningKey      string            `mapstructure:"worker_signing_key"`
+	WorkerSigningKeys     []string          `mapstructure:"worker_signing_keys"`
+	WorkerRevokedTokenIDs []string          `mapstructure:"worker_revoked_token_ids"`
+	AdminFallbackEnabled  bool              `mapstructure:"admin_fallback_enabled"`
+	AdminAuditRetention   string            `mapstructure:"admin_audit_retention"`
 }
 
 type RateLimitConfig struct {
@@ -277,6 +278,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("auth.worker_tokens", map[string]string{})
 	v.SetDefault("auth.worker_signing_key", "")
 	v.SetDefault("auth.worker_signing_keys", []string{})
+	v.SetDefault("auth.worker_revoked_token_ids", []string{})
 	v.SetDefault("auth.admin_fallback_enabled", true)
 	v.SetDefault("auth.admin_audit_retention", "0s")
 

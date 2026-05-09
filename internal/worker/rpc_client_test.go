@@ -168,6 +168,45 @@ func TestRPCClientRejectsControlPlaneAudienceToken(t *testing.T) {
 	}
 }
 
+func TestRPCServerRejectsRevokedSignedToken(t *testing.T) {
+	now := time.Date(2026, 5, 9, 10, 0, 0, 0, time.UTC)
+	registry := providers.NewRegistry()
+	registry.Register(providers.NewMockProvider())
+	if err := registry.SetDefault("mock"); err != nil {
+		t.Fatalf("set default: %v", err)
+	}
+	server := httptest.NewServer((&RPCServer{
+		WorkerID:        "worker-a",
+		SigningKey:      "worker-signing-key-with-at-least-32-bytes",
+		RevokedTokenIDs: []string{"revoked-token-id"},
+		Now:             func() time.Time { return now },
+		Registry:        registry,
+	}).Handler())
+	defer server.Close()
+
+	client := RPCClient{
+		BaseURL:  server.URL,
+		WorkerID: "worker-a",
+		TokenFunc: func() (string, error) {
+			return middleware.SignWorkerToken("worker-signing-key-with-at-least-32-bytes", middleware.WorkerTokenClaims{
+				WorkerID:  "worker-a",
+				TokenID:   "revoked-token-id",
+				Audience:  middleware.WorkerTokenAudienceRPC,
+				IssuedAt:  now.Unix(),
+				ExpiresAt: now.Add(time.Minute).Unix(),
+			})
+		},
+	}
+	_, err := client.Status(context.Background(), "req-1", workerproto.StatusParams{
+		SandboxID: "sb-control-plane",
+		RuntimeID: "runtime-id",
+		Provider:  "mock",
+	})
+	if err == nil {
+		t.Fatal("expected revoked signed token to be rejected by worker RPC")
+	}
+}
+
 func TestRPCClientExec(t *testing.T) {
 	registry := providers.NewRegistry()
 	mock := providers.NewMockProvider()

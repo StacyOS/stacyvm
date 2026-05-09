@@ -559,6 +559,7 @@ auth:
   worker_tokens: {}        # production map of worker_id: token
   worker_signing_key: ""   # production signed worker token verification key
   worker_signing_keys: []   # old verification keys accepted during rotation
+  worker_revoked_token_ids: []  # signed worker token jti values rejected during incidents
   admin_fallback_enabled: true  # false requires admin_api_key for admin routes
   admin_audit_retention: "0s"  # 0s disables native audit pruning
 

@@ -25,6 +25,7 @@ type Runtime struct {
 	RPCTLS            TLSConfig
 	SigningKey        string
 	SigningKeys       []string
+	RevokedTokenIDs   []string
 }
 
 func (r Runtime) Run(ctx context.Context) error {
@@ -33,12 +34,13 @@ func (r Runtime) Run(ctx context.Context) error {
 	serverErr := make(chan error, 1)
 	if r.ListenAddr != "" {
 		rpcServer = &RPCServer{
-			WorkerID:     r.Client.WorkerID,
-			Token:        r.Client.Token,
-			SigningKey:   r.SigningKey,
-			SigningKeys:  r.SigningKeys,
-			Registry:     r.Registry,
-			LeaseRenewer: r.Client,
+			WorkerID:        r.Client.WorkerID,
+			Token:           r.Client.Token,
+			SigningKey:      r.SigningKey,
+			SigningKeys:     r.SigningKeys,
+			RevokedTokenIDs: r.RevokedTokenIDs,
+			Registry:        r.Registry,
+			LeaseRenewer:    r.Client,
 		}
 		var err error
 		server, err = NewHTTPServerWithTLS(r.ListenAddr, rpcServer.Handler(), r.RPCTLS)

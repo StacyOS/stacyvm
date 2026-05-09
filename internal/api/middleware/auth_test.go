@@ -359,6 +359,35 @@ func TestWorkerAuthRejectsSignedWorkerTokenExceedingMaxTTL(t *testing.T) {
 	}
 }
 
+func TestWorkerAuthRejectsRevokedSignedWorkerToken(t *testing.T) {
+	now := time.Date(2026, 5, 9, 10, 0, 0, 0, time.UTC)
+	token, err := SignWorkerToken("0123456789abcdef0123456789abcdef", WorkerTokenClaims{
+		WorkerID:  "worker-a",
+		TokenID:   "revoked-token-id",
+		Audience:  WorkerTokenAudienceControlPlane,
+		IssuedAt:  now.Unix(),
+		ExpiresAt: now.Add(5 * time.Minute).Unix(),
+	})
+	if err != nil {
+		t.Fatalf("sign worker token: %v", err)
+	}
+	handler := WorkerAuthWithConfig(WorkerAuthConfig{
+		SigningKey:      "0123456789abcdef0123456789abcdef",
+		RevokedTokenIDs: []string{"revoked-token-id"},
+		Now:             func() time.Time { return now },
+	})(okHandler())
+
+	req := httptest.NewRequest(http.MethodPost, "/", nil)
+	req.Header.Set("X-Worker-ID", "worker-a")
+	req.Header.Set("X-Worker-Token", token)
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("status = %d, want %d for revoked signed worker token: %s", w.Code, http.StatusUnauthorized, w.Body.String())
+	}
+}
+
 func TestWorkerAuthRejectsRPCAudienceSignedWorkerToken(t *testing.T) {
 	now := time.Date(2026, 5, 9, 10, 0, 0, 0, time.UTC)
 	token, err := SignWorkerToken("0123456789abcdef0123456789abcdef", WorkerTokenClaims{

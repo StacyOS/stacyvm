@@ -168,6 +168,8 @@ auth:
   worker_signing_key: "0123456789abcdef0123456789abcdef"
   worker_signing_keys:
     - "old-worker-signing-key-with-at-least-32-bytes"
+  worker_revoked_token_ids:
+    - "revoked-token-id"
   worker_tokens:
     worker-a: "worker-a-secret"
 `), 0644); err != nil {
@@ -198,6 +200,9 @@ auth:
 	}
 	if len(cfg.Auth.WorkerSigningKeys) != 1 || cfg.Auth.WorkerSigningKeys[0] != "old-worker-signing-key-with-at-least-32-bytes" {
 		t.Fatalf("worker signing keys = %#v, want old rotation key", cfg.Auth.WorkerSigningKeys)
+	}
+	if len(cfg.Auth.WorkerRevokedTokenIDs) != 1 || cfg.Auth.WorkerRevokedTokenIDs[0] != "revoked-token-id" {
+		t.Fatalf("worker revoked token ids = %#v, want revoked-token-id", cfg.Auth.WorkerRevokedTokenIDs)
 	}
 	if cfg.Auth.WorkerTokens["worker-a"] != "worker-a-secret" {
 		t.Fatalf("worker-a token = %q, want worker-a-secret", cfg.Auth.WorkerTokens["worker-a"])

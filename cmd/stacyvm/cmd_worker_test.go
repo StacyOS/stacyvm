@@ -27,6 +27,9 @@ func TestIssueWorkerTokenSignsExpectedClaims(t *testing.T) {
 	if claims.WorkerID != "worker-a" {
 		t.Fatalf("worker id = %q, want worker-a", claims.WorkerID)
 	}
+	if claims.TokenID == "" {
+		t.Fatal("token id is empty")
+	}
 	if claims.Audience != middleware.WorkerTokenAudienceControlPlane {
 		t.Fatalf("audience = %q, want %q", claims.Audience, middleware.WorkerTokenAudienceControlPlane)
 	}

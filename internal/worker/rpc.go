@@ -19,14 +19,15 @@ import (
 )
 
 type RPCServer struct {
-	WorkerID     string
-	Token        string
-	SigningKey   string
-	SigningKeys  []string
-	Now          func() time.Time
-	Registry     *providers.Registry
-	LeaseRenewer LeaseRenewer
-	draining     atomic.Bool
+	WorkerID        string
+	Token           string
+	SigningKey      string
+	SigningKeys     []string
+	RevokedTokenIDs []string
+	Now             func() time.Time
+	Registry        *providers.Registry
+	LeaseRenewer    LeaseRenewer
+	draining        atomic.Bool
 }
 
 type LeaseRenewer interface {
@@ -579,7 +580,19 @@ func (s *RPCServer) authenticate(r *http.Request) bool {
 	}
 	for _, signingKey := range append([]string{s.SigningKey}, s.SigningKeys...) {
 		claims, ok := middleware.VerifyWorkerTokenForAudience(signingKey, token, middleware.WorkerTokenAudienceRPC, now().UTC())
-		if ok && claims.WorkerID == workerID {
+		if ok && claims.WorkerID == workerID && !workerTokenRevoked(claims, s.RevokedTokenIDs) {
+			return true
+		}
+	}
+	return false
+}
+
+func workerTokenRevoked(claims middleware.WorkerTokenClaims, revokedIDs []string) bool {
+	if claims.TokenID == "" || len(revokedIDs) == 0 {
+		return false
+	}
+	for _, id := range revokedIDs {
+		if strings.TrimSpace(id) == claims.TokenID {
 			return true
 		}
 	}

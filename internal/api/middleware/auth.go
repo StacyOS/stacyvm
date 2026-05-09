@@ -3,9 +3,11 @@ package middleware
 import (
 	"context"
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -54,15 +56,17 @@ const (
 )
 
 type WorkerAuthConfig struct {
-	SharedToken  string
-	WorkerTokens map[string]string
-	SigningKey   string
-	SigningKeys  []string
-	Now          func() time.Time
+	SharedToken     string
+	WorkerTokens    map[string]string
+	SigningKey      string
+	SigningKeys     []string
+	RevokedTokenIDs []string
+	Now             func() time.Time
 }
 
 type WorkerTokenClaims struct {
 	WorkerID  string   `json:"worker_id"`
+	TokenID   string   `json:"jti,omitempty"`
 	Audience  string   `json:"aud,omitempty"`
 	Scopes    []string `json:"scopes,omitempty"`
 	ExpiresAt int64    `json:"exp"`
@@ -152,6 +156,7 @@ func WorkerAuthWithConfig(cfg WorkerAuthConfig) func(http.Handler) http.Handler 
 	cleanWorkerTokens := normalizeWorkerTokens(cfg.WorkerTokens)
 	sharedWorkerToken := strings.TrimSpace(cfg.SharedToken)
 	signingKeys := normalizeSigningKeys(cfg.SigningKey, cfg.SigningKeys)
+	revokedTokenIDs := normalizeRevokedTokenIDs(cfg.RevokedTokenIDs)
 	now := cfg.Now
 	if now == nil {
 		now = time.Now
@@ -169,7 +174,7 @@ func WorkerAuthWithConfig(cfg WorkerAuthConfig) func(http.Handler) http.Handler 
 			}
 			workerID := strings.TrimSpace(r.Header.Get("X-Worker-ID"))
 			token, header := workerTokenFromRequest(r)
-			scopes, ok := validateWorkerCredentials(workerID, token, sharedWorkerToken, cleanWorkerTokens, signingKeys, now)
+			scopes, ok := validateWorkerCredentials(workerID, token, sharedWorkerToken, cleanWorkerTokens, signingKeys, revokedTokenIDs, now)
 			if workerID == "" || !ok {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusUnauthorized)
@@ -307,6 +312,14 @@ func SignWorkerToken(signingKey string, claims WorkerTokenClaims) (string, error
 	return signedPart + "." + signature, nil
 }
 
+func NewWorkerTokenID() (string, error) {
+	var b [16]byte
+	if _, err := rand.Read(b[:]); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b[:]), nil
+}
+
 func VerifyWorkerToken(signingKey, token string, now time.Time) (WorkerTokenClaims, bool) {
 	return VerifyWorkerTokenForAudience(signingKey, token, "", now)
 }
@@ -335,6 +348,7 @@ func VerifyWorkerTokenForAudience(signingKey, token, audience string, now time.T
 		return WorkerTokenClaims{}, false
 	}
 	claims.WorkerID = strings.TrimSpace(claims.WorkerID)
+	claims.TokenID = strings.TrimSpace(claims.TokenID)
 	claims.Audience = strings.TrimSpace(claims.Audience)
 	if claims.WorkerID == "" || claims.ExpiresAt <= 0 || !now.Before(time.Unix(claims.ExpiresAt, 0)) {
 		return WorkerTokenClaims{}, false
@@ -354,12 +368,15 @@ func VerifyWorkerTokenForAudience(signingKey, token, audience string, now time.T
 	return claims, true
 }
 
-func validateWorkerCredentials(workerID, token, sharedWorkerToken string, workerTokens map[string]string, signingKeys []string, now func() time.Time) ([]string, bool) {
+func validateWorkerCredentials(workerID, token, sharedWorkerToken string, workerTokens map[string]string, signingKeys []string, revokedTokenIDs map[string]struct{}, now func() time.Time) ([]string, bool) {
 	if token == "" || workerID == "" {
 		return nil, false
 	}
 	if claims, ok := verifyWorkerTokenWithAnyKey(signingKeys, token, WorkerTokenAudienceControlPlane, now().UTC()); ok {
 		if claims.WorkerID != workerID {
+			return nil, false
+		}
+		if isWorkerTokenRevoked(claims, revokedTokenIDs) {
 			return nil, false
 		}
 		scopes := normalizeScopes(claims.Scopes)
@@ -372,6 +389,14 @@ func validateWorkerCredentials(workerID, token, sharedWorkerToken string, worker
 		return scopesForRole(AuthRoleWorker), true
 	}
 	return nil, false
+}
+
+func isWorkerTokenRevoked(claims WorkerTokenClaims, revokedTokenIDs map[string]struct{}) bool {
+	if len(revokedTokenIDs) == 0 || claims.TokenID == "" {
+		return false
+	}
+	_, ok := revokedTokenIDs[claims.TokenID]
+	return ok
 }
 
 func verifyWorkerTokenWithAnyKey(signingKeys []string, token, audience string, now time.Time) (WorkerTokenClaims, bool) {
@@ -422,6 +447,21 @@ func normalizeSigningKeys(primary string, additional []string) []string {
 		keys = append(keys, key)
 	}
 	return keys
+}
+
+func normalizeRevokedTokenIDs(ids []string) map[string]struct{} {
+	if len(ids) == 0 {
+		return nil
+	}
+	revoked := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			continue
+		}
+		revoked[id] = struct{}{}
+	}
+	return revoked
 }
 
 func validWorkerToken(workerID, token, sharedWorkerToken string, workerTokens map[string]string) bool {

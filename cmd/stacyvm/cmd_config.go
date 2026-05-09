@@ -79,6 +79,9 @@ func lintAuthConfig(cfg *config.Config, production bool) []doctorCheck {
 		if len(cfg.Auth.WorkerSigningKeys) > 0 {
 			checks = append(checks, doctorCheck{Name: "auth.worker_signing_keys", Status: doctorPass, Message: fmt.Sprintf("%d additional verification key(s) configured", len(cfg.Auth.WorkerSigningKeys))})
 		}
+		if len(cfg.Auth.WorkerRevokedTokenIDs) > 0 {
+			checks = append(checks, doctorCheck{Name: "auth.worker_revoked_token_ids", Status: doctorPass, Message: fmt.Sprintf("%d revoked worker token id(s) configured", len(cfg.Auth.WorkerRevokedTokenIDs))})
+		}
 		if len(cfg.Auth.WorkerTokens) > 0 {
 			checks = append(checks, doctorCheck{Name: "auth.worker_tokens", Status: doctorWarn, Message: fmt.Sprintf("%d static per-worker token(s) still configured", len(cfg.Auth.WorkerTokens)), Remediation: "Prefer short-lived signed worker tokens for production workers; keep static worker tokens only during migration."})
 		}

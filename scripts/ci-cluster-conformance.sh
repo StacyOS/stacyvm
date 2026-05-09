@@ -24,7 +24,7 @@ go test ./internal/worker -run TestRPCClientMTLSConformance -count=1
 
 echo "==> Running signed worker RPC conformance"
 go test ./internal/worker ./internal/orchestrator \
-  -run 'TestRPCClientStatusWithSignedToken|TestManager_RemoteSpawnUsesSignedWorkerRPC' -count=1
+  -run 'TestRPCClientStatusWithSignedToken|TestRPCServerRejectsRevokedSignedToken|TestManager_RemoteSpawnUsesSignedWorkerRPC' -count=1
 
 cluster_config="$tmpdir/stacyvm.cluster.yaml"
 cat >"$cluster_config" <<YAML

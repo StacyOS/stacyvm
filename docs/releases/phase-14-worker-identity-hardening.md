@@ -10,6 +10,7 @@ Phase 14 begins the worker identity hardening lane for production multi-worker S
 - Added the `stacyvm-worker-v1.<payload>.<signature>` token format.
 - Added signed token claims for:
   - `worker_id`
+  - token ID through `jti`
   - audience through `aud`
   - optional worker `scopes`
   - issued-at time through `iat`
@@ -20,6 +21,7 @@ Phase 14 begins the worker identity hardening lane for production multi-worker S
 - Enforced a 15 minute max signed worker token lifetime when `iat` is present.
 - Enforced that signed `worker_id` must match the `X-Worker-ID` request header.
 - Enforced token audience separation between worker-to-control-plane routes and control-plane-to-worker RPC.
+- Added `auth.worker_revoked_token_ids` emergency revocation for signed worker token IDs.
 - Filtered signed-token scopes so tokens cannot grant user, API, or admin scopes.
 - Added `stacyvm worker token <worker-id>` to issue signed worker tokens from the CLI.
 

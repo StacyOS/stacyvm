@@ -102,6 +102,8 @@ Signed worker token payloads are base64url JSON claims with `worker_id`, `aud`, 
 
 The same signed token format is accepted by worker RPC servers for control-plane-to-worker calls, but RPC tokens use `aud=worker:rpc`. When the control plane has `auth.worker_signing_key` and no shared `auth.worker_token`, it mints short-lived RPC-audience tokens for the target worker before calling `/rpc`. This lets remote spawn, status, exec, file, log, preview, and destroy routing avoid static shared worker RPC credentials.
 
+Issued tokens include a `jti` token ID. During an incident, add a compromised token ID to `auth.worker_revoked_token_ids`; both worker-to-control-plane routes and control-plane-to-worker RPC reject matching signed tokens.
+
 No-downtime signing-key rotation uses a two-key window:
 
 1. Set the new key as `auth.worker_signing_key`.

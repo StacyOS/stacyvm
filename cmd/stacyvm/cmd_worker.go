@@ -83,10 +83,11 @@ func newWorkerCmd() *cobra.Command {
 					"max_sandboxes_per_owner": cfg.Defaults.MaxSandboxesPerOwner,
 					"preview_domain":          previewDomain,
 				},
-				Registry:    registry,
-				RPCTLS:      workerTLSConfig(cfg.Worker.RPCTLS),
-				SigningKey:  cfg.Auth.WorkerSigningKey,
-				SigningKeys: cfg.Auth.WorkerSigningKeys,
+				Registry:        registry,
+				RPCTLS:          workerTLSConfig(cfg.Worker.RPCTLS),
+				SigningKey:      cfg.Auth.WorkerSigningKey,
+				SigningKeys:     cfg.Auth.WorkerSigningKeys,
+				RevokedTokenIDs: cfg.Auth.WorkerRevokedTokenIDs,
 			}
 			if once {
 				return rt.RunOnce(cmd.Context())
@@ -187,8 +188,13 @@ func issueWorkerToken(opts workerTokenIssueOptions) (string, error) {
 		now = time.Now
 	}
 	issuedAt := now().UTC()
+	tokenID, err := middleware.NewWorkerTokenID()
+	if err != nil {
+		return "", fmt.Errorf("worker token id: %w", err)
+	}
 	return middleware.SignWorkerToken(signingKey, middleware.WorkerTokenClaims{
 		WorkerID:  workerID,
+		TokenID:   tokenID,
 		Audience:  audience,
 		Scopes:    opts.Scopes,
 		IssuedAt:  issuedAt.Unix(),
@@ -204,8 +210,13 @@ func signedWorkerTokenFunc(workerID, signingKey string) func() (string, error) {
 	}
 	return func() (string, error) {
 		now := time.Now().UTC()
+		tokenID, err := middleware.NewWorkerTokenID()
+		if err != nil {
+			return "", fmt.Errorf("worker token id: %w", err)
+		}
 		return middleware.SignWorkerToken(signingKey, middleware.WorkerTokenClaims{
 			WorkerID:  workerID,
+			TokenID:   tokenID,
 			Audience:  middleware.WorkerTokenAudienceControlPlane,
 			IssuedAt:  now.Unix(),
 			ExpiresAt: now.Add(5 * time.Minute).Unix(),

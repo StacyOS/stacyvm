@@ -194,9 +194,10 @@ func runServe() error {
 			SpawnQueueTimeout:    spawnQueueTimeout,
 			MaxSpawnQueue:        cfg.Defaults.MaxSpawnQueue,
 		},
-		WorkerToken:      cfg.Auth.WorkerToken,
-		WorkerSigningKey: cfg.Auth.WorkerSigningKey,
-		WorkerRPCTLS:     workerTLSConfig(cfg.Worker.RPCTLS),
+		WorkerToken:           cfg.Auth.WorkerToken,
+		WorkerSigningKey:      cfg.Auth.WorkerSigningKey,
+		WorkerRevokedTokenIDs: cfg.Auth.WorkerRevokedTokenIDs,
+		WorkerRPCTLS:          workerTLSConfig(cfg.Worker.RPCTLS),
 	})
 	if err := mgr.Reconcile(context.Background()); err != nil {
 		return err
@@ -237,6 +238,7 @@ func runServe() error {
 		WorkerTokens:          cfg.Auth.WorkerTokens,
 		WorkerSigningKey:      cfg.Auth.WorkerSigningKey,
 		WorkerSigningKeys:     cfg.Auth.WorkerSigningKeys,
+		WorkerRevokedTokenIDs: cfg.Auth.WorkerRevokedTokenIDs,
 		Version:               version,
 		RateLimit: middleware.RateLimitConfig{
 			Enabled:           cfg.RateLimit.Enabled,

@@ -36,15 +36,16 @@ type Manager struct {
 	capacityCh   chan struct{}
 	queueStats   spawnQueueStats
 
-	defaultTTL       time.Duration
-	defaultImage     string
-	defaultMemory    int
-	defaultVCPUs     int
-	limits           OperationalLimits
-	workerID         string
-	workerToken      string
-	workerSigningKey string
-	workerRPCTLS     worker.TLSConfig
+	defaultTTL            time.Duration
+	defaultImage          string
+	defaultMemory         int
+	defaultVCPUs          int
+	limits                OperationalLimits
+	workerID              string
+	workerToken           string
+	workerSigningKey      string
+	workerRevokedTokenIDs []string
+	workerRPCTLS          worker.TLSConfig
 
 	vmPoolMgr  *VMPoolManager
 	poolConfig config.PoolConfig
@@ -67,42 +68,44 @@ type spawnQueueStats struct {
 const sandboxLeaseGrace = 5 * time.Minute
 
 type ManagerConfig struct {
-	DefaultTTL       time.Duration
-	DefaultImage     string
-	DefaultMemory    int
-	DefaultVCPUs     int
-	Pool             config.PoolConfig
-	PreviewDomain    string
-	Limits           OperationalLimits
-	WorkerID         string
-	WorkerToken      string
-	WorkerSigningKey string
-	WorkerRPCTLS     worker.TLSConfig
+	DefaultTTL            time.Duration
+	DefaultImage          string
+	DefaultMemory         int
+	DefaultVCPUs          int
+	Pool                  config.PoolConfig
+	PreviewDomain         string
+	Limits                OperationalLimits
+	WorkerID              string
+	WorkerToken           string
+	WorkerSigningKey      string
+	WorkerRevokedTokenIDs []string
+	WorkerRPCTLS          worker.TLSConfig
 }
 
 func NewManager(registry *providers.Registry, st store.Store, events *EventBus, logger zerolog.Logger, cfg ManagerConfig) *Manager {
 	ctx, cancel := context.WithCancel(context.Background())
 	m := &Manager{
-		registry:         registry,
-		store:            st,
-		events:           events,
-		logger:           logger.With().Str("component", "manager").Logger(),
-		metrics:          NewMetricsRecorder(),
-		sandboxes:        make(map[string]*Sandbox),
-		capacityCh:       make(chan struct{}),
-		defaultTTL:       cfg.DefaultTTL,
-		defaultImage:     cfg.DefaultImage,
-		defaultMemory:    cfg.DefaultMemory,
-		defaultVCPUs:     cfg.DefaultVCPUs,
-		limits:           cfg.Limits,
-		workerID:         strings.TrimSpace(cfg.WorkerID),
-		workerToken:      strings.TrimSpace(cfg.WorkerToken),
-		workerSigningKey: strings.TrimSpace(cfg.WorkerSigningKey),
-		workerRPCTLS:     cfg.WorkerRPCTLS,
-		poolConfig:       cfg.Pool,
-		previewDomain:    cfg.PreviewDomain,
-		ctx:              ctx,
-		cancel:           cancel,
+		registry:              registry,
+		store:                 st,
+		events:                events,
+		logger:                logger.With().Str("component", "manager").Logger(),
+		metrics:               NewMetricsRecorder(),
+		sandboxes:             make(map[string]*Sandbox),
+		capacityCh:            make(chan struct{}),
+		defaultTTL:            cfg.DefaultTTL,
+		defaultImage:          cfg.DefaultImage,
+		defaultMemory:         cfg.DefaultMemory,
+		defaultVCPUs:          cfg.DefaultVCPUs,
+		limits:                cfg.Limits,
+		workerID:              strings.TrimSpace(cfg.WorkerID),
+		workerToken:           strings.TrimSpace(cfg.WorkerToken),
+		workerSigningKey:      strings.TrimSpace(cfg.WorkerSigningKey),
+		workerRevokedTokenIDs: cfg.WorkerRevokedTokenIDs,
+		workerRPCTLS:          cfg.WorkerRPCTLS,
+		poolConfig:            cfg.Pool,
+		previewDomain:         cfg.PreviewDomain,
+		ctx:                   ctx,
+		cancel:                cancel,
 	}
 	if m.defaultTTL == 0 {
 		m.defaultTTL = 30 * time.Minute
@@ -2098,8 +2101,13 @@ func (m *Manager) remoteWorkerRPCClient(ctx context.Context, workerID string) (w
 	if strings.TrimSpace(client.Token) == "" && strings.TrimSpace(m.workerSigningKey) != "" {
 		client.TokenFunc = func() (string, error) {
 			now := time.Now().UTC()
+			tokenID, err := middleware.NewWorkerTokenID()
+			if err != nil {
+				return "", err
+			}
 			return middleware.SignWorkerToken(m.workerSigningKey, middleware.WorkerTokenClaims{
 				WorkerID:  workerID,
+				TokenID:   tokenID,
 				Audience:  middleware.WorkerTokenAudienceRPC,
 				IssuedAt:  now.Unix(),
 				ExpiresAt: now.Add(5 * time.Minute).Unix(),
