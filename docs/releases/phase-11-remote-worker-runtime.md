@@ -64,6 +64,8 @@ This is still a staging foundation. Remote spawn, destroy, status routing, and l
 - Implemented a no-op `worker.shutdown` acknowledgement as a transport smoke path.
 - `worker.spawn` returns the control-plane sandbox ID and provider runtime ID separately, and the control plane persists that mapping for later routing.
 - Destroy now uses the worker RPC path for remote-owned sandboxes.
+- Added a two-process remote worker staging guide in `docs/remote-worker-staging.md`.
+- Added `scripts/smoke-remote-worker.sh` to exercise control plane plus worker with the mock provider.
 
 ## Code Areas
 
@@ -73,15 +75,16 @@ This is still a staging foundation. Remote spawn, destroy, status routing, and l
 - `internal/api/server.go`: worker-only heartbeat route.
 - `internal/api/routes/workers.go`: worker ID ownership check for heartbeat.
 - `internal/config/config.go`: worker runtime and worker token configuration.
+- `docs/remote-worker-staging.md`: two-process staging guide.
+- `scripts/smoke-remote-worker.sh`: local mock remote-worker smoke flow.
 
 ## Verification
 
 - `go test ./internal/config ./internal/api ./internal/worker ./cmd/stacyvm`
 - `go test ./internal/worker ./internal/config ./cmd/stacyvm`
+- `bash -n scripts/smoke-remote-worker.sh`
 
 ## Remaining Phase 11 Direction
 
 - Add real graceful worker shutdown/drain behavior.
 - Extend worker routing beyond spawn/status/destroy to exec, files, logs, and previews.
-- Add two-process staging documentation and smoke scripts.
-- Add a two-process staging guide for `stacyvm serve` plus `stacyvm worker` using the mock provider first.

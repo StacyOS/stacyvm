@@ -24,6 +24,7 @@ This checkpoint starts the remote worker runtime track on top of the Phase 10 wo
 - Remote-owned sandbox status refresh through `worker.status`.
 - Worker-side destroy RPC handling through `worker.destroy`.
 - Control-plane remote destroy routing for remote-owned sandboxes.
+- Two-process remote worker staging guide and mock smoke script.
 - Phase 11 release notes under `docs/releases/phase-11-remote-worker-runtime.md`.
 
 ### Changed
@@ -35,6 +36,7 @@ This checkpoint starts the remote worker runtime track on top of the Phase 10 wo
 - Remote spawn persists selected `worker_id` and provider runtime ID for later status/destroy routing.
 - Sandbox reads refresh and persist state changes reported by the owning remote worker.
 - Remote destroy validates worker lease ownership, tears down the provider runtime, marks the sandbox destroyed, and releases the durable lease.
+- Production readiness documentation now reflects the Phase 11 remote spawn/status/destroy transport state.
 - Config validation now covers worker heartbeat and shutdown durations.
 
 ## Phase 10 Multi-Worker Foundation - 2026-05-09

@@ -141,4 +141,4 @@ In Postgres terms, lease acquire should be implemented with a unique key on `res
 
 ## Current Limits
 
-Remote placement intentionally returns `remote_worker_rpc_unavailable` until remote spawn and lifecycle RPC are implemented. This prevents StacyVM from silently pretending a remote worker can run work before the trust boundary and lease enforcement are wired end to end.
+Remote placement returns `remote_worker_rpc_unavailable` unless the selected worker advertises `rpc_url` and `auth.worker_token` is configured. Remote exec, file APIs, logs, previews, Postgres-backed cluster storage, and production worker identity are still outside the current Phase 11 transport.
