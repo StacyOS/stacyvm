@@ -491,6 +491,107 @@ func (s *SQLiteStore) DeleteWorker(ctx context.Context, id string) error {
 	return nil
 }
 
+// --- Leases ---
+
+func (s *SQLiteStore) AcquireLease(ctx context.Context, resourceID, resourceType, holderID string, ttl time.Duration) (*LeaseRecord, error) {
+	if strings.TrimSpace(resourceID) == "" {
+		return nil, ConflictError("lease resource id is required")
+	}
+	if strings.TrimSpace(holderID) == "" {
+		return nil, ConflictError("lease holder id is required")
+	}
+	if ttl <= 0 {
+		return nil, ConflictError("lease ttl must be positive")
+	}
+	now := time.Now().UTC()
+	expiresAt := now.Add(ttl)
+	res, err := s.db.ExecContext(ctx, `
+		INSERT INTO leases (resource_id, resource_type, holder_id, generation, expires_at, created_at, updated_at)
+		VALUES (?, ?, ?, 1, ?, ?, ?)
+		ON CONFLICT(resource_id) DO UPDATE SET
+			resource_type = excluded.resource_type,
+			holder_id = excluded.holder_id,
+			generation = leases.generation + 1,
+			expires_at = excluded.expires_at,
+			updated_at = excluded.updated_at
+		WHERE leases.expires_at <= ? OR leases.holder_id = excluded.holder_id`,
+		resourceID, resourceType, holderID, expiresAt, now, now, now,
+	)
+	if err != nil {
+		return nil, err
+	}
+	rows, _ := res.RowsAffected()
+	if rows == 0 {
+		return nil, ConflictError("lease is held by another worker")
+	}
+	return s.GetLease(ctx, resourceID)
+}
+
+func (s *SQLiteStore) RenewLease(ctx context.Context, resourceID, holderID string, ttl time.Duration) (*LeaseRecord, error) {
+	if ttl <= 0 {
+		return nil, ConflictError("lease ttl must be positive")
+	}
+	now := time.Now().UTC()
+	res, err := s.db.ExecContext(ctx, `
+		UPDATE leases
+		SET generation = generation + 1, expires_at = ?, updated_at = ?
+		WHERE resource_id = ? AND holder_id = ? AND expires_at > ?`,
+		now.Add(ttl), now, resourceID, holderID, now,
+	)
+	if err != nil {
+		return nil, err
+	}
+	rows, _ := res.RowsAffected()
+	if rows == 0 {
+		return nil, ConflictError("lease is not held by worker or has expired")
+	}
+	return s.GetLease(ctx, resourceID)
+}
+
+func (s *SQLiteStore) GetLease(ctx context.Context, resourceID string) (*LeaseRecord, error) {
+	rec := &LeaseRecord{}
+	err := s.db.QueryRowContext(ctx, `
+		SELECT resource_id, resource_type, holder_id, generation, expires_at, created_at, updated_at
+		FROM leases WHERE resource_id = ?`, resourceID,
+	).Scan(&rec.ResourceID, &rec.ResourceType, &rec.HolderID, &rec.Generation, &rec.ExpiresAt, &rec.CreatedAt, &rec.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, NotFoundError("lease", resourceID)
+	}
+	return rec, err
+}
+
+func (s *SQLiteStore) ListLeases(ctx context.Context) ([]*LeaseRecord, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT resource_id, resource_type, holder_id, generation, expires_at, created_at, updated_at
+		FROM leases ORDER BY resource_id ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var records []*LeaseRecord
+	for rows.Next() {
+		rec := &LeaseRecord{}
+		if err := rows.Scan(&rec.ResourceID, &rec.ResourceType, &rec.HolderID, &rec.Generation, &rec.ExpiresAt, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
+			return nil, err
+		}
+		records = append(records, rec)
+	}
+	return records, rows.Err()
+}
+
+func (s *SQLiteStore) ReleaseLease(ctx context.Context, resourceID, holderID string) error {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM leases WHERE resource_id = ? AND holder_id = ?`, resourceID, holderID)
+	if err != nil {
+		return err
+	}
+	rows, _ := res.RowsAffected()
+	if rows == 0 {
+		return NotFoundError("lease", resourceID)
+	}
+	return nil
+}
+
 // --- Exec Logs ---
 
 func (s *SQLiteStore) CreateExecLog(ctx context.Context, log *ExecLogRecord) error {

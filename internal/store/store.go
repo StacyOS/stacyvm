@@ -168,6 +168,16 @@ type WorkerRecord struct {
 	UpdatedAt     time.Time `json:"updated_at" example:"2026-05-09T10:30:00Z"`
 }
 
+type LeaseRecord struct {
+	ResourceID   string    `json:"resource_id" example:"sb-abc123"`
+	ResourceType string    `json:"resource_type" example:"sandbox"`
+	HolderID     string    `json:"holder_id" example:"worker-local"`
+	Generation   int64     `json:"generation" example:"3"`
+	ExpiresAt    time.Time `json:"expires_at" example:"2026-05-09T10:31:00Z"`
+	CreatedAt    time.Time `json:"created_at" example:"2026-05-09T10:30:00Z"`
+	UpdatedAt    time.Time `json:"updated_at" example:"2026-05-09T10:30:30Z"`
+}
+
 // Store defines the persistence interface.
 type Store interface {
 	// Sandbox CRUD
@@ -201,6 +211,13 @@ type Store interface {
 	GetWorker(ctx context.Context, id string) (*WorkerRecord, error)
 	ListWorkers(ctx context.Context) ([]*WorkerRecord, error)
 	DeleteWorker(ctx context.Context, id string) error
+
+	// Leases
+	AcquireLease(ctx context.Context, resourceID, resourceType, holderID string, ttl time.Duration) (*LeaseRecord, error)
+	RenewLease(ctx context.Context, resourceID, holderID string, ttl time.Duration) (*LeaseRecord, error)
+	GetLease(ctx context.Context, resourceID string) (*LeaseRecord, error)
+	ListLeases(ctx context.Context) ([]*LeaseRecord, error)
+	ReleaseLease(ctx context.Context, resourceID, holderID string) error
 
 	// Exec logs
 	CreateExecLog(ctx context.Context, log *ExecLogRecord) error

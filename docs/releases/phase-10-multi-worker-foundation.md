@@ -47,15 +47,25 @@ This is not a full distributed runtime yet. It is the first production-aligned c
 - Local execution remains honest: if the scheduler would place work on a remote worker, admission reports `remote_worker_rpc_unavailable` until the worker RPC slice lands.
 - The current local worker remains eligible for local execution even if its registry heartbeat has gone stale between startup registration and the future heartbeat loop.
 
+### Distributed Lease Foundation
+
+- Added durable lease records for resource ownership fencing.
+- Added store APIs to acquire, renew, release, get, and list leases.
+- Lease acquisition is holder-aware and expiry-aware: a competing worker cannot acquire an unexpired lease held by another worker.
+- Lease renewals require the current holder and an unexpired lease.
+- Diagnostics and Prometheus now expose lease totals so operators can inspect active and expired lease state.
+
 ### Diagnostics And Metrics
 
 - Diagnostics now include worker totals, online count, stale count, unhealthy count, and worker items.
+- Diagnostics now include lease totals, active count, expired count, and active leases by holder.
 - Diagnostics sandbox summaries now include `by_worker` counts.
 - Prometheus output now includes:
   - `stacyvm_workers_total{status="total"}`
   - `stacyvm_workers_total{status="online"}`
   - `stacyvm_workers_total{status="stale"}`
   - `stacyvm_workers_total{status="unhealthy"}`
+  - `stacyvm_leases_total{status="active"}`
   - `stacyvm_sandboxes_by_worker_total{worker="local"}`
 
 ### Documentation
@@ -67,7 +77,7 @@ This is not a full distributed runtime yet. It is the first production-aligned c
 
 ## Code Areas
 
-- `internal/store`: worker model, migration, SQLite CRUD, and sandbox `worker_id` persistence.
+- `internal/store`: worker model, lease model, migrations, SQLite CRUD, and sandbox `worker_id` persistence.
 - `internal/api/routes`: worker routes, diagnostics worker summary, and Prometheus worker metrics.
 - `internal/api/server.go`: local worker startup registration and route mounting.
 - `docs`: API, README, changelog, production readiness, and release notes.
@@ -82,7 +92,7 @@ This is not a full distributed runtime yet. It is the first production-aligned c
 ## Remaining Phase 10 Direction
 
 - Add worker RPC so selected remote workers can execute assigned spawns.
-- Add distributed leases before multiple workers can manage the same sandbox pool.
+- Enforce leases around lifecycle operations before multiple workers can manage the same sandbox pool.
 - Add remote worker authentication and RPC.
 - Add Postgres-backed worker registry semantics for production clusters.
 - Add CI coverage for remote worker RPC and distributed leases once those slices land.

@@ -94,6 +94,7 @@ func TestSQLiteStoreMigratesLegacyDatabase(t *testing.T) {
 		"admin_audit_logs",
 		"operation_audit_logs",
 		"workers",
+		"leases",
 	} {
 		if !sqliteTableExists(t, s.db, table) {
 			t.Fatalf("missing migrated table %s", table)
@@ -203,6 +204,67 @@ func TestWorkerRegistryCRUD(t *testing.T) {
 	}
 	if _, err := s.GetWorker(ctx, "worker-a"); !errors.Is(err, ErrNotFound) {
 		t.Fatalf("get deleted worker err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestLeaseLifecycle(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	lease, err := s.AcquireLease(ctx, "sb-lease", "sandbox", "worker-a", time.Minute)
+	if err != nil {
+		t.Fatalf("acquire lease: %v", err)
+	}
+	if lease.ResourceID != "sb-lease" || lease.HolderID != "worker-a" || lease.Generation != 1 {
+		t.Fatalf("unexpected lease: %+v", lease)
+	}
+
+	if _, err := s.AcquireLease(ctx, "sb-lease", "sandbox", "worker-b", time.Minute); !errors.Is(err, ErrConflict) {
+		t.Fatalf("competing acquire err = %v, want ErrConflict", err)
+	}
+
+	renewed, err := s.RenewLease(ctx, "sb-lease", "worker-a", 2*time.Minute)
+	if err != nil {
+		t.Fatalf("renew lease: %v", err)
+	}
+	if renewed.Generation <= lease.Generation || !renewed.ExpiresAt.After(lease.ExpiresAt) {
+		t.Fatalf("expected renewed generation and expiry: old=%+v new=%+v", lease, renewed)
+	}
+
+	leases, err := s.ListLeases(ctx)
+	if err != nil {
+		t.Fatalf("list leases: %v", err)
+	}
+	if len(leases) != 1 || leases[0].ResourceID != "sb-lease" {
+		t.Fatalf("unexpected leases: %+v", leases)
+	}
+
+	if err := s.ReleaseLease(ctx, "sb-lease", "worker-b"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("wrong holder release err = %v, want ErrNotFound", err)
+	}
+	if err := s.ReleaseLease(ctx, "sb-lease", "worker-a"); err != nil {
+		t.Fatalf("release lease: %v", err)
+	}
+	if _, err := s.GetLease(ctx, "sb-lease"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("get released lease err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestLeaseAcquireAfterExpiry(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	if _, err := s.AcquireLease(ctx, "sb-expired", "sandbox", "worker-a", time.Nanosecond); err != nil {
+		t.Fatalf("acquire lease: %v", err)
+	}
+	time.Sleep(time.Millisecond)
+
+	lease, err := s.AcquireLease(ctx, "sb-expired", "sandbox", "worker-b", time.Minute)
+	if err != nil {
+		t.Fatalf("acquire expired lease: %v", err)
+	}
+	if lease.HolderID != "worker-b" || lease.Generation != 2 {
+		t.Fatalf("unexpected reacquired lease: %+v", lease)
 	}
 }
 

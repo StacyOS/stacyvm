@@ -59,6 +59,12 @@ func writePrometheusMetrics(w io.Writer, metrics systemMetricsSnapshot) {
 			fmt.Fprintf(w, "stacyvm_workers_total{status=%q} %d\n", key, intMetric(metrics.workerSummary[key]))
 		}
 	}
+	if metrics.leaseSummary != nil {
+		writePrometheusHelp(w, "stacyvm_leases_total", "Durable lease count by status bucket.")
+		for _, key := range []string{"total", "active", "expired"} {
+			fmt.Fprintf(w, "stacyvm_leases_total{status=%q} %d\n", key, intMetric(metrics.leaseSummary[key]))
+		}
+	}
 
 	writePrometheusHelp(w, "stacyvm_events_total", "Total events published by the in-process event bus.")
 	fmt.Fprintf(w, "stacyvm_events_total %d\n", metrics.eventStats.EventsTotal)

@@ -483,6 +483,9 @@ definitions:
       generated_at:
         example: "2026-05-08T10:30:00Z"
         type: string
+      leases:
+        additionalProperties: true
+        type: object
       limits:
         $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.OperationalLimitsInfo'
       operations:

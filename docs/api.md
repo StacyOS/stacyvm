@@ -911,6 +911,12 @@ GET /api/v1/diagnostics
       }
     ]
   },
+  "leases": {
+    "total": 1,
+    "active": 1,
+    "expired": 0,
+    "by_holder": { "local": 1 }
+  },
   "sandboxes": {
     "total": 138,
     "active": 12,
@@ -991,6 +997,12 @@ GET /api/v1/metrics
         "stale": false
       }
     ]
+  },
+  "leases": {
+    "total": 1,
+    "active": 1,
+    "expired": 0,
+    "by_holder": { "local": 1 }
   },
   "events": {
     "subscribers": 2,
@@ -1073,6 +1085,9 @@ stacyvm_workers_total{status="total"} 1
 stacyvm_workers_total{status="online"} 1
 stacyvm_workers_total{status="stale"} 0
 stacyvm_workers_total{status="unhealthy"} 0
+stacyvm_leases_total{status="total"} 1
+stacyvm_leases_total{status="active"} 1
+stacyvm_leases_total{status="expired"} 0
 stacyvm_sandboxes_by_worker_total{worker="local"} 138
 stacyvm_operation_success_total{operation="exec",provider="docker"} 482
 stacyvm_operation_failure_total{operation="exec",provider="docker"} 7

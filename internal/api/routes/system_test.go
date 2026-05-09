@@ -131,7 +131,7 @@ func TestSystemRoutes_Diagnostics(t *testing.T) {
 	}
 	var body map[string]interface{}
 	decodeSystemResponse(t, w, &body)
-	for _, field := range []string{"generated_at", "build", "process", "store", "limits", "scheduler", "quotas", "rate_limit", "providers", "workers", "sandboxes", "events", "operations", "remediation", "redactions"} {
+	for _, field := range []string{"generated_at", "build", "process", "store", "limits", "scheduler", "quotas", "rate_limit", "providers", "workers", "leases", "sandboxes", "events", "operations", "remediation", "redactions"} {
 		if _, ok := body[field]; !ok {
 			t.Fatalf("diagnostics missing %s: %#v", field, body)
 		}
@@ -139,6 +139,10 @@ func TestSystemRoutes_Diagnostics(t *testing.T) {
 	workers := body["workers"].(map[string]interface{})
 	if workers["total"].(float64) != 0 {
 		t.Fatalf("worker total = %v, want 0 before server registration", workers["total"])
+	}
+	leases := body["leases"].(map[string]interface{})
+	if leases["total"].(float64) != 0 {
+		t.Fatalf("lease total = %v, want 0", leases["total"])
 	}
 	remediation := body["remediation"].(map[string]interface{})
 	if remediation["runtime_certification"] != "docs/runtime-certification.md" {
@@ -255,6 +259,7 @@ func TestSystemRoutes_PrometheusMetrics(t *testing.T) {
 		"stacyvm_owner_quotas_total",
 		`type="max_sandboxes"`,
 		"stacyvm_workers_total",
+		"stacyvm_leases_total",
 		"stacyvm_sandboxes_by_worker_total",
 		"stacyvm_rate_limit_allowed_total",
 		"stacyvm_operation_success_total",

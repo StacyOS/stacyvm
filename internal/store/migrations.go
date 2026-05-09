@@ -225,4 +225,21 @@ ALTER TABLE sandboxes ADD COLUMN worker_id TEXT NOT NULL DEFAULT 'local';
 CREATE INDEX IF NOT EXISTS idx_sandboxes_worker ON sandboxes(worker_id);
 `,
 	},
+	{
+		version: 10,
+		sql: `
+CREATE TABLE IF NOT EXISTS leases (
+    resource_id   TEXT PRIMARY KEY,
+    resource_type TEXT NOT NULL DEFAULT '',
+    holder_id     TEXT NOT NULL,
+    generation    INTEGER NOT NULL DEFAULT 1,
+    expires_at    DATETIME NOT NULL,
+    created_at    DATETIME NOT NULL DEFAULT (datetime('now')),
+    updated_at    DATETIME NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_leases_holder ON leases(holder_id);
+CREATE INDEX IF NOT EXISTS idx_leases_expires_at ON leases(expires_at);
+`,
+	},
 }

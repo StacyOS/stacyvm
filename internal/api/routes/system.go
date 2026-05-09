@@ -187,6 +187,7 @@ func (s *SystemRoutes) Diagnostics(w http.ResponseWriter, r *http.Request) {
 		"rate_limit": s.rateLimitStats(),
 		"providers":  metrics.providerHealth,
 		"workers":    metrics.workerSummary,
+		"leases":     metrics.leaseSummary,
 		"sandboxes":  metrics.sandboxSummary(),
 		"events":     metrics.eventStats,
 		"operations": metrics.operationMetrics,
@@ -273,6 +274,7 @@ type systemMetricsSnapshot struct {
 	quotaSummary        orchestrator.QuotaSummary
 	rateLimitStats      middleware.RateLimitStats
 	workerSummary       map[string]interface{}
+	leaseSummary        map[string]interface{}
 }
 
 func (s *SystemRoutes) collectMetrics(ctx context.Context) (systemMetricsSnapshot, error) {
@@ -308,6 +310,7 @@ func (s *SystemRoutes) collectMetrics(ctx context.Context) (systemMetricsSnapsho
 		return systemMetricsSnapshot{}, err
 	}
 	workerSummary := s.workerSummary(ctx)
+	leaseSummary := s.leaseSummary(ctx)
 
 	return systemMetricsSnapshot{
 		uptime:              time.Since(s.startTime),
@@ -329,6 +332,7 @@ func (s *SystemRoutes) collectMetrics(ctx context.Context) (systemMetricsSnapsho
 		quotaSummary:        quotaSummary,
 		rateLimitStats:      s.rateLimitStats(),
 		workerSummary:       workerSummary,
+		leaseSummary:        leaseSummary,
 	}, nil
 }
 
@@ -347,6 +351,7 @@ func (m systemMetricsSnapshot) toResponse() map[string]interface{} {
 			"items":   m.providerHealth,
 		},
 		"workers":    m.workerSummary,
+		"leases":     m.leaseSummary,
 		"events":     m.eventStats,
 		"operations": m.operationMetrics,
 		"scheduler":  m.schedulerStatus,
@@ -409,6 +414,40 @@ func (s *SystemRoutes) workerSummary(ctx context.Context) map[string]interface{}
 	}
 	summary["total"] = len(workers)
 	summary["items"] = items
+	return summary
+}
+
+func (s *SystemRoutes) leaseSummary(ctx context.Context) map[string]interface{} {
+	summary := map[string]interface{}{
+		"total":     0,
+		"active":    0,
+		"expired":   0,
+		"by_holder": map[string]int{},
+	}
+	if s.store == nil {
+		return summary
+	}
+	leases, err := s.store.ListLeases(ctx)
+	if err != nil {
+		summary["error"] = err.Error()
+		return summary
+	}
+	now := time.Now().UTC()
+	byHolder := make(map[string]int)
+	active := 0
+	expired := 0
+	for _, lease := range leases {
+		if lease.ExpiresAt.After(now) {
+			active++
+			byHolder[lease.HolderID]++
+		} else {
+			expired++
+		}
+	}
+	summary["total"] = len(leases)
+	summary["active"] = active
+	summary["expired"] = expired
+	summary["by_holder"] = byHolder
 	return summary
 }
 

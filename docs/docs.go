@@ -2392,6 +2392,10 @@ const docTemplate = `{
                     "type": "string",
                     "example": "2026-05-08T10:30:00Z"
                 },
+                "leases": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
                 "limits": {
                     "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.OperationalLimitsInfo"
                 },
