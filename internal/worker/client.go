@@ -58,3 +58,50 @@ func (c Client) Heartbeat(ctx context.Context, params workerproto.HeartbeatParam
 	}
 	return nil
 }
+
+func (c Client) RenewLease(ctx context.Context, resourceID, ttl string) (workerproto.LeaseToken, error) {
+	var zero workerproto.LeaseToken
+	if strings.TrimSpace(c.BaseURL) == "" {
+		return zero, fmt.Errorf("control plane URL is required")
+	}
+	if strings.TrimSpace(c.WorkerID) == "" {
+		return zero, fmt.Errorf("worker id is required")
+	}
+	if strings.TrimSpace(c.Token) == "" {
+		return zero, fmt.Errorf("worker token is required")
+	}
+	if strings.TrimSpace(resourceID) == "" {
+		return zero, fmt.Errorf("lease resource id is required")
+	}
+	body, err := json.Marshal(workerproto.RenewLeaseParams{ResourceID: resourceID, TTL: ttl})
+	if err != nil {
+		return zero, err
+	}
+	url := strings.TrimRight(c.BaseURL, "/") + "/api/v1/worker/" + c.WorkerID + "/leases/" + resourceID + "/renew"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	if err != nil {
+		return zero, err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Worker-ID", c.WorkerID)
+	req.Header.Set("X-Worker-Token", c.Token)
+
+	client := c.HTTPClient
+	if client == nil {
+		client = &http.Client{Timeout: 10 * time.Second}
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return zero, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode >= 300 {
+		data, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
+		return zero, fmt.Errorf("worker lease renewal failed: HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(data)))
+	}
+	var result workerproto.RenewLeaseResult
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return zero, err
+	}
+	return result.Lease, nil
+}

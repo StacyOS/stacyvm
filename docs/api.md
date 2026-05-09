@@ -696,6 +696,36 @@ X-Worker-Token: <auth.worker_token>
 
 Admin heartbeat aliases remain available at `/api/v1/admin/workers/{workerID}/heartbeat` for controlled registry repair and test setup.
 
+### Renew a worker lease
+
+```
+POST /api/v1/worker/{workerID}/leases/{resourceID}/renew
+```
+
+Required headers:
+
+```text
+X-Worker-ID: worker-a
+X-Worker-Token: <auth.worker_token>
+```
+
+**Request**:
+```json
+{ "ttl": "30s" }
+```
+
+**Response** `200 OK`:
+```json
+{
+  "lease": {
+    "resource_id": "sb-abc123",
+    "holder_id": "worker-a",
+    "generation": 4,
+    "expires_at": "2026-05-09T10:31:00Z"
+  }
+}
+```
+
 ### Delete a worker
 
 ```

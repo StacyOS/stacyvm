@@ -11,6 +11,7 @@ import (
 	"github.com/StacyOs/stacyvm/internal/api/middleware"
 	"github.com/StacyOs/stacyvm/internal/httputil"
 	"github.com/StacyOs/stacyvm/internal/store"
+	"github.com/StacyOs/stacyvm/internal/workerproto"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -19,6 +20,7 @@ type workerStore interface {
 	GetWorker(ctx context.Context, id string) (*store.WorkerRecord, error)
 	ListWorkers(ctx context.Context) ([]*store.WorkerRecord, error)
 	DeleteWorker(ctx context.Context, id string) error
+	RenewLease(ctx context.Context, resourceID, holderID string, ttl time.Duration) (*store.LeaseRecord, error)
 }
 
 type WorkerRoutes struct {
@@ -34,6 +36,7 @@ func (w *WorkerRoutes) Routes() chi.Router {
 	r.Get("/", w.List)
 	r.Get("/{workerID}", w.Get)
 	r.Post("/{workerID}/heartbeat", w.Heartbeat)
+	r.Post("/{workerID}/leases/{resourceID}/renew", w.RenewLease)
 	r.Delete("/{workerID}", w.Delete)
 	return r
 }
@@ -51,6 +54,10 @@ type WorkerHeartbeatRequest struct {
 	Providers    []string               `json:"providers"`
 	Capabilities []string               `json:"capabilities"`
 	Capacity     map[string]interface{} `json:"capacity"`
+}
+
+type WorkerRenewLeaseRequest struct {
+	TTL string `json:"ttl" example:"30s"`
 }
 
 type WorkerResponse struct {
@@ -190,6 +197,41 @@ func (w *WorkerRoutes) Delete(rw http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(rw, http.StatusOK, map[string]string{"status": "deleted"})
 }
 
+func (w *WorkerRoutes) RenewLease(rw http.ResponseWriter, r *http.Request) {
+	if w.store == nil {
+		httputil.WriteError(rw, http.StatusServiceUnavailable, httputil.CodeUnavailable, "worker store unavailable")
+		return
+	}
+	workerID := strings.TrimSpace(chi.URLParam(r, "workerID"))
+	resourceID := strings.TrimSpace(chi.URLParam(r, "resourceID"))
+	if workerID == "" || resourceID == "" {
+		httputil.WriteError(rw, http.StatusBadRequest, httputil.CodeBadRequest, "worker id and resource id are required")
+		return
+	}
+	if identity := middleware.AuthIdentityFromContext(r.Context()); identity.Role == middleware.AuthRoleWorker && identity.WorkerID != workerID {
+		httputil.WriteError(rw, http.StatusForbidden, httputil.CodeUnauth, "worker credential does not match requested worker")
+		return
+	}
+	var req WorkerRenewLeaseRequest
+	if r.Body != nil {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			httputil.WriteError(rw, http.StatusBadRequest, httputil.CodeBadRequest, "invalid request body")
+			return
+		}
+	}
+	ttl, err := time.ParseDuration(req.TTL)
+	if err != nil || ttl <= 0 {
+		httputil.WriteError(rw, http.StatusBadRequest, httputil.CodeBadRequest, "ttl must be a positive duration")
+		return
+	}
+	lease, err := w.store.RenewLease(r.Context(), resourceID, workerID, ttl)
+	if err != nil {
+		writeRouteError(rw, err)
+		return
+	}
+	httputil.WriteJSON(rw, http.StatusOK, workerproto.RenewLeaseResult{Lease: leaseTokenFromRecord(lease)})
+}
+
 func workerResponse(rec *store.WorkerRecord, now time.Time) WorkerResponse {
 	var providers []string
 	var capabilities []string
@@ -208,6 +250,18 @@ func workerResponse(rec *store.WorkerRecord, now time.Time) WorkerResponse {
 		CreatedAt:     rec.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:     rec.UpdatedAt.UTC().Format(time.RFC3339),
 		Stale:         now.Sub(rec.LastHeartbeat) > 2*time.Minute,
+	}
+}
+
+func leaseTokenFromRecord(rec *store.LeaseRecord) workerproto.LeaseToken {
+	if rec == nil {
+		return workerproto.LeaseToken{}
+	}
+	return workerproto.LeaseToken{
+		ResourceID: rec.ResourceID,
+		HolderID:   rec.HolderID,
+		Generation: rec.Generation,
+		ExpiresAt:  rec.ExpiresAt,
 	}
 }
 

@@ -41,6 +41,8 @@ This is still a staging foundation. Remote spawn, destroy, status routing, and l
 - Added `internal/worker` with a heartbeat client and runtime loop.
 - Added a worker-only control-plane endpoint:
   - `POST /api/v1/worker/{workerID}/heartbeat`
+- Added a worker-only control-plane lease renewal endpoint:
+  - `POST /api/v1/worker/{workerID}/leases/{resourceID}/renew`
 - The endpoint persists worker host, status, provider list, capability list, capacity, and last heartbeat timestamp through the existing worker registry.
 
 ### Worker RPC Transport
@@ -48,8 +50,9 @@ This is still a staging foundation. Remote spawn, destroy, status routing, and l
 - Added worker-side `/rpc` HTTP handling for `workerproto.Request` envelopes.
 - Added worker RPC authentication with `X-Worker-ID` and `X-Worker-Token`.
 - Implemented `worker.status` against the local worker provider registry.
+- Implemented `worker.renew_lease` with resource, holder, and expiry validation before calling the control plane to renew the durable lease.
 - Implemented a no-op `worker.shutdown` acknowledgement as a transport smoke path.
-- Mutating methods such as spawn, destroy, and lease renewal return explicit not-implemented responses until the full lifecycle transport lands.
+- Mutating lifecycle methods such as spawn and destroy return explicit not-implemented responses until the full lifecycle transport lands.
 
 ## Code Areas
 
@@ -67,8 +70,8 @@ This is still a staging foundation. Remote spawn, destroy, status routing, and l
 
 ## Remaining Phase 11 Direction
 
-- Add worker RPC endpoints for lease renewal, spawn assignment, destroy, and real graceful shutdown.
+- Add worker RPC endpoints for spawn assignment, destroy, and real graceful shutdown.
 - Add remote spawn assignment through the scheduler when a non-local worker is selected.
 - Route destroy/status calls to the owning remote worker.
-- Enforce lease tokens on worker-side lifecycle mutations.
+- Extend lease-token enforcement from renewals to worker-side spawn/destroy lifecycle mutations.
 - Add a two-process staging guide for `stacyvm serve` plus `stacyvm worker` using the mock provider first.

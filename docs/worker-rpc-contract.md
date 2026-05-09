@@ -95,7 +95,15 @@ Run it with:
 stacyvm worker --listen 127.0.0.1:7430
 ```
 
-The endpoint accepts `workerproto.Request` envelopes, requires the same worker headers, and currently implements `worker.status`. Mutating methods return explicit not-implemented responses until remote spawn/destroy/lease renewal are wired end to end.
+The endpoint accepts `workerproto.Request` envelopes, requires the same worker headers, and currently implements `worker.status` and `worker.renew_lease`. Spawn and destroy return explicit not-implemented responses until remote lifecycle execution is wired end to end.
+
+Current Phase 11 control-plane lease renewal endpoint:
+
+```text
+POST /api/v1/worker/{workerID}/leases/{resourceID}/renew
+```
+
+The worker RPC handler validates the presented lease token before calling this endpoint. The control plane only renews unexpired leases held by the authenticated worker.
 
 ## Cluster Store Semantics
 

@@ -15,9 +15,14 @@ import (
 )
 
 type RPCServer struct {
-	WorkerID string
-	Token    string
-	Registry *providers.Registry
+	WorkerID     string
+	Token        string
+	Registry     *providers.Registry
+	LeaseRenewer LeaseRenewer
+}
+
+type LeaseRenewer interface {
+	RenewLease(ctx context.Context, resourceID, ttl string) (workerproto.LeaseToken, error)
 }
 
 func (s RPCServer) Handler() http.Handler {
@@ -59,6 +64,8 @@ func (s RPCServer) handleRPC(w http.ResponseWriter, r *http.Request) {
 	switch req.Method {
 	case workerproto.MethodStatus:
 		s.handleStatus(w, r.Context(), req)
+	case workerproto.MethodRenewLease:
+		s.handleRenewLease(w, r.Context(), req)
 	case workerproto.MethodShutdown:
 		httputil.WriteJSON(w, http.StatusOK, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID})
 	default:
@@ -105,6 +112,49 @@ func (s RPCServer) handleStatus(w http.ResponseWriter, ctx context.Context, req 
 		WorkerID:  s.WorkerID,
 	})
 	httputil.WriteJSON(w, http.StatusOK, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Result: result})
+}
+
+func (s RPCServer) handleRenewLease(w http.ResponseWriter, ctx context.Context, req workerproto.Request) {
+	if err := validateLeaseToken(req.Lease, s.WorkerID); err != nil {
+		httputil.WriteJSON(w, http.StatusForbidden, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Error: err.Error()})
+		return
+	}
+	var params workerproto.RenewLeaseParams
+	if err := json.Unmarshal(req.Params, &params); err != nil {
+		httputil.WriteJSON(w, http.StatusBadRequest, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Error: err.Error()})
+		return
+	}
+	if params.ResourceID != req.Lease.ResourceID {
+		httputil.WriteJSON(w, http.StatusForbidden, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Error: "lease resource does not match renewal request"})
+		return
+	}
+	if s.LeaseRenewer == nil {
+		httputil.WriteJSON(w, http.StatusServiceUnavailable, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Error: "lease renewer unavailable"})
+		return
+	}
+	lease, err := s.LeaseRenewer.RenewLease(ctx, params.ResourceID, params.TTL)
+	if err != nil {
+		httputil.WriteJSON(w, http.StatusConflict, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Error: err.Error()})
+		return
+	}
+	result, _ := json.Marshal(workerproto.RenewLeaseResult{Lease: lease})
+	httputil.WriteJSON(w, http.StatusOK, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Result: result})
+}
+
+func validateLeaseToken(token *workerproto.LeaseToken, workerID string) error {
+	if token == nil {
+		return errors.New("lease token is required")
+	}
+	if token.HolderID != workerID {
+		return errors.New("lease holder does not match worker")
+	}
+	if strings.TrimSpace(token.ResourceID) == "" {
+		return errors.New("lease resource is required")
+	}
+	if token.ExpiresAt.Before(time.Now().UTC()) {
+		return errors.New("lease token is expired")
+	}
+	return nil
 }
 
 func (s RPCServer) authenticate(r *http.Request) bool {

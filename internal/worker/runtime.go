@@ -28,9 +28,10 @@ func (r Runtime) Run(ctx context.Context) error {
 	serverErr := make(chan error, 1)
 	if r.ListenAddr != "" {
 		server = NewHTTPServer(r.ListenAddr, RPCServer{
-			WorkerID: r.Client.WorkerID,
-			Token:    r.Client.Token,
-			Registry: r.Registry,
+			WorkerID:     r.Client.WorkerID,
+			Token:        r.Client.Token,
+			Registry:     r.Registry,
+			LeaseRenewer: r.Client,
 		}.Handler())
 		go func() {
 			r.Logger.Info().Str("addr", r.ListenAddr).Msg("starting worker RPC server")

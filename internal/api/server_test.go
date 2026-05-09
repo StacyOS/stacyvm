@@ -129,6 +129,48 @@ func TestWorkerHeartbeatRejectsWorkerIDMismatch(t *testing.T) {
 	}
 }
 
+func TestWorkerRenewLeaseUsesWorkerToken(t *testing.T) {
+	srv, st := setupTestServerWithStore(t, ServerConfig{
+		APIKey:      "client-key",
+		AdminAPIKey: "admin-key",
+		WorkerToken: "worker-secret",
+		Version:     "test",
+	})
+	if _, err := st.AcquireLease(context.Background(), "sb-lease", "sandbox", "worker-a", time.Minute); err != nil {
+		t.Fatalf("acquire lease: %v", err)
+	}
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/worker/worker-a/leases/sb-lease/renew", strings.NewReader(`{"ttl":"2m"}`))
+	req.Header.Set("X-Worker-ID", "worker-a")
+	req.Header.Set("X-Worker-Token", "worker-secret")
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	var result struct {
+		Lease struct {
+			ResourceID string `json:"resource_id"`
+			HolderID   string `json:"holder_id"`
+			Generation int64  `json:"generation"`
+		} `json:"lease"`
+	}
+	if err := json.NewDecoder(w.Body).Decode(&result); err != nil {
+		t.Fatalf("decode result: %v", err)
+	}
+	if result.Lease.ResourceID != "sb-lease" || result.Lease.HolderID != "worker-a" || result.Lease.Generation != 2 {
+		t.Fatalf("unexpected lease result: %+v", result.Lease)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/worker/worker-a/leases/sb-lease/renew", strings.NewReader(`{"ttl":"2m"}`))
+	req.Header.Set("X-API-Key", "client-key")
+	w = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("api key status = %d, want %d", w.Code, http.StatusUnauthorized)
+	}
+}
+
 func TestAdminRoutesRequireAdminAPIKeyWhenConfigured(t *testing.T) {
 	srv := setupTestServer(t, ServerConfig{
 		APIKey:      "client-key",

@@ -75,6 +75,7 @@ func NewServer(cfg ServerConfig, registry *providers.Registry, manager *orchestr
 		r.Use(middleware.WorkerAuth(cfg.WorkerToken))
 		r.Use(middleware.RequireScope(middleware.ScopeWorkerHeartbeat))
 		r.Post("/{workerID}/heartbeat", workerRoutes.Heartbeat)
+		r.Post("/{workerID}/leases/{resourceID}/renew", workerRoutes.RenewLease)
 	})
 
 	// API routes — with auth and CORS
