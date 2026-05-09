@@ -19,6 +19,14 @@ scripts/certify-runtime.sh docker --format markdown --output docker-certificatio
 scripts/certify-runtime.sh firecracker --format json --output firecracker-certification.json
 ```
 
+For Phase 14 worker identity signoff, run the signed-token lifecycle smoke:
+
+```sh
+scripts/certify-worker-identity.sh worker-a
+```
+
+This verifies token issue, inspect, verify, revocation rejection, and rotation-plan generation using secret files. Set `STACYVM_WORKER_SIGNING_KEY_FILE`, `STACYVM_OLD_WORKER_SIGNING_KEY_FILE`, `STACYVM_WORKER_IDENTITY_AUDIENCE`, or `STACYVM_WORKER_IDENTITY_TTL` to point at deployment-specific values.
+
 The script exits non-zero when any required check fails. Warnings are included in
 the artifact but do not fail the command. Attach the generated artifact to the
 release checklist, support ticket, or infrastructure change record for the host
@@ -58,6 +66,7 @@ Before calling a single-node host production-ready, collect:
 - `stacyvm upgrade rehearse --config <config> --database <db> --backup-output <path>`
 - `stacyvm doctor --production`
 - `scripts/certify-runtime.sh <runtime> --format markdown --output <runtime>-certification.md`
+- `scripts/certify-worker-identity.sh <worker-id>`
 - Provider conformance or smoke output for the configured runtime.
 
 Store these artifacts with the deployment record. Do not treat a runtime as
