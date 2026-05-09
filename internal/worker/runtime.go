@@ -26,14 +26,16 @@ type Runtime struct {
 
 func (r Runtime) Run(ctx context.Context) error {
 	var server *http.Server
+	var rpcServer *RPCServer
 	serverErr := make(chan error, 1)
 	if r.ListenAddr != "" {
-		server = NewHTTPServer(r.ListenAddr, RPCServer{
+		rpcServer = &RPCServer{
 			WorkerID:     r.Client.WorkerID,
 			Token:        r.Client.Token,
 			Registry:     r.Registry,
 			LeaseRenewer: r.Client,
-		}.Handler())
+		}
+		server = NewHTTPServer(r.ListenAddr, rpcServer.Handler())
 		go func() {
 			r.Logger.Info().Str("addr", r.ListenAddr).Msg("starting worker RPC server")
 			err := server.ListenAndServe()
@@ -48,7 +50,7 @@ func (r Runtime) Run(ctx context.Context) error {
 			_ = server.Shutdown(shutdownCtx)
 		}()
 	}
-	if err := r.heartbeat(ctx); err != nil {
+	if err := r.heartbeat(ctx, isDraining(rpcServer)); err != nil {
 		return err
 	}
 	interval := r.HeartbeatInterval
@@ -64,18 +66,22 @@ func (r Runtime) Run(ctx context.Context) error {
 		case err := <-serverErr:
 			return err
 		case <-ticker.C:
-			if err := r.heartbeat(ctx); err != nil {
+			if err := r.heartbeat(ctx, isDraining(rpcServer)); err != nil {
 				r.Logger.Warn().Err(err).Msg("worker heartbeat failed")
 			}
 		}
 	}
 }
 
-func (r Runtime) RunOnce(ctx context.Context) error {
-	return r.heartbeat(ctx)
+func isDraining(server *RPCServer) bool {
+	return server != nil && server.Draining()
 }
 
-func (r Runtime) heartbeat(ctx context.Context) error {
+func (r Runtime) RunOnce(ctx context.Context) error {
+	return r.heartbeat(ctx, false)
+}
+
+func (r Runtime) heartbeat(ctx context.Context, draining bool) error {
 	hostname, err := os.Hostname()
 	if err != nil {
 		hostname = r.Client.WorkerID
@@ -83,9 +89,13 @@ func (r Runtime) heartbeat(ctx context.Context) error {
 	if hostname == "" {
 		return fmt.Errorf("worker hostname is empty")
 	}
+	status := "online"
+	if draining {
+		status = "draining"
+	}
 	params := workerproto.HeartbeatParams{
 		Hostname:     hostname,
-		Status:       "online",
+		Status:       status,
 		Providers:    r.Providers,
 		Capabilities: []string{"remote_worker", "heartbeat"},
 		Capacity:     r.Capacity,

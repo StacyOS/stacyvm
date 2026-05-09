@@ -139,4 +139,4 @@ The script starts both processes, waits for worker registration, spawns a mock s
 - Remote exec, file APIs, logs, and previews are not routed to remote workers yet.
 - Worker auth is a shared token suitable for staging; production enterprise mode should move to signed worker identity or mTLS.
 - SQLite remains a staging/single-node store. Enterprise multi-worker mode still needs Postgres-grade lease semantics.
-- Worker shutdown currently acknowledges the RPC method; full drain and graceful assignment handoff are still pending.
+- Worker shutdown enters drain mode and rejects new spawns; full assignment handoff to another worker is still pending.

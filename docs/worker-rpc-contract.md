@@ -116,6 +116,8 @@ Sandbox reads use the persisted `worker_id` and provider `runtime_id` to call `w
 
 Remote destroy uses the same persisted ownership tuple. The control plane fetches the durable sandbox lease, presents it to `worker.destroy`, updates sandbox state to `destroyed`, and releases the lease after the worker confirms teardown.
 
+`worker.shutdown` is a drain signal. After receiving it, the worker rejects new `worker.spawn` assignments and reports `draining` in future heartbeats, which keeps it out of scheduler placement. Existing sandboxes are not reassigned automatically in Phase 11.
+
 Current Phase 11 control-plane lease renewal endpoint:
 
 ```text

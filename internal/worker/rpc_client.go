@@ -66,6 +66,15 @@ func (c RPCClient) Destroy(ctx context.Context, reqID string, lease workerproto.
 	return err
 }
 
+func (c RPCClient) Shutdown(ctx context.Context, reqID string) error {
+	_, err := c.call(ctx, workerproto.Request{
+		ID:       reqID,
+		Method:   workerproto.MethodShutdown,
+		WorkerID: c.WorkerID,
+	})
+	return err
+}
+
 func (c RPCClient) call(ctx context.Context, request workerproto.Request) (workerproto.Response, error) {
 	var zero workerproto.Response
 	if strings.TrimSpace(c.BaseURL) == "" {

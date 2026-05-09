@@ -36,7 +36,7 @@ func TestRPCServerStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("spawn: %v", err)
 	}
-	handler := RPCServer{WorkerID: "worker-a", Token: "worker-secret", Registry: registry}.Handler()
+	handler := (&RPCServer{WorkerID: "worker-a", Token: "worker-secret", Registry: registry}).Handler()
 	params, _ := json.Marshal(workerproto.StatusParams{
 		SandboxID: "sb-control-plane",
 		Provider:  "mock",
@@ -79,7 +79,7 @@ func TestRPCServerRenewLease(t *testing.T) {
 		ExpiresAt:  time.Now().UTC().Add(2 * time.Minute),
 	}
 	renewer := &fakeLeaseRenewer{lease: renewed}
-	handler := RPCServer{WorkerID: "worker-a", Token: "worker-secret", Registry: providers.NewRegistry(), LeaseRenewer: renewer}.Handler()
+	handler := (&RPCServer{WorkerID: "worker-a", Token: "worker-secret", Registry: providers.NewRegistry(), LeaseRenewer: renewer}).Handler()
 	params, _ := json.Marshal(workerproto.RenewLeaseParams{ResourceID: "sb-1", TTL: "30s"})
 	reqBody, _ := json.Marshal(workerproto.Request{
 		ID:       "req-1",
@@ -126,7 +126,7 @@ func TestRPCServerSpawn(t *testing.T) {
 	if err := registry.SetDefault("mock"); err != nil {
 		t.Fatalf("set default: %v", err)
 	}
-	handler := RPCServer{WorkerID: "worker-a", Token: "worker-secret", Registry: registry}.Handler()
+	handler := (&RPCServer{WorkerID: "worker-a", Token: "worker-secret", Registry: registry}).Handler()
 	params, _ := json.Marshal(workerproto.SpawnParams{
 		SandboxID: "sb-control-plane",
 		Image:     "alpine:latest",
@@ -177,7 +177,7 @@ func TestRPCServerSpawn(t *testing.T) {
 func TestRPCServerSpawnRejectsLeaseMismatch(t *testing.T) {
 	registry := providers.NewRegistry()
 	registry.Register(providers.NewMockProvider())
-	handler := RPCServer{WorkerID: "worker-a", Token: "worker-secret", Registry: registry}.Handler()
+	handler := (&RPCServer{WorkerID: "worker-a", Token: "worker-secret", Registry: registry}).Handler()
 	params, _ := json.Marshal(workerproto.SpawnParams{
 		SandboxID: "sb-control-plane",
 		Image:     "alpine:latest",
@@ -210,6 +210,61 @@ func TestRPCServerSpawnRejectsLeaseMismatch(t *testing.T) {
 	}
 }
 
+func TestRPCServerShutdownDrainsWorker(t *testing.T) {
+	registry := providers.NewRegistry()
+	registry.Register(providers.NewMockProvider())
+	if err := registry.SetDefault("mock"); err != nil {
+		t.Fatalf("set default: %v", err)
+	}
+	rpcServer := &RPCServer{WorkerID: "worker-a", Token: "worker-secret", Registry: registry}
+	handler := rpcServer.Handler()
+	shutdownBody, _ := json.Marshal(workerproto.Request{
+		ID:       "req-shutdown",
+		Method:   workerproto.MethodShutdown,
+		WorkerID: "worker-a",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/rpc", bytes.NewReader(shutdownBody))
+	req.Header.Set("X-Worker-ID", "worker-a")
+	req.Header.Set("X-Worker-Token", "worker-secret")
+	w := httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("shutdown status = %d, want %d: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if !rpcServer.Draining() {
+		t.Fatal("expected worker to be draining")
+	}
+
+	params, _ := json.Marshal(workerproto.SpawnParams{
+		SandboxID: "sb-control-plane",
+		Image:     "alpine:latest",
+		Provider:  "mock",
+		MemoryMB:  512,
+		VCPUs:     1,
+		TTL:       "5m",
+	})
+	spawnBody, _ := json.Marshal(workerproto.Request{
+		ID:       "req-spawn",
+		Method:   workerproto.MethodSpawn,
+		WorkerID: "worker-a",
+		Lease: &workerproto.LeaseToken{
+			ResourceID: "sb-control-plane",
+			HolderID:   "worker-a",
+			Generation: 1,
+			ExpiresAt:  time.Now().UTC().Add(time.Minute),
+		},
+		Params: params,
+	})
+	req = httptest.NewRequest(http.MethodPost, "/rpc", bytes.NewReader(spawnBody))
+	req.Header.Set("X-Worker-ID", "worker-a")
+	req.Header.Set("X-Worker-Token", "worker-secret")
+	w = httptest.NewRecorder()
+	handler.ServeHTTP(w, req)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("spawn status = %d, want %d", w.Code, http.StatusServiceUnavailable)
+	}
+}
+
 func TestRPCServerDestroy(t *testing.T) {
 	registry := providers.NewRegistry()
 	mock := providers.NewMockProvider()
@@ -221,7 +276,7 @@ func TestRPCServerDestroy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("spawn: %v", err)
 	}
-	handler := RPCServer{WorkerID: "worker-a", Token: "worker-secret", Registry: registry}.Handler()
+	handler := (&RPCServer{WorkerID: "worker-a", Token: "worker-secret", Registry: registry}).Handler()
 	params, _ := json.Marshal(workerproto.DestroyParams{
 		SandboxID: "sb-control-plane",
 		Provider:  "mock",
@@ -261,7 +316,7 @@ func TestRPCServerDestroy(t *testing.T) {
 func TestRPCServerDestroyRejectsLeaseMismatch(t *testing.T) {
 	registry := providers.NewRegistry()
 	registry.Register(providers.NewMockProvider())
-	handler := RPCServer{WorkerID: "worker-a", Token: "worker-secret", Registry: registry}.Handler()
+	handler := (&RPCServer{WorkerID: "worker-a", Token: "worker-secret", Registry: registry}).Handler()
 	params, _ := json.Marshal(workerproto.DestroyParams{
 		SandboxID: "sb-control-plane",
 		Provider:  "mock",
@@ -293,7 +348,7 @@ func TestRPCServerDestroyRejectsLeaseMismatch(t *testing.T) {
 
 func TestRPCServerRenewLeaseRejectsExpiredToken(t *testing.T) {
 	renewer := &fakeLeaseRenewer{}
-	handler := RPCServer{WorkerID: "worker-a", Token: "worker-secret", Registry: providers.NewRegistry(), LeaseRenewer: renewer}.Handler()
+	handler := (&RPCServer{WorkerID: "worker-a", Token: "worker-secret", Registry: providers.NewRegistry(), LeaseRenewer: renewer}).Handler()
 	params, _ := json.Marshal(workerproto.RenewLeaseParams{ResourceID: "sb-1", TTL: "30s"})
 	reqBody, _ := json.Marshal(workerproto.Request{
 		ID:       "req-1",
@@ -323,7 +378,7 @@ func TestRPCServerRenewLeaseRejectsExpiredToken(t *testing.T) {
 }
 
 func TestRPCServerRejectsWrongWorker(t *testing.T) {
-	handler := RPCServer{WorkerID: "worker-a", Token: "worker-secret", Registry: providers.NewRegistry()}.Handler()
+	handler := (&RPCServer{WorkerID: "worker-a", Token: "worker-secret", Registry: providers.NewRegistry()}).Handler()
 	reqBody, _ := json.Marshal(workerproto.Request{
 		ID:       "req-1",
 		Method:   workerproto.MethodShutdown,
@@ -342,7 +397,7 @@ func TestRPCServerRejectsWrongWorker(t *testing.T) {
 }
 
 func TestRPCServerRejectsMissingCredentials(t *testing.T) {
-	handler := RPCServer{WorkerID: "worker-a", Token: "worker-secret", Registry: providers.NewRegistry()}.Handler()
+	handler := (&RPCServer{WorkerID: "worker-a", Token: "worker-secret", Registry: providers.NewRegistry()}).Handler()
 	req := httptest.NewRequest(http.MethodPost, "/rpc", bytes.NewReader([]byte(`{}`)))
 	w := httptest.NewRecorder()
 

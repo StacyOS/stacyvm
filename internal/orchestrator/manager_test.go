@@ -124,11 +124,11 @@ func TestManager_RemoteSpawnUsesWorkerRPC(t *testing.T) {
 	if err := remoteRegistry.SetDefault("mock"); err != nil {
 		t.Fatalf("set remote default: %v", err)
 	}
-	server := httptest.NewServer(worker.RPCServer{
+	server := httptest.NewServer((&worker.RPCServer{
 		WorkerID: "worker-remote",
 		Token:    "worker-secret",
 		Registry: remoteRegistry,
-	}.Handler())
+	}).Handler())
 	defer server.Close()
 
 	m := setupManagerWithConfig(t, ManagerConfig{
@@ -192,11 +192,11 @@ func TestManager_GetRefreshesRemoteStatus(t *testing.T) {
 	if err := remoteRegistry.SetDefault("mock"); err != nil {
 		t.Fatalf("set remote default: %v", err)
 	}
-	server := httptest.NewServer(worker.RPCServer{
+	server := httptest.NewServer((&worker.RPCServer{
 		WorkerID: "worker-remote",
 		Token:    "worker-secret",
 		Registry: remoteRegistry,
-	}.Handler())
+	}).Handler())
 	defer server.Close()
 
 	m := setupManagerWithConfig(t, ManagerConfig{
@@ -254,11 +254,11 @@ func TestManager_DestroyRoutesToRemoteWorker(t *testing.T) {
 	if err := remoteRegistry.SetDefault("mock"); err != nil {
 		t.Fatalf("set remote default: %v", err)
 	}
-	server := httptest.NewServer(worker.RPCServer{
+	server := httptest.NewServer((&worker.RPCServer{
 		WorkerID: "worker-remote",
 		Token:    "worker-secret",
 		Registry: remoteRegistry,
-	}.Handler())
+	}).Handler())
 	defer server.Close()
 
 	m := setupManagerWithConfig(t, ManagerConfig{

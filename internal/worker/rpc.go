@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/StacyOs/stacyvm/internal/httputil"
@@ -19,13 +20,14 @@ type RPCServer struct {
 	Token        string
 	Registry     *providers.Registry
 	LeaseRenewer LeaseRenewer
+	draining     atomic.Bool
 }
 
 type LeaseRenewer interface {
 	RenewLease(ctx context.Context, resourceID, ttl string) (workerproto.LeaseToken, error)
 }
 
-func (s RPCServer) Handler() http.Handler {
+func (s *RPCServer) Handler() http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/rpc", s.handleRPC)
 	mux.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
@@ -34,7 +36,14 @@ func (s RPCServer) Handler() http.Handler {
 	return mux
 }
 
-func (s RPCServer) handleRPC(w http.ResponseWriter, r *http.Request) {
+func (s *RPCServer) Draining() bool {
+	if s == nil {
+		return false
+	}
+	return s.draining.Load()
+}
+
+func (s *RPCServer) handleRPC(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		httputil.WriteError(w, http.StatusMethodNotAllowed, httputil.CodeBadRequest, "method not allowed")
 		return
@@ -67,10 +76,19 @@ func (s RPCServer) handleRPC(w http.ResponseWriter, r *http.Request) {
 	case workerproto.MethodRenewLease:
 		s.handleRenewLease(w, r.Context(), req)
 	case workerproto.MethodSpawn:
+		if s.draining.Load() {
+			httputil.WriteJSON(w, http.StatusServiceUnavailable, workerproto.Response{
+				ID:       req.ID,
+				WorkerID: s.WorkerID,
+				Error:    "worker is draining",
+			})
+			return
+		}
 		s.handleSpawn(w, r.Context(), req)
 	case workerproto.MethodDestroy:
 		s.handleDestroy(w, r.Context(), req)
 	case workerproto.MethodShutdown:
+		s.draining.Store(true)
 		httputil.WriteJSON(w, http.StatusOK, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID})
 	default:
 		httputil.WriteJSON(w, http.StatusNotImplemented, workerproto.Response{
@@ -81,7 +99,7 @@ func (s RPCServer) handleRPC(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func (s RPCServer) handleStatus(w http.ResponseWriter, ctx context.Context, req workerproto.Request) {
+func (s *RPCServer) handleStatus(w http.ResponseWriter, ctx context.Context, req workerproto.Request) {
 	var params workerproto.StatusParams
 	if err := json.Unmarshal(req.Params, &params); err != nil {
 		httputil.WriteJSON(w, http.StatusBadRequest, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Error: err.Error()})
@@ -118,7 +136,7 @@ func (s RPCServer) handleStatus(w http.ResponseWriter, ctx context.Context, req 
 	httputil.WriteJSON(w, http.StatusOK, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Result: result})
 }
 
-func (s RPCServer) handleSpawn(w http.ResponseWriter, ctx context.Context, req workerproto.Request) {
+func (s *RPCServer) handleSpawn(w http.ResponseWriter, ctx context.Context, req workerproto.Request) {
 	if err := validateLeaseToken(req.Lease, s.WorkerID); err != nil {
 		httputil.WriteJSON(w, http.StatusForbidden, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Error: err.Error()})
 		return
@@ -162,7 +180,7 @@ func (s RPCServer) handleSpawn(w http.ResponseWriter, ctx context.Context, req w
 	httputil.WriteJSON(w, http.StatusOK, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Result: result})
 }
 
-func (s RPCServer) handleDestroy(w http.ResponseWriter, ctx context.Context, req workerproto.Request) {
+func (s *RPCServer) handleDestroy(w http.ResponseWriter, ctx context.Context, req workerproto.Request) {
 	if err := validateLeaseToken(req.Lease, s.WorkerID); err != nil {
 		httputil.WriteJSON(w, http.StatusForbidden, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Error: err.Error()})
 		return
@@ -196,7 +214,7 @@ func (s RPCServer) handleDestroy(w http.ResponseWriter, ctx context.Context, req
 	httputil.WriteJSON(w, http.StatusOK, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID})
 }
 
-func (s RPCServer) handleRenewLease(w http.ResponseWriter, ctx context.Context, req workerproto.Request) {
+func (s *RPCServer) handleRenewLease(w http.ResponseWriter, ctx context.Context, req workerproto.Request) {
 	if err := validateLeaseToken(req.Lease, s.WorkerID); err != nil {
 		httputil.WriteJSON(w, http.StatusForbidden, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Error: err.Error()})
 		return
@@ -239,7 +257,7 @@ func validateLeaseToken(token *workerproto.LeaseToken, workerID string) error {
 	return nil
 }
 
-func (s RPCServer) authenticate(r *http.Request) bool {
+func (s *RPCServer) authenticate(r *http.Request) bool {
 	if strings.TrimSpace(s.Token) == "" || strings.TrimSpace(s.WorkerID) == "" {
 		return false
 	}

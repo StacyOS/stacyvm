@@ -16,11 +16,11 @@ func TestRPCClientSpawn(t *testing.T) {
 	if err := registry.SetDefault("mock"); err != nil {
 		t.Fatalf("set default: %v", err)
 	}
-	server := httptest.NewServer(RPCServer{
+	server := httptest.NewServer((&RPCServer{
 		WorkerID: "worker-a",
 		Token:    "worker-secret",
 		Registry: registry,
-	}.Handler())
+	}).Handler())
 	defer server.Close()
 
 	client := RPCClient{
@@ -60,11 +60,11 @@ func TestRPCClientStatus(t *testing.T) {
 	if err != nil {
 		t.Fatalf("spawn mock: %v", err)
 	}
-	server := httptest.NewServer(RPCServer{
+	server := httptest.NewServer((&RPCServer{
 		WorkerID: "worker-a",
 		Token:    "worker-secret",
 		Registry: registry,
-	}.Handler())
+	}).Handler())
 	defer server.Close()
 
 	client := RPCClient{
@@ -96,11 +96,11 @@ func TestRPCClientDestroy(t *testing.T) {
 	if err != nil {
 		t.Fatalf("spawn mock: %v", err)
 	}
-	server := httptest.NewServer(RPCServer{
+	server := httptest.NewServer((&RPCServer{
 		WorkerID: "worker-a",
 		Token:    "worker-secret",
 		Registry: registry,
-	}.Handler())
+	}).Handler())
 	defer server.Close()
 
 	client := RPCClient{

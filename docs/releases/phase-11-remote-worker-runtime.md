@@ -61,7 +61,7 @@ This is still a staging foundation. Remote spawn, destroy, status routing, and l
 - Implemented worker-side `worker.destroy` with lease validation and provider runtime teardown.
 - Added control-plane remote destroy routing for remote-owned sandboxes using persisted `worker_id` and `runtime_id`.
 - Remote destroy updates sandbox state, releases the durable lease, and publishes the normal destroyed event.
-- Implemented a no-op `worker.shutdown` acknowledgement as a transport smoke path.
+- Implemented `worker.shutdown` drain behavior: the worker marks itself draining, rejects new spawn assignments, and reports `draining` on subsequent heartbeats.
 - `worker.spawn` returns the control-plane sandbox ID and provider runtime ID separately, and the control plane persists that mapping for later routing.
 - Destroy now uses the worker RPC path for remote-owned sandboxes.
 - Added a two-process remote worker staging guide in `docs/remote-worker-staging.md`.
@@ -86,5 +86,5 @@ This is still a staging foundation. Remote spawn, destroy, status routing, and l
 
 ## Remaining Phase 11 Direction
 
-- Add real graceful worker shutdown/drain behavior.
 - Extend worker routing beyond spawn/status/destroy to exec, files, logs, and previews.
+- Add production-grade drain handoff/reassignment across workers.
