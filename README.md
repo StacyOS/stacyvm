@@ -556,8 +556,10 @@ auth:
   api_key: ""
   admin_api_key: ""       # optional separate key for /api/v1/admin/*
   worker_token: ""         # shared staging worker token
+  worker_token_file: ""    # file containing shared worker token
   worker_tokens: {}        # production map of worker_id: token
   worker_signing_key: ""   # production signed worker token verification key
+  worker_signing_key_file: ""  # file containing active worker signing key
   worker_signing_keys: []   # old verification keys accepted during rotation
   worker_revoked_token_ids: []  # signed worker token jti values rejected during incidents
   admin_fallback_enabled: true  # false requires admin_api_key for admin routes

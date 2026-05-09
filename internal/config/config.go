@@ -162,8 +162,10 @@ type AuthConfig struct {
 	APIKey                string            `mapstructure:"api_key"`
 	AdminAPIKey           string            `mapstructure:"admin_api_key"`
 	WorkerToken           string            `mapstructure:"worker_token"`
+	WorkerTokenFile       string            `mapstructure:"worker_token_file"`
 	WorkerTokens          map[string]string `mapstructure:"worker_tokens"`
 	WorkerSigningKey      string            `mapstructure:"worker_signing_key"`
+	WorkerSigningKeyFile  string            `mapstructure:"worker_signing_key_file"`
 	WorkerSigningKeys     []string          `mapstructure:"worker_signing_keys"`
 	WorkerRevokedTokenIDs []string          `mapstructure:"worker_revoked_token_ids"`
 	AdminFallbackEnabled  bool              `mapstructure:"admin_fallback_enabled"`
@@ -275,8 +277,10 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("auth.api_key", "")
 	v.SetDefault("auth.admin_api_key", "")
 	v.SetDefault("auth.worker_token", "")
+	v.SetDefault("auth.worker_token_file", "")
 	v.SetDefault("auth.worker_tokens", map[string]string{})
 	v.SetDefault("auth.worker_signing_key", "")
+	v.SetDefault("auth.worker_signing_key_file", "")
 	v.SetDefault("auth.worker_signing_keys", []string{})
 	v.SetDefault("auth.worker_revoked_token_ids", []string{})
 	v.SetDefault("auth.admin_fallback_enabled", true)
@@ -381,11 +385,44 @@ func load(configPaths []string, requireConfig bool) (*Config, error) {
 	if err := v.Unmarshal(&cfg); err != nil {
 		return nil, fmt.Errorf("unmarshaling config: %w", err)
 	}
+	if err := cfg.resolveAuthSecretFiles(); err != nil {
+		return nil, err
+	}
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}
 
 	return &cfg, nil
+}
+
+func (c *Config) resolveAuthSecretFiles() error {
+	if err := resolveSecretFile("auth.worker_token", &c.Auth.WorkerToken, "auth.worker_token_file", c.Auth.WorkerTokenFile); err != nil {
+		return err
+	}
+	if err := resolveSecretFile("auth.worker_signing_key", &c.Auth.WorkerSigningKey, "auth.worker_signing_key_file", c.Auth.WorkerSigningKeyFile); err != nil {
+		return err
+	}
+	return nil
+}
+
+func resolveSecretFile(valueName string, value *string, fileName, path string) error {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return nil
+	}
+	if strings.TrimSpace(*value) != "" {
+		return fmt.Errorf("%s and %s cannot both be set", valueName, fileName)
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("%s: %w", fileName, err)
+	}
+	secret := strings.TrimSpace(string(data))
+	if secret == "" {
+		return fmt.Errorf("%s is empty", fileName)
+	}
+	*value = secret
+	return nil
 }
 
 func (c *Config) Validate() error {

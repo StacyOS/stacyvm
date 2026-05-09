@@ -33,12 +33,14 @@ Phase 14 begins the worker identity hardening lane for production multi-worker S
 ### Configuration
 
 - Added `auth.worker_signing_key`.
+- Added `auth.worker_token_file` and `auth.worker_signing_key_file` so production services can mount worker credentials from files.
 - Added `auth.worker_signing_keys` for old verification keys during rotation.
 - Kept `auth.worker_token` for shared-token staging compatibility.
 - Kept `auth.worker_tokens` for per-worker static token migration paths.
 - Updated `stacyvm config lint --production` so a strong `auth.worker_signing_key` satisfies production-aligned worker credential checks.
 - Added config lint warnings when revoked signed-token IDs are configured without signed worker-token verification.
 - Added config lint warnings for shared worker tokens left enabled beside signed worker tokens, duplicate rotation keys, and rotation keys that repeat the active signing key.
+- Config loading now rejects ambiguous inline/file worker secret pairs such as `auth.worker_signing_key` plus `auth.worker_signing_key_file`.
 
 ### Worker runtime
 
@@ -85,6 +87,7 @@ Phase 14 begins the worker identity hardening lane for production multi-worker S
 - Added cluster conformance coverage for worker identity certification report generation.
 - Updated the threat model and remote-worker staging guide so worker impersonation controls and staging guidance reflect the implemented signed-token and mTLS paths.
 - Documented reloadable worker token files as the handoff path for external worker-token issuers.
+- Updated deployment and configuration docs for secret-mounted worker token and signing-key files.
 
 ## Code Areas Changed
 
@@ -102,6 +105,7 @@ Phase 14 begins the worker identity hardening lane for production multi-worker S
 The new signed-token path is additive:
 
 - Existing `auth.worker_token` deployments continue to work.
+- Existing inline worker secrets can be moved to `auth.worker_token_file` or `auth.worker_signing_key_file` without changing runtime behavior.
 - Existing `auth.worker_tokens.<worker_id>` deployments continue to work.
 - Signed tokens can be introduced gradually by setting `auth.worker_signing_key`.
 - Workers can also consume externally issued short-lived tokens through reloadable `--worker-token-file` secrets.

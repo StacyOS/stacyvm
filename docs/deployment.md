@@ -10,7 +10,7 @@ This guide covers a single-node StacyVM deployment suitable for an internal serv
 - TLS and public ingress handled by a reverse proxy or load balancer in front of StacyVM.
 - Health checks wired to the API endpoints listed below.
 
-StacyVM reads config from `./stacyvm.yaml`, then `~/.stacyvm/config.yaml`, then `STACYVM_` environment variables. In production, prefer a checked-in baseline config plus environment variables for secrets and environment-specific values.
+StacyVM reads config from `./stacyvm.yaml`, then `~/.stacyvm/config.yaml`, then `STACYVM_` environment variables. In production, prefer a checked-in baseline config plus environment variables or secret files for secrets and environment-specific values. Worker credentials can be mounted through `auth.worker_token_file` and `auth.worker_signing_key_file`; the loader rejects configs that set both the inline secret and its file reference.
 
 Before starting a single-node staging or production host, lint the final config with the same environment variables the service will use:
 

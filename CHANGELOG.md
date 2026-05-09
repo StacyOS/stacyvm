@@ -30,6 +30,7 @@ This checkpoint starts hardening remote worker identity for public and enterpris
 - Worker RPC mTLS config under `worker.rpc_tls`.
 - TLS server support for inbound worker RPC.
 - TLS client support for control-plane calls to remote worker RPC.
+- Config-level worker secret file support through `auth.worker_token_file` and `auth.worker_signing_key_file`.
 - Worker RPC mTLS conformance test with generated CA, server, and client certificates.
 - Config lint checks for worker RPC TLS certificate and CA settings.
 - Cluster conformance coverage for signed-token migration lint warnings.
@@ -50,6 +51,7 @@ This checkpoint starts hardening remote worker identity for public and enterpris
 - API and worker RPC docs now describe signed worker token behavior, signing-key rotation, and worker RPC mTLS.
 - Threat model and remote-worker staging docs now treat signed worker tokens as implemented Phase 14 identity controls instead of future work.
 - Runtime certification and public support guidance now document reloadable worker token files for external issuer handoff.
+- Config examples now prefer secret-mounted worker credential files for production services.
 
 ## Phase 13 Cluster Store And Worker Identity - 2026-05-09
 

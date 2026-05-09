@@ -92,8 +92,10 @@ Workers must not accept user API keys or admin API keys for worker RPC. Control-
 Current control-plane worker authentication accepts either:
 
 - `auth.worker_token` as a shared staging token.
+- `auth.worker_token_file` as a secret-mounted file containing the shared staging token.
 - `auth.worker_tokens.<worker_id>` as a per-worker token map for production-aligned staging.
 - `auth.worker_signing_key` for HMAC-SHA256 signed worker tokens using the `stacyvm-worker-v1.<payload>.<signature>` format.
+- `auth.worker_signing_key_file` as a secret-mounted file containing the active signing key.
 - `auth.worker_signing_keys` as additional verification keys accepted during signing-key rotation.
 
 When a worker has an entry in `auth.worker_tokens`, that worker-specific token takes precedence and the shared token is rejected for that worker ID. This keeps legacy staging configs compatible while giving production deployments individually rotatable worker credentials.
@@ -115,7 +117,7 @@ stacyvm worker token rotation-plan --new-key-ref /run/secrets/stacyvm-worker-sig
 
 `stacyvm worker token inspect` decodes token metadata without verifying the signature. Use it to recover `worker_id`, `jti`, `aud`, and expiry metadata from an already-captured token before adding the `jti` value to `auth.worker_revoked_token_ids`; do not treat inspected claims as authenticated identity. `stacyvm worker token verify` validates the signature against `auth.worker_signing_key`, accepts `auth.worker_signing_keys` during rotation, applies optional `--worker-id` and `--audience` expectations, and rejects configured revoked token IDs.
 
-For production services, prefer `--worker-token-file`, `--worker-signing-key-file`, `--signing-key-file`, and `--verification-key-file` with secret-mounted files over passing long-lived worker secrets directly in shell history or environment variables. `stacyvm worker --worker-token-file` reloads the token file for each heartbeat and lease-renewal request, so an external issuer or sidecar can rotate short-lived signed worker tokens without restarting the worker process.
+For production services, prefer `auth.worker_token_file`, `auth.worker_signing_key_file`, `--worker-token-file`, `--worker-signing-key-file`, `--signing-key-file`, and `--verification-key-file` with secret-mounted files over passing long-lived worker secrets directly in YAML, shell history, or environment variables. The config loader rejects ambiguous pairs such as `auth.worker_signing_key` plus `auth.worker_signing_key_file`. `stacyvm worker --worker-token-file` reloads the token file for each heartbeat and lease-renewal request, so an external issuer or sidecar can rotate short-lived signed worker tokens without restarting the worker process.
 
 `stacyvm worker token rotation-plan` emits a no-secret checklist, config sketch, and validation commands for a two-key rotation window. No-downtime signing-key rotation uses this sequence:
 

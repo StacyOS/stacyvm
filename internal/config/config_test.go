@@ -1,7 +1,9 @@
 package config
 
 import (
+	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -206,5 +208,56 @@ auth:
 	}
 	if cfg.Auth.WorkerTokens["worker-a"] != "worker-a-secret" {
 		t.Fatalf("worker-a token = %q, want worker-a-secret", cfg.Auth.WorkerTokens["worker-a"])
+	}
+}
+
+func TestLoadResolvesWorkerSecretFiles(t *testing.T) {
+	dir := t.TempDir()
+	tokenPath := filepath.Join(dir, "worker-token")
+	signingKeyPath := filepath.Join(dir, "worker-signing-key")
+	if err := os.WriteFile(tokenPath, []byte("worker-token-from-file\n"), 0o600); err != nil {
+		t.Fatalf("write token file: %v", err)
+	}
+	if err := os.WriteFile(signingKeyPath, []byte("worker-signing-key-from-file-with-32-bytes\n"), 0o600); err != nil {
+		t.Fatalf("write signing key file: %v", err)
+	}
+	configPath := filepath.Join(dir, "stacyvm.yaml")
+	if err := os.WriteFile(configPath, []byte(fmt.Sprintf(`
+auth:
+  worker_token_file: %q
+  worker_signing_key_file: %q
+`, tokenPath, signingKeyPath)), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg, err := LoadFile(configPath)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.Auth.WorkerToken != "worker-token-from-file" {
+		t.Fatalf("worker token = %q, want token from file", cfg.Auth.WorkerToken)
+	}
+	if cfg.Auth.WorkerSigningKey != "worker-signing-key-from-file-with-32-bytes" {
+		t.Fatalf("worker signing key = %q, want key from file", cfg.Auth.WorkerSigningKey)
+	}
+}
+
+func TestLoadRejectsAmbiguousWorkerSecretFile(t *testing.T) {
+	dir := t.TempDir()
+	tokenPath := filepath.Join(dir, "worker-token")
+	if err := os.WriteFile(tokenPath, []byte("worker-token-from-file\n"), 0o600); err != nil {
+		t.Fatalf("write token file: %v", err)
+	}
+	configPath := filepath.Join(dir, "stacyvm.yaml")
+	if err := os.WriteFile(configPath, []byte(fmt.Sprintf(`
+auth:
+  worker_token: "worker-token-inline"
+  worker_token_file: %q
+`, tokenPath)), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	if _, err := LoadFile(configPath); err == nil {
+		t.Fatal("expected ambiguous worker token config to fail")
 	}
 }
