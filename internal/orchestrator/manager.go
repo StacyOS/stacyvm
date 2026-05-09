@@ -2272,11 +2272,35 @@ func (m *Manager) spawnDirect(ctx context.Context, req SpawnRequest) (*Sandbox, 
 }
 
 func (m *Manager) ConsoleLog(ctx context.Context, sandboxID string, lines int) ([]string, error) {
-	_, prov, err := m.getSandboxAndProvider(sandboxID)
+	sb, prov, err := m.getSandboxAndProvider(sandboxID)
 	if err != nil {
 		return nil, err
 	}
-	return prov.ConsoleLog(ctx, sandboxID, lines)
+	if m.isRemoteOwnedSandbox(sb) {
+		return m.remoteConsoleLog(ctx, sb, lines)
+	}
+	return prov.ConsoleLog(ctx, m.resolveVMID(sb), lines)
+}
+
+func (m *Manager) remoteConsoleLog(ctx context.Context, sb *Sandbox, lines int) ([]string, error) {
+	client, err := m.remoteWorkerRPCClient(ctx, sb.WorkerID)
+	if err != nil {
+		return nil, err
+	}
+	runtimeID := strings.TrimSpace(sb.VMID)
+	if runtimeID == "" {
+		runtimeID = sb.ID
+	}
+	result, err := client.Logs(ctx, "logs-"+sb.ID, workerproto.LogsParams{
+		SandboxID: sb.ID,
+		Provider:  sb.Provider,
+		RuntimeID: runtimeID,
+		Lines:     lines,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("remote worker logs: %w", err)
+	}
+	return result.Lines, nil
 }
 
 func (m *Manager) Get(ctx context.Context, id string) (*Sandbox, error) {

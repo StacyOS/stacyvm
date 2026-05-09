@@ -524,6 +524,66 @@ func TestManager_FileOperationsRouteToRemoteWorker(t *testing.T) {
 	}
 }
 
+func TestManager_ConsoleLogRoutesToRemoteWorker(t *testing.T) {
+	remoteRegistry := providers.NewRegistry()
+	remoteMock := providers.NewMockProvider()
+	remoteRegistry.Register(remoteMock)
+	if err := remoteRegistry.SetDefault("mock"); err != nil {
+		t.Fatalf("set remote default: %v", err)
+	}
+	server := httptest.NewServer((&worker.RPCServer{
+		WorkerID: "worker-remote",
+		Token:    "worker-secret",
+		Registry: remoteRegistry,
+	}).Handler())
+	defer server.Close()
+
+	m := setupManagerWithConfig(t, ManagerConfig{
+		DefaultTTL:    5 * time.Minute,
+		DefaultImage:  "alpine:latest",
+		DefaultMemory: 512,
+		DefaultVCPUs:  1,
+		WorkerToken:   "worker-secret",
+	})
+	providersJSON, _ := json.Marshal([]string{"mock"})
+	capacityJSON, _ := json.Marshal(map[string]interface{}{
+		"max_sandboxes": 10,
+		"rpc_url":       server.URL,
+	})
+	now := time.Now().UTC()
+	if err := m.store.SaveWorker(context.Background(), &store.WorkerRecord{
+		ID:            "worker-remote",
+		Hostname:      "remote-host",
+		Status:        "online",
+		Providers:     string(providersJSON),
+		Capabilities:  `["remote_worker","spawn","status","logs"]`,
+		Capacity:      string(capacityJSON),
+		LastHeartbeat: now,
+	}); err != nil {
+		t.Fatalf("save worker: %v", err)
+	}
+	sb, err := m.Spawn(context.Background(), SpawnRequest{Image: "alpine:latest"})
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+
+	lines, err := m.ConsoleLog(context.Background(), sb.ID, 2)
+	if err != nil {
+		t.Fatalf("console log: %v", err)
+	}
+	if len(lines) != 2 {
+		t.Fatalf("log line count = %d, want 2: %+v", len(lines), lines)
+	}
+	for _, line := range lines {
+		if strings.Contains(line, sb.ID) {
+			t.Fatalf("expected worker runtime id in logs, got control-plane id in %q", line)
+		}
+	}
+	if !strings.Contains(lines[0], "workspace initialized") {
+		t.Fatalf("unexpected logs: %+v", lines)
+	}
+}
+
 func TestManager_List(t *testing.T) {
 	m := setupManager(t)
 	ctx := context.Background()

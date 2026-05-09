@@ -197,6 +197,23 @@ func (c RPCClient) FileGlob(ctx context.Context, reqID string, params workerprot
 	return result, nil
 }
 
+func (c RPCClient) Logs(ctx context.Context, reqID string, params workerproto.LogsParams) (workerproto.LogsResult, error) {
+	var result workerproto.LogsResult
+	resp, err := c.call(ctx, workerproto.Request{
+		ID:       reqID,
+		Method:   workerproto.MethodLogs,
+		WorkerID: c.WorkerID,
+		Params:   mustRawMessage(params),
+	})
+	if err != nil {
+		return result, err
+	}
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		return result, err
+	}
+	return result, nil
+}
+
 func (c RPCClient) Destroy(ctx context.Context, reqID string, lease workerproto.LeaseToken, params workerproto.DestroyParams) error {
 	_, err := c.call(ctx, workerproto.Request{
 		ID:       reqID,

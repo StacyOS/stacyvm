@@ -149,6 +149,13 @@ curl -sS -H "X-API-Key: dev-api-key-dev-api-key-dev-api-key" \
   "http://127.0.0.1:7423/api/v1/sandboxes/<sandbox-id>/files?path=/workspace/remote.txt"
 ```
 
+Fetch console logs. This routes through `worker.logs`:
+
+```bash
+curl -sS -H "X-API-Key: dev-api-key-dev-api-key-dev-api-key" \
+  "http://127.0.0.1:7423/api/v1/sandboxes/<sandbox-id>/logs?lines=50"
+```
+
 Destroy the sandbox. This routes through `worker.destroy`, updates state, and releases the lease:
 
 ```bash
@@ -172,7 +179,8 @@ The script starts both processes, waits for worker registration, spawns a mock s
 - Remote non-streaming exec is routed to remote workers.
 - Remote streaming exec is routed through buffered worker RPC responses, not a true live stream transport yet.
 - Remote file APIs are routed to remote workers.
-- Remote logs and previews are not routed to remote workers yet.
+- Remote logs are routed to remote workers.
+- Remote previews are not routed to remote workers yet.
 - Worker auth is a shared token suitable for staging; production enterprise mode should move to signed worker identity or mTLS.
 - SQLite remains a staging/single-node store. Enterprise multi-worker mode still needs Postgres-grade lease semantics.
 - Worker shutdown enters drain mode and rejects new spawns; full assignment handoff to another worker is still pending.

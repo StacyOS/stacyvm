@@ -249,6 +249,43 @@ func TestRPCClientFileOperations(t *testing.T) {
 	}
 }
 
+func TestRPCClientLogs(t *testing.T) {
+	registry := providers.NewRegistry()
+	mock := providers.NewMockProvider()
+	registry.Register(mock)
+	if err := registry.SetDefault("mock"); err != nil {
+		t.Fatalf("set default: %v", err)
+	}
+	runtimeID, err := mock.Spawn(context.Background(), providers.SpawnOptions{Image: "alpine:latest"})
+	if err != nil {
+		t.Fatalf("spawn mock: %v", err)
+	}
+	server := httptest.NewServer((&RPCServer{
+		WorkerID: "worker-a",
+		Token:    "worker-secret",
+		Registry: registry,
+	}).Handler())
+	defer server.Close()
+
+	client := RPCClient{
+		BaseURL:  server.URL,
+		WorkerID: "worker-a",
+		Token:    "worker-secret",
+	}
+	result, err := client.Logs(context.Background(), "req-logs", workerproto.LogsParams{
+		SandboxID: "sb-control-plane",
+		RuntimeID: runtimeID,
+		Provider:  "mock",
+		Lines:     2,
+	})
+	if err != nil {
+		t.Fatalf("logs: %v", err)
+	}
+	if result.SandboxID != "sb-control-plane" || len(result.Lines) != 2 {
+		t.Fatalf("unexpected logs result: %+v", result)
+	}
+}
+
 func TestRPCClientDestroy(t *testing.T) {
 	registry := providers.NewRegistry()
 	mock := providers.NewMockProvider()

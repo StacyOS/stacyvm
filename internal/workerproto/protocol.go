@@ -28,6 +28,7 @@ const (
 	MethodFileChmod  = "worker.file_chmod"
 	MethodFileStat   = "worker.file_stat"
 	MethodFileGlob   = "worker.file_glob"
+	MethodLogs       = "worker.logs"
 	MethodRenewLease = "worker.renew_lease"
 	MethodShutdown   = "worker.shutdown"
 )
@@ -39,6 +40,7 @@ const (
 	ScopeStatus    = "worker:status"
 	ScopeExec      = "worker:exec"
 	ScopeFiles     = "worker:files"
+	ScopeLogs      = "worker:logs"
 	ScopeLease     = "worker:lease"
 )
 
@@ -207,6 +209,20 @@ type FileGlobResult struct {
 	Matches   []string `json:"matches"`
 }
 
+// LogsParams asks a worker to return console logs for an owned runtime.
+type LogsParams struct {
+	SandboxID string `json:"sandbox_id"`
+	Provider  string `json:"provider"`
+	RuntimeID string `json:"runtime_id,omitempty"`
+	Lines     int    `json:"lines,omitempty"`
+}
+
+// LogsResult contains console log lines returned by a worker runtime.
+type LogsResult struct {
+	SandboxID string   `json:"sandbox_id"`
+	Lines     []string `json:"lines"`
+}
+
 // RenewLeaseParams asks a worker to confirm it still owns work and needs a
 // renewed lease window.
 type RenewLeaseParams struct {
@@ -264,6 +280,8 @@ func ValidateRequest(req Request) error {
 		return validateParams[ExecParams](req.Params)
 	case MethodFileWrite, MethodFileRead, MethodFileList, MethodFileDelete, MethodFileMove, MethodFileChmod, MethodFileStat, MethodFileGlob:
 		return validateParams[FileParams](req.Params)
+	case MethodLogs:
+		return validateParams[LogsParams](req.Params)
 	case MethodRenewLease:
 		if req.Lease == nil {
 			return fmt.Errorf("%w: lease is required for renew_lease", ErrInvalidMessage)

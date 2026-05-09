@@ -83,6 +83,8 @@ func (s *RPCServer) handleRPC(w http.ResponseWriter, r *http.Request) {
 		workerproto.MethodFileDelete, workerproto.MethodFileMove, workerproto.MethodFileChmod,
 		workerproto.MethodFileStat, workerproto.MethodFileGlob:
 		s.handleFile(w, r.Context(), req)
+	case workerproto.MethodLogs:
+		s.handleLogs(w, r.Context(), req)
 	case workerproto.MethodRenewLease:
 		s.handleRenewLease(w, r.Context(), req)
 	case workerproto.MethodSpawn:
@@ -354,6 +356,41 @@ func toWorkerFileInfo(files []providers.FileInfo) []workerproto.FileInfo {
 		}
 	}
 	return out
+}
+
+func (s *RPCServer) handleLogs(w http.ResponseWriter, ctx context.Context, req workerproto.Request) {
+	var params workerproto.LogsParams
+	if err := json.Unmarshal(req.Params, &params); err != nil {
+		httputil.WriteJSON(w, http.StatusBadRequest, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Error: err.Error()})
+		return
+	}
+	if s.Registry == nil {
+		httputil.WriteJSON(w, http.StatusServiceUnavailable, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Error: "provider registry unavailable"})
+		return
+	}
+	provider, err := s.Registry.Get(params.Provider)
+	if err != nil {
+		httputil.WriteJSON(w, http.StatusNotFound, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Error: err.Error()})
+		return
+	}
+	runtimeID := strings.TrimSpace(params.RuntimeID)
+	if runtimeID == "" {
+		runtimeID = params.SandboxID
+	}
+	lines, err := provider.ConsoleLog(ctx, runtimeID, params.Lines)
+	if err != nil {
+		code := http.StatusInternalServerError
+		if errors.Is(err, providers.ErrSandboxNotFound) {
+			code = http.StatusNotFound
+		}
+		httputil.WriteJSON(w, code, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Error: err.Error()})
+		return
+	}
+	result, _ := json.Marshal(workerproto.LogsResult{
+		SandboxID: params.SandboxID,
+		Lines:     lines,
+	})
+	httputil.WriteJSON(w, http.StatusOK, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Result: result})
 }
 
 func (s *RPCServer) handleSpawn(w http.ResponseWriter, ctx context.Context, req workerproto.Request) {
