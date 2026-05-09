@@ -2103,6 +2103,8 @@
                 "creating",
                 "running",
                 "idle",
+                "unhealthy",
+                "expired",
                 "destroyed",
                 "error"
             ],
@@ -2110,6 +2112,8 @@
                 "StateCreating",
                 "StateRunning",
                 "StateIdle",
+                "StateUnhealthy",
+                "StateExpired",
                 "StateDestroyed",
                 "StateError"
             ]

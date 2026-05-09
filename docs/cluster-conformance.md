@@ -20,6 +20,7 @@ It currently verifies:
 - Postgres configuration with a valid DSN passes `stacyvm config lint --production`.
 - Live Postgres passes the reusable store contract when `STACYVM_POSTGRES_TEST_DSN` is set.
 - Live Postgres proves one active lease holder under concurrent acquire and expired takeover attempts.
+- Live Postgres proves migrations apply idempotently and record every expected schema version.
 - A Postgres-backed remote worker smoke runs control plane plus worker against the mock provider.
 
 ## Store Matrix
@@ -27,7 +28,7 @@ It currently verifies:
 | Store | Status | Required Checks |
 |---|---|---|
 | SQLite | Supported for single-node and internal staging | `TestSQLiteStoreContract`, migration tests, backup/restore tests |
-| Postgres | Contract-backed cluster store path | `TestPostgresStoreContract`, Postgres migration alignment tests, lease takeover race tests, remote worker smoke, startup reconciliation with multiple workers |
+| Postgres | Contract-backed cluster store path | `TestPostgresStoreContract`, `TestPostgresMigrationRehearsal`, Postgres migration alignment tests, lease takeover race tests, remote worker smoke, startup reconciliation with multiple workers |
 
 Postgres must not be marked production-ready for a deployment until it runs the same store contract suite as SQLite, passes lease race coverage, and passes the remote worker smoke in that deployment's target topology.
 
@@ -74,7 +75,7 @@ Phase 13 has completed:
 - Per-worker token authentication.
 - Cluster conformance CI scaffolding.
 
-Remaining cluster-storage work:
+Remaining cluster-storage work after Phase 13:
 
 - Extend multi-worker conformance beyond the mock provider into certified Docker, gVisor/Kata, and Firecracker hosts.
-- Add operational migration rehearsal against real Postgres backups before enterprise production rollout.
+- Add backup/restore-specific Postgres migration rehearsal before enterprise production rollout.

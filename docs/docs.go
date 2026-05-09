@@ -2109,6 +2109,8 @@ const docTemplate = `{
                 "creating",
                 "running",
                 "idle",
+                "unhealthy",
+                "expired",
                 "destroyed",
                 "error"
             ],
@@ -2116,6 +2118,8 @@ const docTemplate = `{
                 "StateCreating",
                 "StateRunning",
                 "StateIdle",
+                "StateUnhealthy",
+                "StateExpired",
                 "StateDestroyed",
                 "StateError"
             ]

@@ -23,6 +23,7 @@ Phase 13 starts the enterprise multi-worker production track after Phase 12 comp
 - Added tests that verify Postgres migrations track SQLite migration versions.
 - Added tests that verify Postgres migrations cover all store tables and avoid SQLite-only dialect tokens.
 - Added a Postgres store migrator that applies those migrations through `store.Open`.
+- Added live Postgres migration rehearsal coverage for idempotent migration application.
 
 ### Store Contract Harness
 
@@ -64,7 +65,7 @@ Phase 13 starts the enterprise multi-worker production track after Phase 12 comp
 - Added the `cluster-conformance` GitHub Actions job.
 - Added the `remote-worker-postgres-smoke` GitHub Actions job.
 - Added `docs/cluster-conformance.md` with store, worker identity, runtime, and promotion gates.
-- CI now verifies the SQLite store contract, live Postgres store contract, live Postgres lease concurrency, worker identity tests, production-aligned cluster config linting, and a Postgres-backed remote worker smoke.
+- CI now verifies the SQLite store contract, live Postgres store contract, live Postgres lease concurrency, live Postgres migration rehearsal, worker identity tests, production-aligned cluster config linting, and a Postgres-backed remote worker smoke.
 
 ## Verification
 

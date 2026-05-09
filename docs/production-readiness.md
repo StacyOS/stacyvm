@@ -51,7 +51,7 @@ This checklist tracks the Phase 7 release-candidate hardening work needed before
 - Sandbox records persist their owning worker ID and diagnostics expose sandbox counts by worker. Done in Phase 10 slice 2.
 - Scheduler placement policy is worker-aware. Remote spawn, status, destroy, live exec streaming, files, logs, preview metadata, and conservative drain/offline ownership policy are available for workers that advertise `rpc_url`.
 - Sandbox ownership is tied to worker IDs. Remote spawn/status/destroy ownership is enforced through worker RPC and persisted runtime IDs.
-- Distributed leases prevent duplicate worker ownership. Remote spawn, renew, and destroy now carry lease tokens; persistence now has SQLite and Postgres store paths, and production still needs deeper Postgres lease race testing.
+- Distributed leases prevent duplicate worker ownership. Remote spawn, renew, and destroy now carry lease tokens; persistence now has SQLite and Postgres store paths with Postgres lease race coverage.
 - Remote worker authentication and RPC contract are implemented for heartbeat, lease renewal, spawn, status, destroy, exec, files, logs, preview metadata, and drain/offline ownership reconciliation. Shared worker tokens remain available for staging, and per-worker token mapping now supports individually rotatable worker credentials.
 
 ## Current Release-Candidate Gates
@@ -62,7 +62,7 @@ This checklist tracks the Phase 7 release-candidate hardening work needed before
 | Web build | Passing | CI runs `npm run build`. |
 | SDK checks | Passing | TypeScript builds, Python imports, and mock-based SDK parity smoke tests run in CI. |
 | Deployment smoke | Passing | Mock-provider smoke is in CI. Docker live host certification remains external. |
-| Cluster conformance | Partial | Always-on CI covers SQLite store contract, live Postgres store contract, Postgres lease concurrency, per-worker identity, production cluster config lint, and Postgres-backed remote worker smoke. See `docs/cluster-conformance.md`. |
+| Cluster conformance | Partial | Always-on CI covers SQLite store contract, live Postgres store contract, Postgres migration rehearsal, Postgres lease concurrency, per-worker identity, production cluster config lint, and Postgres-backed remote worker smoke. See `docs/cluster-conformance.md`. |
 | Runtime conformance | Partial | Harness and host certification script exist; Firecracker/PRoot remain platform-gated. |
 | Security posture | Partial | Admin governance, operation audit, path traversal checks, and explicit exec modes are implemented; OIDC/JWT implementation remains. |
 | Release automation | Passing | Release workflow signs binaries, checksums, and GHCR image digests; public verifier and installer verification exist. |
@@ -96,7 +96,7 @@ This checklist tracks the Phase 7 release-candidate hardening work needed before
 
 ## Required Before Enterprise/Multi-Worker
 
-- Postgres store implementation. Driver, migrations, contract path, lease race coverage, and mock-provider remote worker smoke exist; production distributed mode still needs operational migration rehearsal.
+- Postgres store implementation. Driver, migrations, contract path, migration rehearsal, lease race coverage, and mock-provider remote worker smoke exist; production distributed mode still needs backup/restore-specific migration rehearsal.
 - Worker registration and heartbeat model. Durable registry and per-worker token auth exist; production distributed mode still needs signed-token or mTLS hardening for public/enterprise deployments.
 - Scheduler abstraction with placement policy.
 - Durable queue/pub-sub for lifecycle events.

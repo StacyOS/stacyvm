@@ -291,6 +291,8 @@ definitions:
     - creating
     - running
     - idle
+    - unhealthy
+    - expired
     - destroyed
     - error
     type: string
@@ -298,6 +300,8 @@ definitions:
     - StateCreating
     - StateRunning
     - StateIdle
+    - StateUnhealthy
+    - StateExpired
     - StateDestroyed
     - StateError
   github_com_StacyOs_stacyvm_internal_orchestrator.SchedulerStatus:
