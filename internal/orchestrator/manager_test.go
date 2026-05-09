@@ -850,7 +850,7 @@ func TestManager_SchedulerStatus(t *testing.T) {
 	})
 
 	status := m.SchedulerStatus()
-	if status.SpawnOverflow != "queue" || status.MaxSpawnQueue != 7 || status.SpawnQueueTimeout != "10s" || status.AdmissionControl != "single_node" {
+	if status.SpawnOverflow != "queue" || status.MaxSpawnQueue != 7 || status.SpawnQueueTimeout != "10s" || status.AdmissionControl != "single_node" || status.WorkerID != "local" {
 		t.Fatalf("unexpected scheduler status: %+v", status)
 	}
 	if status.SpawnQueueDepth != 0 {

@@ -264,6 +264,7 @@ type systemMetricsSnapshot struct {
 	sandboxActive       int
 	sandboxesByState    map[string]int
 	sandboxesByProvider map[string]int
+	sandboxesByWorker   map[string]int
 	providerHealth      []ProviderHealth
 	healthyProviders    int
 	eventStats          orchestrator.EventBusStats
@@ -285,9 +286,13 @@ func (s *SystemRoutes) collectMetrics(ctx context.Context) (systemMetricsSnapsho
 
 	byState := make(map[string]int)
 	byProvider := make(map[string]int)
+	byWorker := make(map[string]int)
 	for _, sb := range sandboxes {
 		byState[string(sb.State)]++
 		byProvider[sb.Provider]++
+		if sb.WorkerID != "" {
+			byWorker[sb.WorkerID]++
+		}
 	}
 
 	providerHealth := s.providerHealth(ctx)
@@ -315,6 +320,7 @@ func (s *SystemRoutes) collectMetrics(ctx context.Context) (systemMetricsSnapsho
 		sandboxActive:       byState[string(orchestrator.StateRunning)],
 		sandboxesByState:    byState,
 		sandboxesByProvider: byProvider,
+		sandboxesByWorker:   byWorker,
 		providerHealth:      providerHealth,
 		healthyProviders:    healthyProviders,
 		eventStats:          eventStats,
@@ -355,6 +361,7 @@ func (m systemMetricsSnapshot) sandboxSummary() map[string]interface{} {
 		"active":      m.sandboxActive,
 		"by_state":    m.sandboxesByState,
 		"by_provider": m.sandboxesByProvider,
+		"by_worker":   m.sandboxesByWorker,
 	}
 }
 

@@ -21,6 +21,7 @@ type Sandbox struct {
 	VCPUs         int               `json:"vcpus"`
 	OwnerID       string            `json:"owner_id,omitempty"`
 	VMID          string            `json:"vm_id,omitempty"`
+	WorkerID      string            `json:"worker_id,omitempty"`
 	CreatedAt     time.Time         `json:"created_at"`
 	ExpiresAt     time.Time         `json:"expires_at"`
 	Metadata      map[string]string `json:"metadata,omitempty"`
@@ -127,6 +128,7 @@ type SchedulerStatus struct {
 	MaxSpawnQueue         int    `json:"max_spawn_queue"`
 	SpawnQueueTimeout     string `json:"spawn_queue_timeout"`
 	AdmissionControl      string `json:"admission_control"`
+	WorkerID              string `json:"worker_id"`
 	SpawnQueuedTotal      uint64 `json:"spawn_queued_total"`
 	SpawnDequeuedTotal    uint64 `json:"spawn_dequeued_total"`
 	SpawnQueueTimeouts    uint64 `json:"spawn_queue_timeouts"`

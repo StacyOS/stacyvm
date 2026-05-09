@@ -15,6 +15,7 @@ type SandboxRecord struct {
 	Metadata  string // JSON
 	OwnerID   string
 	VMID      string
+	WorkerID  string
 	CreatedAt time.Time
 	ExpiresAt time.Time
 	UpdatedAt time.Time

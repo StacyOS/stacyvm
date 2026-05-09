@@ -857,7 +857,8 @@ GET /api/v1/diagnostics
     "spawn_queue_wait_avg": "5.666s",
     "spawn_queue_wait_total_ms": 102000,
     "spawn_queue_wait_max_ms": 12000,
-    "spawn_queue_wait_avg_ms": 5666
+    "spawn_queue_wait_avg_ms": 5666,
+    "worker_id": "local"
   },
   "quotas": {
     "total": 8,
@@ -912,7 +913,8 @@ GET /api/v1/diagnostics
     "total": 138,
     "active": 12,
     "by_state": { "running": 12, "destroyed": 126 },
-    "by_provider": { "docker": 90, "firecracker": 48 }
+    "by_provider": { "docker": 90, "firecracker": 48 },
+    "by_worker": { "local": 138 }
   },
   "events": {
     "subscribers": 2,
@@ -957,7 +959,8 @@ GET /api/v1/metrics
     "total": 138,
     "active": 12,
     "by_state": { "running": 12, "destroyed": 126 },
-    "by_provider": { "docker": 90, "firecracker": 48 }
+    "by_provider": { "docker": 90, "firecracker": 48 },
+    "by_worker": { "local": 138 }
   },
   "providers": {
     "total": 2,
@@ -1007,7 +1010,8 @@ GET /api/v1/metrics
     "spawn_queue_wait_avg": "5.666s",
     "spawn_queue_wait_total_ms": 102000,
     "spawn_queue_wait_max_ms": 12000,
-    "spawn_queue_wait_avg_ms": 5666
+    "spawn_queue_wait_avg_ms": 5666,
+    "worker_id": "local"
   },
   "quotas": {
     "total": 8,
@@ -1065,6 +1069,7 @@ stacyvm_workers_total{status="total"} 1
 stacyvm_workers_total{status="online"} 1
 stacyvm_workers_total{status="stale"} 0
 stacyvm_workers_total{status="unhealthy"} 0
+stacyvm_sandboxes_by_worker_total{worker="local"} 138
 stacyvm_operation_success_total{operation="exec",provider="docker"} 482
 stacyvm_operation_failure_total{operation="exec",provider="docker"} 7
 ```

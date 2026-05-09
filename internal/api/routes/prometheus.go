@@ -33,6 +33,10 @@ func writePrometheusMetrics(w io.Writer, metrics systemMetricsSnapshot) {
 	for _, provider := range providers {
 		fmt.Fprintf(w, "stacyvm_sandboxes_by_provider_total{provider=%q} %d\n", provider, metrics.sandboxesByProvider[provider])
 	}
+	workers := sortedKeys(metrics.sandboxesByWorker)
+	for _, worker := range workers {
+		fmt.Fprintf(w, "stacyvm_sandboxes_by_worker_total{worker=%q} %d\n", worker, metrics.sandboxesByWorker[worker])
+	}
 
 	writePrometheusHelp(w, "stacyvm_provider_healthy", "Provider health status where 1 is healthy and 0 is unhealthy.")
 	writePrometheusHelp(w, "stacyvm_provider_health_latency_milliseconds", "Provider health check latency in milliseconds.")

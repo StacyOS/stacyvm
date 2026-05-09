@@ -218,4 +218,11 @@ CREATE INDEX IF NOT EXISTS idx_workers_status ON workers(status);
 CREATE INDEX IF NOT EXISTS idx_workers_last_heartbeat ON workers(last_heartbeat DESC);
 `,
 	},
+	{
+		version: 9,
+		sql: `
+ALTER TABLE sandboxes ADD COLUMN worker_id TEXT NOT NULL DEFAULT 'local';
+CREATE INDEX IF NOT EXISTS idx_sandboxes_worker ON sandboxes(worker_id);
+`,
+	},
 }

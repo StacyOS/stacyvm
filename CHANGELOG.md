@@ -14,14 +14,18 @@ This checkpoint starts the enterprise and multi-worker readiness track.
   - `GET /api/v1/workers/{workerID}`
   - `POST /api/v1/admin/workers/{workerID}/heartbeat`
   - `DELETE /api/v1/admin/workers/{workerID}`
+- Worker ownership on sandbox records through persisted `worker_id`.
 - Diagnostics worker summary with online, stale, unhealthy, and total counts.
+- Diagnostics sandbox summaries grouped by worker ID.
 - Prometheus worker count metrics by status.
+- Prometheus sandbox ownership metrics by worker ID.
 - Phase 10 release notes under `docs/releases/phase-10-multi-worker-foundation.md`.
 
 ### Changed
 
 - Diagnostics now include worker registry state alongside provider, sandbox, scheduler, quota, rate-limit, and operation data.
 - The public API exposes read-only worker discovery while heartbeat and delete operations live under the admin namespace.
+- Scheduler status now reports the active local worker ID.
 
 ## Phase 9 Public Self-Serve Release Trust - 2026-05-08
 

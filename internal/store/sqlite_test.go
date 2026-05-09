@@ -78,7 +78,7 @@ func TestSQLiteStoreMigratesLegacyDatabase(t *testing.T) {
 		t.Fatalf("migration count = %d, want %d", migrated, len(migrations))
 	}
 
-	for _, col := range []string{"template", "owner_id", "vm_id"} {
+	for _, col := range []string{"template", "owner_id", "vm_id", "worker_id"} {
 		if !sqliteColumnExists(t, s.db, "sandboxes", col) {
 			t.Fatalf("sandboxes missing migrated column %s", col)
 		}
@@ -219,6 +219,7 @@ func TestSandboxCRUD(t *testing.T) {
 		MemoryMB:  512,
 		VCPUs:     1,
 		Metadata:  `{"env":"test"}`,
+		WorkerID:  "worker-a",
 		CreatedAt: now,
 		ExpiresAt: now.Add(30 * time.Minute),
 		UpdatedAt: now,
@@ -239,6 +240,9 @@ func TestSandboxCRUD(t *testing.T) {
 	}
 	if got.Image != "alpine:latest" {
 		t.Fatalf("expected alpine:latest, got %s", got.Image)
+	}
+	if got.WorkerID != "worker-a" {
+		t.Fatalf("expected worker-a, got %s", got.WorkerID)
 	}
 
 	// List

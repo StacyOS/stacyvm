@@ -38,6 +38,7 @@ type Manager struct {
 	defaultMemory int
 	defaultVCPUs  int
 	limits        OperationalLimits
+	workerID      string
 
 	vmPoolMgr  *VMPoolManager
 	poolConfig config.PoolConfig
@@ -65,6 +66,7 @@ type ManagerConfig struct {
 	Pool          config.PoolConfig
 	PreviewDomain string
 	Limits        OperationalLimits
+	WorkerID      string
 }
 
 func NewManager(registry *providers.Registry, st store.Store, events *EventBus, logger zerolog.Logger, cfg ManagerConfig) *Manager {
@@ -82,6 +84,7 @@ func NewManager(registry *providers.Registry, st store.Store, events *EventBus, 
 		defaultMemory: cfg.DefaultMemory,
 		defaultVCPUs:  cfg.DefaultVCPUs,
 		limits:        cfg.Limits,
+		workerID:      strings.TrimSpace(cfg.WorkerID),
 		poolConfig:    cfg.Pool,
 		previewDomain: cfg.PreviewDomain,
 		ctx:           ctx,
@@ -107,6 +110,9 @@ func NewManager(registry *providers.Registry, st store.Store, events *EventBus, 
 	}
 	if m.limits.MaxSpawnQueue == 0 {
 		m.limits.MaxSpawnQueue = 100
+	}
+	if m.workerID == "" {
+		m.workerID = "local"
 	}
 	return m
 }
@@ -291,6 +297,7 @@ func (m *Manager) reconcileProviderRuntimes(ctx context.Context, known map[strin
 				MemoryMB:  m.defaultMemory,
 				VCPUs:     m.defaultVCPUs,
 				Metadata:  string(metaJSON),
+				WorkerID:  m.workerID,
 				CreatedAt: runtime.CreatedAt,
 				ExpiresAt: expiresAt,
 				UpdatedAt: time.Now().UTC(),
@@ -396,6 +403,7 @@ func (m *Manager) Spawn(ctx context.Context, req SpawnRequest) (*Sandbox, error)
 		MemoryMB:      memMB,
 		VCPUs:         vcpus,
 		OwnerID:       req.OwnerID,
+		WorkerID:      m.workerID,
 		CreatedAt:     now,
 		ExpiresAt:     now.Add(ttl),
 		Metadata:      req.Metadata,
@@ -429,6 +437,7 @@ func (m *Manager) Spawn(ctx context.Context, req SpawnRequest) (*Sandbox, error)
 		Metadata:  string(metaJSON),
 		OwnerID:   sb.OwnerID,
 		VMID:      sb.VMID,
+		WorkerID:  sb.WorkerID,
 		CreatedAt: sb.CreatedAt,
 		ExpiresAt: sb.ExpiresAt,
 		UpdatedAt: now,
@@ -483,6 +492,7 @@ func (m *Manager) spawnPooled(ctx context.Context, prov providers.Provider, req 
 		VCPUs:         vcpus,
 		OwnerID:       req.OwnerID,
 		VMID:          vmID,
+		WorkerID:      m.workerID,
 		CreatedAt:     now,
 		ExpiresAt:     now.Add(ttl),
 		Metadata:      req.Metadata,
@@ -512,6 +522,7 @@ func (m *Manager) spawnPooled(ctx context.Context, prov providers.Provider, req 
 		Metadata:  string(metaJSON),
 		OwnerID:   sb.OwnerID,
 		VMID:      sb.VMID,
+		WorkerID:  sb.WorkerID,
 		CreatedAt: sb.CreatedAt,
 		ExpiresAt: sb.ExpiresAt,
 		UpdatedAt: now,
@@ -1167,6 +1178,7 @@ func (m *Manager) SchedulerStatus() SchedulerStatus {
 		MaxSpawnQueue:         m.limits.MaxSpawnQueue,
 		SpawnQueueTimeout:     m.limits.SpawnQueueTimeout.String(),
 		AdmissionControl:      "single_node",
+		WorkerID:              m.workerID,
 		SpawnQueuedTotal:      m.queueStats.queuedTotal,
 		SpawnDequeuedTotal:    m.queueStats.dequeuedTotal,
 		SpawnQueueTimeouts:    m.queueStats.timeoutTotal,
@@ -1750,6 +1762,7 @@ func (m *Manager) spawnDirect(ctx context.Context, req SpawnRequest) (*Sandbox, 
 		VCPUs:         vcpus,
 		CreatedAt:     now,
 		ExpiresAt:     now.Add(m.defaultTTL),
+		WorkerID:      m.workerID,
 		PreviewDomain: m.previewDomain,
 	}
 
@@ -1762,6 +1775,7 @@ func (m *Manager) spawnDirect(ctx context.Context, req SpawnRequest) (*Sandbox, 
 		MemoryMB:  sb.MemoryMB,
 		VCPUs:     sb.VCPUs,
 		Metadata:  string(metaJSON),
+		WorkerID:  sb.WorkerID,
 		CreatedAt: sb.CreatedAt,
 		ExpiresAt: sb.ExpiresAt,
 		UpdatedAt: now,
@@ -2036,6 +2050,7 @@ func recordToSandbox(r *store.SandboxRecord) *Sandbox {
 		VCPUs:     r.VCPUs,
 		OwnerID:   r.OwnerID,
 		VMID:      r.VMID,
+		WorkerID:  r.WorkerID,
 		CreatedAt: r.CreatedAt,
 		ExpiresAt: r.ExpiresAt,
 		Metadata:  metadata,

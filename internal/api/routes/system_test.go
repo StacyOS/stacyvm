@@ -187,6 +187,10 @@ func TestSystemRoutes_MetricsIncludesOperationalBreakdown(t *testing.T) {
 	if sandboxes["total"].(float64) != 1 {
 		t.Fatalf("sandbox total = %v, want 1", sandboxes["total"])
 	}
+	byWorker := sandboxes["by_worker"].(map[string]interface{})
+	if byWorker["local"].(float64) != 1 {
+		t.Fatalf("sandbox by_worker = %#v, want local=1", byWorker)
+	}
 	providersBody := body["providers"].(map[string]interface{})
 	if providersBody["healthy"].(float64) != 1 {
 		t.Fatalf("healthy providers = %v, want 1", providersBody["healthy"])
@@ -251,6 +255,7 @@ func TestSystemRoutes_PrometheusMetrics(t *testing.T) {
 		"stacyvm_owner_quotas_total",
 		`type="max_sandboxes"`,
 		"stacyvm_workers_total",
+		"stacyvm_sandboxes_by_worker_total",
 		"stacyvm_rate_limit_allowed_total",
 		"stacyvm_operation_success_total",
 		`operation="spawn"`,

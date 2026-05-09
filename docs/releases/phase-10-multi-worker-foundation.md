@@ -33,14 +33,23 @@ This is not a full distributed runtime yet. It is the first production-aligned c
   - `DELETE /api/v1/admin/workers/{workerID}`
 - Worker responses include a computed `stale` flag when the last heartbeat is older than the freshness window.
 
+### Sandbox Worker Ownership
+
+- Added persisted `worker_id` ownership to sandbox records.
+- New and adopted local sandboxes are stamped with the active worker ID.
+- Scheduler status now reports the current worker ID.
+- Sandbox API responses now include `worker_id` when ownership is known.
+
 ### Diagnostics And Metrics
 
 - Diagnostics now include worker totals, online count, stale count, unhealthy count, and worker items.
+- Diagnostics sandbox summaries now include `by_worker` counts.
 - Prometheus output now includes:
   - `stacyvm_workers_total{status="total"}`
   - `stacyvm_workers_total{status="online"}`
   - `stacyvm_workers_total{status="stale"}`
   - `stacyvm_workers_total{status="unhealthy"}`
+  - `stacyvm_sandboxes_by_worker_total{worker="local"}`
 
 ### Documentation
 
@@ -51,7 +60,7 @@ This is not a full distributed runtime yet. It is the first production-aligned c
 
 ## Code Areas
 
-- `internal/store`: worker model, migration, and SQLite CRUD.
+- `internal/store`: worker model, migration, SQLite CRUD, and sandbox `worker_id` persistence.
 - `internal/api/routes`: worker routes, diagnostics worker summary, and Prometheus worker metrics.
 - `internal/api/server.go`: local worker startup registration and route mounting.
 - `docs`: API, README, changelog, production readiness, and release notes.

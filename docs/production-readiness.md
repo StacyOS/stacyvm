@@ -47,8 +47,9 @@ This checklist tracks the Phase 7 release-candidate hardening work needed before
 - Read-only worker discovery is available through the normal API. Done in Phase 10 slice 1.
 - Worker heartbeat and deletion are protected by the admin namespace. Done in Phase 10 slice 1.
 - Diagnostics and Prometheus expose worker registry state. Done in Phase 10 slice 1.
+- Sandbox records persist their owning worker ID and diagnostics expose sandbox counts by worker. Done in Phase 10 slice 2.
 - Scheduler placement policy is worker-aware. Pending.
-- Sandbox ownership is tied to worker IDs. Pending.
+- Sandbox ownership is tied to worker IDs. Initial local ownership is done; remote ownership enforcement is pending.
 - Distributed leases prevent duplicate worker ownership. Pending.
 - Remote worker authentication and RPC are implemented. Pending.
 

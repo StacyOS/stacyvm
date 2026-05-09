@@ -2097,6 +2097,9 @@ const docTemplate = `{
                 },
                 "vm_id": {
                     "type": "string"
+                },
+                "worker_id": {
+                    "type": "string"
                 }
             }
         },
@@ -2164,6 +2167,9 @@ const docTemplate = `{
                 },
                 "spawn_queued_total": {
                     "type": "integer"
+                },
+                "worker_id": {
+                    "type": "string"
                 }
             }
         },

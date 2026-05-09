@@ -283,6 +283,8 @@ definitions:
         type: integer
       vm_id:
         type: string
+      worker_id:
+        type: string
     type: object
   github_com_StacyOs_stacyvm_internal_orchestrator.SandboxState:
     enum:
@@ -330,6 +332,8 @@ definitions:
         type: integer
       spawn_queued_total:
         type: integer
+      worker_id:
+        type: string
     type: object
   github_com_StacyOs_stacyvm_internal_orchestrator.SecretConfig:
     properties:
