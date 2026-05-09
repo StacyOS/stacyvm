@@ -50,14 +50,22 @@ Postgres is intentionally not marked production-ready in this checkpoint. Config
 - Worker identities now receive explicit scopes for heartbeat, spawn, destroy, status, exec, files, logs, and leases.
 - Worker lease renewal now requires the dedicated `worker:lease` scope.
 
+### Cluster Conformance
+
+- Added `scripts/ci-cluster-conformance.sh`.
+- Added the `cluster-conformance` GitHub Actions job.
+- Added `docs/cluster-conformance.md` with store, worker identity, runtime, and promotion gates.
+- CI now verifies the SQLite store contract, worker identity tests, production-aligned cluster config linting, and explicit Postgres-driver gating.
+
 ## Verification
 
 - `go test ./internal/store`
 - `go test ./internal/api/middleware ./internal/api ./internal/config ./cmd/stacyvm`
+- `scripts/ci-cluster-conformance.sh`
 
 ## Next Phase 13 Direction
 
 - Add a real Postgres store implementation with migration management.
 - Run the existing store contract tests against Postgres once the Postgres driver is implemented.
 - Continue worker identity hardening toward signed tokens or mTLS transport enforcement.
-- Add cluster conformance docs and CI paths for Postgres-backed multi-worker mode.
+- Add a real multi-worker conformance environment that runs control plane, worker, and Postgres together.

@@ -16,6 +16,8 @@ This checkpoint starts the enterprise multi-worker production track after Phase 
 - Per-worker token map support through `auth.worker_tokens`.
 - Worker auth scopes for heartbeat, spawn, destroy, status, exec, files, logs, and leases.
 - Config linting guidance for staging shared worker tokens versus production per-worker credentials.
+- Cluster conformance CI script and workflow job.
+- Cluster conformance matrix documenting store, worker identity, runtime, and promotion gates.
 - Phase 13 release notes under `docs/releases/phase-13-cluster-store-and-worker-identity.md`.
 
 ### Changed

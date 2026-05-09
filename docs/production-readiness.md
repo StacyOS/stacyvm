@@ -62,6 +62,7 @@ This checklist tracks the Phase 7 release-candidate hardening work needed before
 | Web build | Passing | CI runs `npm run build`. |
 | SDK checks | Passing | TypeScript builds, Python imports, and mock-based SDK parity smoke tests run in CI. |
 | Deployment smoke | Passing | Mock-provider smoke is in CI. Docker live host certification remains external. |
+| Cluster conformance | Partial | Always-on CI covers SQLite store contract, per-worker identity, production cluster config lint, and explicit Postgres gating. See `docs/cluster-conformance.md`. |
 | Runtime conformance | Partial | Harness and host certification script exist; Firecracker/PRoot remain platform-gated. |
 | Security posture | Partial | Admin governance, operation audit, path traversal checks, and explicit exec modes are implemented; OIDC/JWT implementation remains. |
 | Release automation | Passing | Release workflow signs binaries, checksums, and GHCR image digests; public verifier and installer verification exist. |

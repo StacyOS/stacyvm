@@ -85,6 +85,22 @@ jobs:
       - name: Run upgrade and migration checks
         run: scripts/ci-upgrade-migration.sh
 
+  cluster-conformance:
+    name: Cluster conformance checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run cluster conformance checks
+        run: scripts/ci-cluster-conformance.sh
+
   public-release-sanity:
     name: Public release sanity
     runs-on: ubuntu-latest
