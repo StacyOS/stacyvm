@@ -21,6 +21,7 @@ This checkpoint starts the remote worker runtime track on top of the Phase 10 wo
 - Worker-side spawn RPC handling through `worker.spawn`.
 - Typed worker RPC client methods for spawn and status calls.
 - Control-plane remote spawn assignment for scheduler-selected workers that advertise an RPC URL.
+- Remote-owned sandbox status refresh through `worker.status`.
 - Phase 11 release notes under `docs/releases/phase-11-remote-worker-runtime.md`.
 
 ### Changed
@@ -30,6 +31,7 @@ This checkpoint starts the remote worker runtime track on top of the Phase 10 wo
 - Worker lease renewal validates resource, holder, and expiry before renewing durable control-plane leases.
 - Worker spawn validates lease ownership before creating a provider runtime and returns both control-plane sandbox ID and provider runtime ID.
 - Remote spawn persists selected `worker_id` and provider runtime ID for later status/destroy routing.
+- Sandbox reads refresh and persist state changes reported by the owning remote worker.
 - Destroy worker RPC methods return explicit not-implemented responses until remote lifecycle execution lands.
 - Config validation now covers worker heartbeat and shutdown durations.
 

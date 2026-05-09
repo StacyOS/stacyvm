@@ -2031,6 +2031,9 @@ func (m *Manager) Get(ctx context.Context, id string) (*Sandbox, error) {
 	m.mu.RUnlock()
 
 	if ok {
+		if refreshed, err := m.refreshRemoteSandboxStatus(ctx, sb); err == nil {
+			return refreshed, nil
+		}
 		return sb, nil
 	}
 
@@ -2042,6 +2045,49 @@ func (m *Manager) Get(ctx context.Context, id string) (*Sandbox, error) {
 	sb = recordToSandbox(rec)
 	if sb.State == StateDestroyed {
 		return nil, providers.SandboxDestroyedError(id)
+	}
+	if refreshed, err := m.refreshRemoteSandboxStatus(ctx, sb); err == nil {
+		return refreshed, nil
+	}
+	return sb, nil
+}
+
+func (m *Manager) refreshRemoteSandboxStatus(ctx context.Context, sb *Sandbox) (*Sandbox, error) {
+	if sb == nil || strings.TrimSpace(sb.WorkerID) == "" || sb.WorkerID == m.workerID {
+		return sb, nil
+	}
+	client, err := m.remoteWorkerRPCClient(ctx, sb.WorkerID)
+	if err != nil {
+		m.logger.Debug().Err(err).Str("sandbox", sb.ID).Str("worker", sb.WorkerID).Msg("remote status unavailable")
+		return nil, err
+	}
+	runtimeID := strings.TrimSpace(sb.VMID)
+	if runtimeID == "" {
+		runtimeID = sb.ID
+	}
+	status, err := client.Status(ctx, "status-"+sb.ID, workerproto.StatusParams{
+		SandboxID: sb.ID,
+		Provider:  sb.Provider,
+		RuntimeID: runtimeID,
+	})
+	if err != nil {
+		m.logger.Debug().Err(err).Str("sandbox", sb.ID).Str("worker", sb.WorkerID).Msg("remote status failed")
+		return nil, err
+	}
+	state := SandboxState(status.State)
+	if state == "" {
+		return sb, nil
+	}
+	if state != sb.State {
+		sb.State = state
+		_ = m.store.UpdateSandboxState(ctx, sb.ID, string(state))
+		m.mu.Lock()
+		if current, ok := m.sandboxes[sb.ID]; ok {
+			current.State = state
+		} else {
+			m.sandboxes[sb.ID] = sb
+		}
+		m.mu.Unlock()
 	}
 	return sb, nil
 }

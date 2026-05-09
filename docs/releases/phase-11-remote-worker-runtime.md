@@ -56,6 +56,8 @@ This is still a staging foundation. Remote spawn, destroy, status routing, and l
 - Added control-plane remote spawn assignment when the scheduler selects a non-local worker with an advertised `rpc_url`.
 - Remote spawn now acquires the durable sandbox lease for the selected worker before calling `worker.spawn`.
 - Remote spawn persists the control-plane sandbox ID, selected `worker_id`, and provider `runtime_id`.
+- Sandbox reads now refresh remote-owned sandbox state through `worker.status` using the persisted provider `runtime_id`.
+- Remote status refresh updates persisted sandbox state when the worker reports a state change.
 - Implemented a no-op `worker.shutdown` acknowledgement as a transport smoke path.
 - `worker.spawn` returns the control-plane sandbox ID and provider runtime ID separately, and the control plane persists that mapping for later routing.
 - Destroy returns explicit not-implemented responses until the destroy transport lands.
@@ -77,6 +79,6 @@ This is still a staging foundation. Remote spawn, destroy, status routing, and l
 ## Remaining Phase 11 Direction
 
 - Add worker RPC endpoints for destroy and real graceful shutdown.
-- Route destroy/status calls to the owning remote worker.
+- Route destroy calls to the owning remote worker.
 - Extend lease-token enforcement from renewals to worker-side spawn/destroy lifecycle mutations.
 - Add a two-process staging guide for `stacyvm serve` plus `stacyvm worker` using the mock provider first.
