@@ -99,6 +99,41 @@ func TestLintAuthConfigAcceptsWorkerSigningKey(t *testing.T) {
 	}
 }
 
+func TestLintAuthConfigReportsWorkerSecretFileSources(t *testing.T) {
+	cfg := validProductionConfig()
+	cfg.Auth.WorkerSigningKey = "worker-signing-key-with-at-least-32-bytes"
+	cfg.Auth.WorkerSigningKeyFile = "/run/secrets/stacyvm-worker-signing-key"
+	cfg.Auth.WorkerToken = "shared-worker-token-with-at-least-32-bytes"
+	cfg.Auth.WorkerTokenFile = "/run/secrets/stacyvm-worker-token"
+
+	checks := lintAuthConfig(cfg, true)
+	statuses := map[string]doctorStatus{}
+	for _, check := range checks {
+		statuses[check.Name] = check.Status
+	}
+
+	if statuses["auth.worker_signing_key_file"] != doctorPass {
+		t.Fatalf("auth.worker_signing_key_file status = %s, want %s", statuses["auth.worker_signing_key_file"], doctorPass)
+	}
+	if statuses["auth.worker_token_file"] != doctorPass {
+		t.Fatalf("auth.worker_token_file status = %s, want %s", statuses["auth.worker_token_file"], doctorPass)
+	}
+
+	cfg.Auth.WorkerSigningKeyFile = ""
+	cfg.Auth.WorkerTokenFile = ""
+	checks = lintAuthConfig(cfg, true)
+	statuses = map[string]doctorStatus{}
+	for _, check := range checks {
+		statuses[check.Name] = check.Status
+	}
+	if statuses["auth.worker_signing_key_file"] != doctorWarn {
+		t.Fatalf("auth.worker_signing_key_file inline status = %s, want %s", statuses["auth.worker_signing_key_file"], doctorWarn)
+	}
+	if statuses["auth.worker_token_file"] != doctorWarn {
+		t.Fatalf("auth.worker_token_file inline status = %s, want %s", statuses["auth.worker_token_file"], doctorWarn)
+	}
+}
+
 func TestLintAuthConfigWarnsRevokedWorkerTokenIDsWithoutSigningKey(t *testing.T) {
 	cfg := validProductionConfig()
 	cfg.Auth.WorkerRevokedTokenIDs = []string{"revoked-token-id"}

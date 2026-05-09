@@ -76,12 +76,14 @@ func lintAuthConfig(cfg *config.Config, production bool) []doctorCheck {
 	checks = append(checks, lintSecret("auth.admin_api_key", cfg.Auth.AdminAPIKey, production, "Set STACYVM_AUTH_ADMIN_API_KEY or auth.admin_api_key to a separate random 32+ byte secret."))
 	if cfg.Auth.WorkerSigningKey != "" {
 		checks = append(checks, lintSecret("auth.worker_signing_key", cfg.Auth.WorkerSigningKey, production, "Set STACYVM_AUTH_WORKER_SIGNING_KEY or auth.worker_signing_key to a random 32+ byte secret used to verify signed worker tokens."))
+		checks = append(checks, lintWorkerSecretSource("auth.worker_signing_key_file", cfg.Auth.WorkerSigningKeyFile, "auth.worker_signing_key", "Mount the worker signing key through auth.worker_signing_key_file for production services.")...)
 		checks = append(checks, lintWorkerSigningKeyRotation(cfg.Auth.WorkerSigningKey, cfg.Auth.WorkerSigningKeys)...)
 		if len(cfg.Auth.WorkerRevokedTokenIDs) > 0 {
 			checks = append(checks, doctorCheck{Name: "auth.worker_revoked_token_ids", Status: doctorPass, Message: fmt.Sprintf("%d revoked worker token id(s) configured", len(cfg.Auth.WorkerRevokedTokenIDs))})
 		}
 		if cfg.Auth.WorkerToken != "" {
 			checks = append(checks, doctorCheck{Name: "auth.worker_token", Status: doctorWarn, Message: "shared worker token still configured with signed worker tokens", Remediation: "Remove auth.worker_token after workers and worker RPC clients use short-lived signed worker tokens."})
+			checks = append(checks, lintWorkerSecretSource("auth.worker_token_file", cfg.Auth.WorkerTokenFile, "auth.worker_token", "Mount shared staging worker tokens through auth.worker_token_file when they cannot be removed yet.")...)
 		}
 		if len(cfg.Auth.WorkerTokens) > 0 {
 			checks = append(checks, doctorCheck{Name: "auth.worker_tokens", Status: doctorWarn, Message: fmt.Sprintf("%d static per-worker token(s) still configured", len(cfg.Auth.WorkerTokens)), Remediation: "Prefer short-lived signed worker tokens for production workers; keep static worker tokens only during migration."})
@@ -95,6 +97,7 @@ func lintAuthConfig(cfg *config.Config, production bool) []doctorCheck {
 	} else if cfg.Auth.WorkerToken != "" {
 		checks = append(checks, lintWorkerRevokedTokenIDsWithoutSigningKey(cfg.Auth.WorkerRevokedTokenIDs)...)
 		checks = append(checks, doctorCheck{Name: "auth.worker_tokens", Status: doctorWarn, Message: "using shared worker token", Remediation: "Configure auth.worker_tokens for production workers so each worker has an individually rotatable credential."})
+		checks = append(checks, lintWorkerSecretSource("auth.worker_token_file", cfg.Auth.WorkerTokenFile, "auth.worker_token", "Mount shared staging worker tokens through auth.worker_token_file when they cannot be replaced yet.")...)
 	} else {
 		checks = append(checks, lintWorkerRevokedTokenIDsWithoutSigningKey(cfg.Auth.WorkerRevokedTokenIDs)...)
 		checks = append(checks, doctorCheck{Name: "auth.worker_tokens", Status: doctorWarn, Message: "no worker credentials configured", Remediation: "Set auth.worker_token for staging, auth.worker_tokens for migration, or auth.worker_signing_key for production signed worker identity."})
@@ -116,6 +119,13 @@ func lintAuthConfig(cfg *config.Config, production bool) []doctorCheck {
 		checks = append(checks, doctorCheck{Name: "auth.admin_audit_retention", Status: doctorPass, Message: retention.String()})
 	}
 	return checks
+}
+
+func lintWorkerSecretSource(fileName, filePath, inlineName, remediation string) []doctorCheck {
+	if strings.TrimSpace(filePath) != "" {
+		return []doctorCheck{{Name: fileName, Status: doctorPass, Message: "configured"}}
+	}
+	return []doctorCheck{{Name: fileName, Status: doctorWarn, Message: fmt.Sprintf("%s is configured inline", inlineName), Remediation: remediation}}
 }
 
 func lintWorkerRevokedTokenIDsWithoutSigningKey(tokenIDs []string) []doctorCheck {

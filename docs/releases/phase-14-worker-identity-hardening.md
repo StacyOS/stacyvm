@@ -41,6 +41,7 @@ Phase 14 begins the worker identity hardening lane for production multi-worker S
 - Added config lint warnings when revoked signed-token IDs are configured without signed worker-token verification.
 - Added config lint warnings for shared worker tokens left enabled beside signed worker tokens, duplicate rotation keys, and rotation keys that repeat the active signing key.
 - Config loading now rejects ambiguous inline/file worker secret pairs such as `auth.worker_signing_key` plus `auth.worker_signing_key_file`.
+- Config lint now reports whether worker token and signing-key values are file-backed or still configured inline.
 
 ### Worker runtime
 
@@ -88,6 +89,7 @@ Phase 14 begins the worker identity hardening lane for production multi-worker S
 - Updated the threat model and remote-worker staging guide so worker impersonation controls and staging guidance reflect the implemented signed-token and mTLS paths.
 - Documented reloadable worker token files as the handoff path for external worker-token issuers.
 - Updated deployment and configuration docs for secret-mounted worker token and signing-key files.
+- Documented production lint visibility for file-backed worker credential sources.
 
 ## Code Areas Changed
 

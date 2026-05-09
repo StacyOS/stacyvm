@@ -33,6 +33,7 @@ This checkpoint starts hardening remote worker identity for public and enterpris
 - Config-level worker secret file support through `auth.worker_token_file` and `auth.worker_signing_key_file`.
 - Worker RPC mTLS conformance test with generated CA, server, and client certificates.
 - Config lint checks for worker RPC TLS certificate and CA settings.
+- Config lint source checks for file-backed versus inline worker token and signing-key secrets.
 - Cluster conformance coverage for signed-token migration lint warnings.
 - `scripts/certify-worker-identity.sh` for signed-token lifecycle certification reports on target hosts.
 - Cluster conformance coverage for worker identity certification report generation.
@@ -52,6 +53,7 @@ This checkpoint starts hardening remote worker identity for public and enterpris
 - Threat model and remote-worker staging docs now treat signed worker tokens as implemented Phase 14 identity controls instead of future work.
 - Runtime certification and public support guidance now document reloadable worker token files for external issuer handoff.
 - Config examples now prefer secret-mounted worker credential files for production services.
+- Worker identity config lint now reports file-backed worker credential sources so inline secrets are visible during production review.
 
 ## Phase 13 Cluster Store And Worker Identity - 2026-05-09
 
