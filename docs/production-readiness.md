@@ -62,7 +62,7 @@ This checklist tracks the Phase 7 release-candidate hardening work needed before
 | Web build | Passing | CI runs `npm run build`. |
 | SDK checks | Passing | TypeScript builds, Python imports, and mock-based SDK parity smoke tests run in CI. |
 | Deployment smoke | Passing | Mock-provider smoke is in CI. Docker live host certification remains external. |
-| Cluster conformance | Partial | Always-on CI covers SQLite store contract, per-worker identity, production cluster config lint, and explicit Postgres gating. See `docs/cluster-conformance.md`. |
+| Cluster conformance | Partial | Always-on CI covers SQLite store contract, live Postgres store contract, Postgres lease concurrency, per-worker identity, production cluster config lint, and Postgres-backed remote worker smoke. See `docs/cluster-conformance.md`. |
 | Runtime conformance | Partial | Harness and host certification script exist; Firecracker/PRoot remain platform-gated. |
 | Security posture | Partial | Admin governance, operation audit, path traversal checks, and explicit exec modes are implemented; OIDC/JWT implementation remains. |
 | Release automation | Passing | Release workflow signs binaries, checksums, and GHCR image digests; public verifier and installer verification exist. |
@@ -96,7 +96,7 @@ This checklist tracks the Phase 7 release-candidate hardening work needed before
 
 ## Required Before Enterprise/Multi-Worker
 
-- Postgres store implementation. Driver, migrations, and contract path exist; production distributed mode still needs deeper lease race testing and operational migration rehearsal.
+- Postgres store implementation. Driver, migrations, contract path, lease race coverage, and mock-provider remote worker smoke exist; production distributed mode still needs operational migration rehearsal.
 - Worker registration and heartbeat model. Durable registry and per-worker token auth exist; production distributed mode still needs signed-token or mTLS hardening for public/enterprise deployments.
 - Scheduler abstraction with placement policy.
 - Durable queue/pub-sub for lifecycle events.

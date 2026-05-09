@@ -21,6 +21,8 @@ This checkpoint starts the enterprise multi-worker production track after Phase 
 - Postgres-native migration definitions matching the current SQLite schema version cadence.
 - Store migration tests that keep Postgres schema coverage aligned with SQLite migrations.
 - Live Postgres store contract path through `STACYVM_POSTGRES_TEST_DSN`.
+- Live Postgres lease race/concurrency coverage.
+- Remote worker smoke support for Postgres-backed control planes.
 - Phase 13 release notes under `docs/releases/phase-13-cluster-store-and-worker-identity.md`.
 
 ### Changed

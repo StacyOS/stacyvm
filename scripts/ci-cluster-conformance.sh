@@ -109,7 +109,7 @@ go run ./cmd/stacyvm config lint --production --file "$postgres_config"
 
 if [[ -n "${STACYVM_POSTGRES_TEST_DSN:-}" ]]; then
   echo "==> Running live Postgres store contract"
-  go test ./internal/store -run TestPostgresStoreContract -count=1
+  go test ./internal/store -run 'TestPostgresStoreContract|TestPostgresLeaseConcurrency' -count=1
 else
   echo "==> Skipping live Postgres store contract; STACYVM_POSTGRES_TEST_DSN is not set"
 fi

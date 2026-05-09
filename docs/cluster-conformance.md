@@ -19,15 +19,17 @@ It currently verifies:
 - A production-aligned cluster config with `auth.worker_tokens` passes `stacyvm config lint --production`.
 - Postgres configuration with a valid DSN passes `stacyvm config lint --production`.
 - Live Postgres passes the reusable store contract when `STACYVM_POSTGRES_TEST_DSN` is set.
+- Live Postgres proves one active lease holder under concurrent acquire and expired takeover attempts.
+- A Postgres-backed remote worker smoke runs control plane plus worker against the mock provider.
 
 ## Store Matrix
 
 | Store | Status | Required Checks |
 |---|---|---|
 | SQLite | Supported for single-node and internal staging | `TestSQLiteStoreContract`, migration tests, backup/restore tests |
-| Postgres | Contract-backed cluster store path | `TestPostgresStoreContract`, Postgres migration alignment tests, migration upgrade/downgrade rehearsal, lease takeover race tests, startup reconciliation with multiple workers |
+| Postgres | Contract-backed cluster store path | `TestPostgresStoreContract`, Postgres migration alignment tests, lease takeover race tests, remote worker smoke, startup reconciliation with multiple workers |
 
-Postgres must not be marked production-ready until it runs the same store contract suite as SQLite and adds database-level lease semantics that are safe across multiple control-plane or worker processes.
+Postgres must not be marked production-ready for a deployment until it runs the same store contract suite as SQLite, passes lease race coverage, and passes the remote worker smoke in that deployment's target topology.
 
 ## Worker Identity Matrix
 
@@ -74,5 +76,5 @@ Phase 13 has completed:
 
 Remaining cluster-storage work:
 
-- Add Postgres lease race/concurrency tests.
-- Add a real multi-worker conformance environment that runs control plane, worker, and Postgres together.
+- Extend multi-worker conformance beyond the mock provider into certified Docker, gVisor/Kata, and Firecracker hosts.
+- Add operational migration rehearsal against real Postgres backups before enterprise production rollout.

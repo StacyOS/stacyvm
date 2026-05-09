@@ -32,6 +32,7 @@ Phase 13 starts the enterprise multi-worker production track after Phase 12 comp
 - Covered sandbox lifecycle semantics, including soft-delete behavior and active-list filtering.
 - Covered worker registry behavior for save, update, list, get, and delete.
 - Covered lease acquisition, renewal, conflict detection, release ownership, and expired lease takeover.
+- Covered live Postgres lease acquisition and expired-takeover races across multiple store connections.
 - Covered exec logs, admin audit logs, operation audit logs, owner quotas, and provider configs.
 - Covered templates, environment specs, environment builds, build artifacts, and registry connections.
 
@@ -61,8 +62,9 @@ Phase 13 starts the enterprise multi-worker production track after Phase 12 comp
 
 - Added `scripts/ci-cluster-conformance.sh`.
 - Added the `cluster-conformance` GitHub Actions job.
+- Added the `remote-worker-postgres-smoke` GitHub Actions job.
 - Added `docs/cluster-conformance.md` with store, worker identity, runtime, and promotion gates.
-- CI now verifies the SQLite store contract, live Postgres store contract, worker identity tests, and production-aligned cluster config linting.
+- CI now verifies the SQLite store contract, live Postgres store contract, live Postgres lease concurrency, worker identity tests, production-aligned cluster config linting, and a Postgres-backed remote worker smoke.
 
 ## Verification
 
@@ -72,6 +74,5 @@ Phase 13 starts the enterprise multi-worker production track after Phase 12 comp
 
 ## Next Phase 13 Direction
 
-- Add deeper Postgres lease race/concurrency tests.
 - Continue worker identity hardening toward signed tokens or mTLS transport enforcement.
-- Add a real multi-worker conformance environment that runs control plane, worker, and Postgres together.
+- Extend multi-worker conformance beyond the mock-provider smoke into Docker/gVisor/Kata/Firecracker certified hosts.

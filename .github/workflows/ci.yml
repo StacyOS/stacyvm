@@ -117,6 +117,42 @@ jobs:
           STACYVM_POSTGRES_TEST_DSN: postgres://stacyvm:stacyvm@127.0.0.1:5432/stacyvm?sslmode=disable
         run: scripts/ci-cluster-conformance.sh
 
+  remote-worker-postgres-smoke:
+    name: Remote worker Postgres smoke
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: stacyvm
+          POSTGRES_PASSWORD: stacyvm
+          POSTGRES_DB: stacyvm
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U stacyvm -d stacyvm"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build CLI
+        run: make build
+
+      - name: Run remote worker smoke with Postgres store
+        env:
+          STACYVM_REMOTE_SMOKE_DATABASE_DRIVER: postgres
+          STACYVM_REMOTE_SMOKE_DATABASE_DSN: postgres://stacyvm:stacyvm@127.0.0.1:5432/stacyvm?sslmode=disable
+        run: scripts/smoke-remote-worker.sh ./stacyvm
+
   public-release-sanity:
     name: Public release sanity
     runs-on: ubuntu-latest

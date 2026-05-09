@@ -14,6 +14,8 @@ WORKER_CONFIG="$WORKER_DIR/stacyvm.yaml"
 SERVER_LOG="$WORK_DIR/server.log"
 WORKER_LOG="$WORK_DIR/worker.log"
 DB_PATH="$WORK_DIR/stacyvm.db"
+DATABASE_DRIVER="${STACYVM_REMOTE_SMOKE_DATABASE_DRIVER:-sqlite}"
+DATABASE_DSN="${STACYVM_REMOTE_SMOKE_DATABASE_DSN:-}"
 CONTROL_PORT="${STACYVM_REMOTE_SMOKE_CONTROL_PORT:-17423}"
 WORKER_PORT="${STACYVM_REMOTE_SMOKE_WORKER_PORT:-17430}"
 API_KEY="dev-api-key-dev-api-key-dev-api-key"
@@ -52,12 +54,28 @@ auth:
   admin_api_key: "$ADMIN_KEY"
   worker_token: "$WORKER_TOKEN"
   admin_fallback_enabled: false
-database:
-  path: "$DB_PATH"
 logging:
   level: "warn"
   format: "json"
 YAML
+
+if [[ "$DATABASE_DRIVER" == "postgres" || "$DATABASE_DRIVER" == "postgresql" ]]; then
+  if [[ -z "$DATABASE_DSN" ]]; then
+    echo "STACYVM_REMOTE_SMOKE_DATABASE_DSN is required when STACYVM_REMOTE_SMOKE_DATABASE_DRIVER=postgres" >&2
+    exit 1
+  fi
+  cat >>"$CONTROL_CONFIG" <<YAML
+database:
+  driver: "postgres"
+  dsn: "$DATABASE_DSN"
+YAML
+else
+  cat >>"$CONTROL_CONFIG" <<YAML
+database:
+  driver: "sqlite"
+  path: "$DB_PATH"
+YAML
+fi
 
 cat >"$WORKER_CONFIG" <<YAML
 worker:
