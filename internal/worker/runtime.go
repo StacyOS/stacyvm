@@ -23,6 +23,8 @@ type Runtime struct {
 	Capacity          map[string]interface{}
 	Registry          *providers.Registry
 	RPCTLS            TLSConfig
+	SigningKey        string
+	SigningKeys       []string
 }
 
 func (r Runtime) Run(ctx context.Context) error {
@@ -33,6 +35,8 @@ func (r Runtime) Run(ctx context.Context) error {
 		rpcServer = &RPCServer{
 			WorkerID:     r.Client.WorkerID,
 			Token:        r.Client.Token,
+			SigningKey:   r.SigningKey,
+			SigningKeys:  r.SigningKeys,
 			Registry:     r.Registry,
 			LeaseRenewer: r.Client,
 		}

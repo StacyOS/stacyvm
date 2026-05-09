@@ -16,6 +16,8 @@ It currently verifies:
 - Worker route authentication accepts per-worker credentials.
 - Worker-specific credentials override the shared staging token.
 - Worker route authentication accepts short-lived signed worker tokens.
+- Worker RPC accepts short-lived signed control-plane-to-worker tokens.
+- Remote spawn can route through worker RPC using signed tokens without a shared worker token.
 - Worker RPC mTLS completes a real client-authenticated request using generated certificates.
 - Worker lease renewal is guarded by `worker:lease`.
 - A production-aligned cluster config with `auth.worker_tokens` or `auth.worker_signing_key` passes `stacyvm config lint --production`.
@@ -86,6 +88,7 @@ Phase 14 starts worker identity hardening on top of that foundation:
 - HMAC-signed worker tokens.
 - Signed-token config lint awareness.
 - Worker runtime token derivation for heartbeat and lease renewal.
+- Signed control-plane-to-worker RPC token derivation for remote worker calls.
 - Worker RPC mTLS config, transport wiring, and production lint checks.
 - Worker RPC mTLS conformance using generated CA, server, and client certificates.
 

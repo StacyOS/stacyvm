@@ -12,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/StacyOs/stacyvm/internal/api/middleware"
 	"github.com/StacyOs/stacyvm/internal/httputil"
 	"github.com/StacyOs/stacyvm/internal/providers"
 	"github.com/StacyOs/stacyvm/internal/workerproto"
@@ -20,6 +21,9 @@ import (
 type RPCServer struct {
 	WorkerID     string
 	Token        string
+	SigningKey   string
+	SigningKeys  []string
+	Now          func() time.Time
 	Registry     *providers.Registry
 	LeaseRenewer LeaseRenewer
 	draining     atomic.Bool
@@ -552,17 +556,34 @@ func mustJSONRaw(value interface{}) json.RawMessage {
 }
 
 func (s *RPCServer) authenticate(r *http.Request) bool {
-	if strings.TrimSpace(s.Token) == "" || strings.TrimSpace(s.WorkerID) == "" {
+	workerID := strings.TrimSpace(s.WorkerID)
+	if workerID == "" {
 		return false
 	}
-	if r.Header.Get("X-Worker-ID") != s.WorkerID {
+	if r.Header.Get("X-Worker-ID") != workerID {
 		return false
 	}
 	token := r.Header.Get("X-Worker-Token")
 	if token == "" {
 		token = strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 	}
-	return subtle.ConstantTimeCompare([]byte(token), []byte(s.Token)) == 1
+	if token == "" {
+		return false
+	}
+	if staticToken := strings.TrimSpace(s.Token); staticToken != "" && subtle.ConstantTimeCompare([]byte(token), []byte(staticToken)) == 1 {
+		return true
+	}
+	now := s.Now
+	if now == nil {
+		now = time.Now
+	}
+	for _, signingKey := range append([]string{s.SigningKey}, s.SigningKeys...) {
+		claims, ok := middleware.VerifyWorkerToken(signingKey, token, now().UTC())
+		if ok && claims.WorkerID == workerID {
+			return true
+		}
+	}
+	return false
 }
 
 func NewHTTPServer(addr string, handler http.Handler) *http.Server {

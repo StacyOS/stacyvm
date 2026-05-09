@@ -83,8 +83,10 @@ func newWorkerCmd() *cobra.Command {
 					"max_sandboxes_per_owner": cfg.Defaults.MaxSandboxesPerOwner,
 					"preview_domain":          previewDomain,
 				},
-				Registry: registry,
-				RPCTLS:   workerTLSConfig(cfg.Worker.RPCTLS),
+				Registry:    registry,
+				RPCTLS:      workerTLSConfig(cfg.Worker.RPCTLS),
+				SigningKey:  cfg.Auth.WorkerSigningKey,
+				SigningKeys: cfg.Auth.WorkerSigningKeys,
 			}
 			if once {
 				return rt.RunOnce(cmd.Context())

@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/StacyOs/stacyvm/internal/api/middleware"
 	"github.com/StacyOs/stacyvm/internal/config"
 	"github.com/StacyOs/stacyvm/internal/providers"
 	"github.com/StacyOs/stacyvm/internal/store"
@@ -35,14 +36,15 @@ type Manager struct {
 	capacityCh   chan struct{}
 	queueStats   spawnQueueStats
 
-	defaultTTL    time.Duration
-	defaultImage  string
-	defaultMemory int
-	defaultVCPUs  int
-	limits        OperationalLimits
-	workerID      string
-	workerToken   string
-	workerRPCTLS  worker.TLSConfig
+	defaultTTL       time.Duration
+	defaultImage     string
+	defaultMemory    int
+	defaultVCPUs     int
+	limits           OperationalLimits
+	workerID         string
+	workerToken      string
+	workerSigningKey string
+	workerRPCTLS     worker.TLSConfig
 
 	vmPoolMgr  *VMPoolManager
 	poolConfig config.PoolConfig
@@ -65,40 +67,42 @@ type spawnQueueStats struct {
 const sandboxLeaseGrace = 5 * time.Minute
 
 type ManagerConfig struct {
-	DefaultTTL    time.Duration
-	DefaultImage  string
-	DefaultMemory int
-	DefaultVCPUs  int
-	Pool          config.PoolConfig
-	PreviewDomain string
-	Limits        OperationalLimits
-	WorkerID      string
-	WorkerToken   string
-	WorkerRPCTLS  worker.TLSConfig
+	DefaultTTL       time.Duration
+	DefaultImage     string
+	DefaultMemory    int
+	DefaultVCPUs     int
+	Pool             config.PoolConfig
+	PreviewDomain    string
+	Limits           OperationalLimits
+	WorkerID         string
+	WorkerToken      string
+	WorkerSigningKey string
+	WorkerRPCTLS     worker.TLSConfig
 }
 
 func NewManager(registry *providers.Registry, st store.Store, events *EventBus, logger zerolog.Logger, cfg ManagerConfig) *Manager {
 	ctx, cancel := context.WithCancel(context.Background())
 	m := &Manager{
-		registry:      registry,
-		store:         st,
-		events:        events,
-		logger:        logger.With().Str("component", "manager").Logger(),
-		metrics:       NewMetricsRecorder(),
-		sandboxes:     make(map[string]*Sandbox),
-		capacityCh:    make(chan struct{}),
-		defaultTTL:    cfg.DefaultTTL,
-		defaultImage:  cfg.DefaultImage,
-		defaultMemory: cfg.DefaultMemory,
-		defaultVCPUs:  cfg.DefaultVCPUs,
-		limits:        cfg.Limits,
-		workerID:      strings.TrimSpace(cfg.WorkerID),
-		workerToken:   strings.TrimSpace(cfg.WorkerToken),
-		workerRPCTLS:  cfg.WorkerRPCTLS,
-		poolConfig:    cfg.Pool,
-		previewDomain: cfg.PreviewDomain,
-		ctx:           ctx,
-		cancel:        cancel,
+		registry:         registry,
+		store:            st,
+		events:           events,
+		logger:           logger.With().Str("component", "manager").Logger(),
+		metrics:          NewMetricsRecorder(),
+		sandboxes:        make(map[string]*Sandbox),
+		capacityCh:       make(chan struct{}),
+		defaultTTL:       cfg.DefaultTTL,
+		defaultImage:     cfg.DefaultImage,
+		defaultMemory:    cfg.DefaultMemory,
+		defaultVCPUs:     cfg.DefaultVCPUs,
+		limits:           cfg.Limits,
+		workerID:         strings.TrimSpace(cfg.WorkerID),
+		workerToken:      strings.TrimSpace(cfg.WorkerToken),
+		workerSigningKey: strings.TrimSpace(cfg.WorkerSigningKey),
+		workerRPCTLS:     cfg.WorkerRPCTLS,
+		poolConfig:       cfg.Pool,
+		previewDomain:    cfg.PreviewDomain,
+		ctx:              ctx,
+		cancel:           cancel,
 	}
 	if m.defaultTTL == 0 {
 		m.defaultTTL = 30 * time.Minute
@@ -2074,7 +2078,7 @@ func (m *Manager) canUseRemoteWorker(ctx context.Context, workerID string) bool 
 
 func (m *Manager) remoteWorkerRPCClient(ctx context.Context, workerID string) (worker.RPCClient, error) {
 	var zero worker.RPCClient
-	if strings.TrimSpace(m.workerToken) == "" {
+	if strings.TrimSpace(m.workerToken) == "" && strings.TrimSpace(m.workerSigningKey) == "" {
 		return zero, fmt.Errorf("worker token is required for remote worker RPC")
 	}
 	rec, err := m.store.GetWorker(ctx, workerID)
@@ -2085,12 +2089,23 @@ func (m *Manager) remoteWorkerRPCClient(ctx context.Context, workerID string) (w
 	if rpcURL == "" {
 		return zero, fmt.Errorf("worker %s has no rpc_url", workerID)
 	}
-	return worker.RPCClient{
+	client := worker.RPCClient{
 		BaseURL:  rpcURL,
 		WorkerID: workerID,
 		Token:    m.workerToken,
 		RPCTLS:   m.workerRPCTLS,
-	}, nil
+	}
+	if strings.TrimSpace(client.Token) == "" && strings.TrimSpace(m.workerSigningKey) != "" {
+		client.TokenFunc = func() (string, error) {
+			now := time.Now().UTC()
+			return middleware.SignWorkerToken(m.workerSigningKey, middleware.WorkerTokenClaims{
+				WorkerID:  workerID,
+				IssuedAt:  now.Unix(),
+				ExpiresAt: now.Add(5 * time.Minute).Unix(),
+			})
+		}
+	}
+	return client, nil
 }
 
 func leaseTokenFromStore(rec *store.LeaseRecord) workerproto.LeaseToken {

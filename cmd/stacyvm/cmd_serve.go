@@ -194,8 +194,9 @@ func runServe() error {
 			SpawnQueueTimeout:    spawnQueueTimeout,
 			MaxSpawnQueue:        cfg.Defaults.MaxSpawnQueue,
 		},
-		WorkerToken:  cfg.Auth.WorkerToken,
-		WorkerRPCTLS: workerTLSConfig(cfg.Worker.RPCTLS),
+		WorkerToken:      cfg.Auth.WorkerToken,
+		WorkerSigningKey: cfg.Auth.WorkerSigningKey,
+		WorkerRPCTLS:     workerTLSConfig(cfg.Worker.RPCTLS),
 	})
 	if err := mgr.Reconcile(context.Background()); err != nil {
 		return err

@@ -13,6 +13,7 @@ This checkpoint starts hardening remote worker identity for public and enterpris
 - Signed-token worker ID matching and expiry enforcement.
 - Worker scope filtering so signed tokens cannot grant non-worker scopes.
 - Worker runtime token derivation for heartbeat and lease-renewal calls when `auth.worker_signing_key` is configured and no static worker token is provided.
+- Signed control-plane-to-worker RPC tokens for remote worker calls when no shared `auth.worker_token` is configured.
 - `stacyvm worker token <worker-id>` for issuing signed worker tokens.
 - Config loading and defaults for `auth.worker_signing_key` and `auth.worker_signing_keys`.
 - Config lint awareness for signed worker credentials.

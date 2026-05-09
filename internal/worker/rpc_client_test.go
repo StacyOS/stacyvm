@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/StacyOs/stacyvm/internal/api/middleware"
 	"github.com/StacyOs/stacyvm/internal/providers"
 	"github.com/StacyOs/stacyvm/internal/workerproto"
 )
@@ -82,6 +83,50 @@ func TestRPCClientStatus(t *testing.T) {
 	}
 	if result.SandboxID != "sb-control-plane" || result.State == "" || result.WorkerID != "worker-a" {
 		t.Fatalf("unexpected result: %+v", result)
+	}
+}
+
+func TestRPCClientStatusWithSignedToken(t *testing.T) {
+	now := time.Date(2026, 5, 9, 10, 0, 0, 0, time.UTC)
+	registry := providers.NewRegistry()
+	mock := providers.NewMockProvider()
+	registry.Register(mock)
+	if err := registry.SetDefault("mock"); err != nil {
+		t.Fatalf("set default: %v", err)
+	}
+	runtimeID, err := mock.Spawn(context.Background(), providers.SpawnOptions{Image: "alpine:latest"})
+	if err != nil {
+		t.Fatalf("spawn mock: %v", err)
+	}
+	server := httptest.NewServer((&RPCServer{
+		WorkerID:   "worker-a",
+		SigningKey: "worker-signing-key-with-at-least-32-bytes",
+		Now:        func() time.Time { return now },
+		Registry:   registry,
+	}).Handler())
+	defer server.Close()
+
+	client := RPCClient{
+		BaseURL:  server.URL,
+		WorkerID: "worker-a",
+		TokenFunc: func() (string, error) {
+			return middleware.SignWorkerToken("worker-signing-key-with-at-least-32-bytes", middleware.WorkerTokenClaims{
+				WorkerID:  "worker-a",
+				IssuedAt:  now.Unix(),
+				ExpiresAt: now.Add(time.Minute).Unix(),
+			})
+		},
+	}
+	result, err := client.Status(context.Background(), "req-1", workerproto.StatusParams{
+		SandboxID: "sb-control-plane",
+		RuntimeID: runtimeID,
+		Provider:  "mock",
+	})
+	if err != nil {
+		t.Fatalf("status: %v", err)
+	}
+	if result.WorkerID != "worker-a" {
+		t.Fatalf("worker id = %q, want worker-a", result.WorkerID)
 	}
 }
 

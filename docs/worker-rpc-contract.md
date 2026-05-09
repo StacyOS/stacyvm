@@ -100,6 +100,8 @@ When a worker has an entry in `auth.worker_tokens`, that worker-specific token t
 
 Signed worker token payloads are base64url JSON claims with `worker_id`, optional worker scopes, `iat`, and `exp`. The authenticated `X-Worker-ID` must match the signed `worker_id`, expired tokens are rejected, and any non-worker scopes are ignored. `stacyvm worker` can derive short-lived heartbeat and lease-renewal tokens from `auth.worker_signing_key` when no static `--worker-token` or `auth.worker_token` is provided. Operators can also issue a token explicitly with `stacyvm worker token <worker-id> --ttl 5m`.
 
+The same signed token format is accepted by worker RPC servers for control-plane-to-worker calls. When the control plane has `auth.worker_signing_key` and no shared `auth.worker_token`, it mints short-lived tokens for the target worker before calling `/rpc`. This lets remote spawn, status, exec, file, log, preview, and destroy routing avoid static shared worker RPC credentials.
+
 No-downtime signing-key rotation uses a two-key window:
 
 1. Set the new key as `auth.worker_signing_key`.

@@ -30,6 +30,8 @@ Phase 14 begins the worker identity hardening lane for production multi-worker S
 
 - Added dynamic worker token generation for `stacyvm worker` heartbeat and lease-renewal calls.
 - When no static `--worker-token` or `auth.worker_token` is configured, a worker can derive short-lived signed control-plane tokens from `auth.worker_signing_key`.
+- Worker RPC servers now accept signed control-plane-to-worker tokens.
+- Control planes can mint short-lived worker RPC tokens from `auth.worker_signing_key` when no shared `auth.worker_token` is configured.
 - Existing static token behavior is unchanged.
 
 ### Rotation

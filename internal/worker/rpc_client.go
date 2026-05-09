@@ -18,6 +18,7 @@ type RPCClient struct {
 	BaseURL    string
 	WorkerID   string
 	Token      string
+	TokenFunc  func() (string, error)
 	HTTPClient *http.Client
 	RPCTLS     TLSConfig
 }
@@ -98,8 +99,9 @@ func (c RPCClient) ExecStreamLive(ctx context.Context, reqID string, params work
 	if strings.TrimSpace(c.WorkerID) == "" {
 		return nil, nil, fmt.Errorf("worker id is required")
 	}
-	if strings.TrimSpace(c.Token) == "" {
-		return nil, nil, fmt.Errorf("worker token is required")
+	token, err := c.authToken()
+	if err != nil {
+		return nil, nil, err
 	}
 	body, err := json.Marshal(workerproto.Request{
 		ID:       reqID,
@@ -118,7 +120,7 @@ func (c RPCClient) ExecStreamLive(ctx context.Context, reqID string, params work
 	httpReq.Header.Set("Accept", "application/x-ndjson")
 	httpReq.Header.Set("X-Worker-Stream", "ndjson")
 	httpReq.Header.Set("X-Worker-ID", c.WorkerID)
-	httpReq.Header.Set("X-Worker-Token", c.Token)
+	httpReq.Header.Set("X-Worker-Token", token)
 
 	client, err := c.httpClient(&http.Client{})
 	if err != nil {
@@ -334,8 +336,9 @@ func (c RPCClient) call(ctx context.Context, request workerproto.Request) (worke
 	if strings.TrimSpace(c.WorkerID) == "" {
 		return zero, fmt.Errorf("worker id is required")
 	}
-	if strings.TrimSpace(c.Token) == "" {
-		return zero, fmt.Errorf("worker token is required")
+	token, err := c.authToken()
+	if err != nil {
+		return zero, err
 	}
 	body, err := json.Marshal(request)
 	if err != nil {
@@ -347,7 +350,7 @@ func (c RPCClient) call(ctx context.Context, request workerproto.Request) (worke
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("X-Worker-ID", c.WorkerID)
-	httpReq.Header.Set("X-Worker-Token", c.Token)
+	httpReq.Header.Set("X-Worker-Token", token)
 
 	client, err := c.httpClient(&http.Client{Timeout: 30 * time.Second})
 	if err != nil {
@@ -382,6 +385,23 @@ func (c RPCClient) httpClient(defaultClient *http.Client) (*http.Client, error) 
 		return c.HTTPClient, nil
 	}
 	return c.RPCTLS.HTTPClient(defaultClient)
+}
+
+func (c RPCClient) authToken() (string, error) {
+	if c.TokenFunc != nil {
+		token, err := c.TokenFunc()
+		if err != nil {
+			return "", err
+		}
+		if strings.TrimSpace(token) == "" {
+			return "", fmt.Errorf("worker token is required")
+		}
+		return token, nil
+	}
+	if strings.TrimSpace(c.Token) == "" {
+		return "", fmt.Errorf("worker token is required")
+	}
+	return c.Token, nil
 }
 
 func mustRawMessage(value interface{}) json.RawMessage {
