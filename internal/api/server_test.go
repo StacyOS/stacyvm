@@ -232,6 +232,54 @@ func TestAdminRoutesWriteAuditLog(t *testing.T) {
 	}
 }
 
+func TestServerRegistersLocalWorkerAndExposesWorkers(t *testing.T) {
+	srv := setupTestServer(t, ServerConfig{Version: "test"})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/workers", nil)
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("workers status = %d, want %d: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	var workers []map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&workers); err != nil {
+		t.Fatalf("decode workers: %v", err)
+	}
+	if len(workers) != 1 || workers[0]["id"] != "local" {
+		t.Fatalf("unexpected workers: %+v", workers)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/admin/workers/worker-b/heartbeat", strings.NewReader(`{"hostname":"host-b","providers":["mock"],"capabilities":["spawn"],"capacity":{"max_sandboxes":5}}`))
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("heartbeat status = %d, want %d: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	var heartbeat map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&heartbeat); err != nil {
+		t.Fatalf("decode heartbeat: %v", err)
+	}
+	if heartbeat["id"] != "worker-b" || heartbeat["status"] != "online" {
+		t.Fatalf("unexpected heartbeat: %+v", heartbeat)
+	}
+
+	req = httptest.NewRequest(http.MethodGet, "/api/v1/admin/diagnostics", nil)
+	w = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("diagnostics status = %d, want %d: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	var diagnostics map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&diagnostics); err != nil {
+		t.Fatalf("decode diagnostics: %v", err)
+	}
+	workerSummary := diagnostics["workers"].(map[string]interface{})
+	if workerSummary["total"].(float64) != 2 {
+		t.Fatalf("worker total = %v, want 2", workerSummary["total"])
+	}
+}
+
 func TestAdminRoutesPruneAuditLogWithRetention(t *testing.T) {
 	srv, st := setupTestServerWithStore(t, ServerConfig{
 		APIKey:              "client-key",

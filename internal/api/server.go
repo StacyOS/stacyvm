@@ -2,7 +2,9 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
+	"os"
 	"time"
 
 	"github.com/StacyOs/stacyvm/internal/api/middleware"
@@ -46,6 +48,7 @@ type Server struct {
 
 func NewServer(cfg ServerConfig, registry *providers.Registry, manager *orchestrator.Manager, events *orchestrator.EventBus, templates *orchestrator.TemplateRegistry, pool *orchestrator.PoolManager, st store.Store, envBuild routes.BuildStarter, logger zerolog.Logger) *Server {
 	r := chi.NewRouter()
+	registerLocalWorker(registry, manager, st, logger)
 
 	// Global middleware (applies to all routes including swagger)
 	r.Use(chimw.Recoverer)
@@ -93,6 +96,7 @@ func NewServer(cfg ServerConfig, registry *providers.Registry, manager *orchestr
 		environmentRoutes := routes.NewEnvironmentRoutes(st, envBuild)
 		quotaRoutes := routes.NewQuotaRoutes(manager)
 		adminAuditRoutes := routes.NewAdminAuditRoutes(st)
+		workerRoutes := routes.NewWorkerRoutes(st)
 		r.Route("/api/v1", func(r chi.Router) {
 			r.Mount("/sandboxes", sandboxRoutes.Routes())
 			r.Mount("/providers", providerRoutes.Routes())
@@ -100,6 +104,7 @@ func NewServer(cfg ServerConfig, registry *providers.Registry, manager *orchestr
 			r.Mount("/snapshots", snapshotRoutes.Routes())
 			r.Mount("/environments", environmentRoutes.Routes())
 			r.Mount("/quotas", quotaRoutes.Routes())
+			r.Mount("/workers", workerRoutes.ReadOnlyRoutes())
 			r.Get("/pool/status", sandboxRoutes.VMPoolStatus)
 			r.Route("/admin", func(r chi.Router) {
 				r.Use(middleware.AdminAuth(cfg.AdminAPIKey, cfg.APIKey, !cfg.AdminFallbackDisabled))
@@ -110,6 +115,7 @@ func NewServer(cfg ServerConfig, registry *providers.Registry, manager *orchestr
 				r.Get("/audit", adminAuditRoutes.List)
 				r.Mount("/providers", providerRoutes.Routes())
 				r.Mount("/quotas", quotaRoutes.Routes())
+				r.Mount("/workers", workerRoutes.Routes())
 				r.Get("/diagnostics", systemRoutes.Diagnostics)
 				r.Get("/metrics", systemRoutes.Metrics)
 				r.Get("/metrics/prometheus", systemRoutes.PrometheusMetrics)
@@ -127,6 +133,32 @@ func NewServer(cfg ServerConfig, registry *providers.Registry, manager *orchestr
 			IdleTimeout:  60 * time.Second,
 		},
 		logger: logger,
+	}
+}
+
+func registerLocalWorker(registry *providers.Registry, manager *orchestrator.Manager, st store.Store, logger zerolog.Logger) {
+	if st == nil {
+		return
+	}
+	hostname, err := os.Hostname()
+	if err != nil {
+		hostname = "local"
+	}
+	capabilities := []string{"api", "single_node", "spawn", "exec", "files"}
+	providerNames := registry.List()
+	providersJSON, _ := json.Marshal(providerNames)
+	capabilitiesJSON, _ := json.Marshal(capabilities)
+	capacityJSON, _ := json.Marshal(manager.Limits())
+	if err := st.SaveWorker(context.Background(), &store.WorkerRecord{
+		ID:            "local",
+		Hostname:      hostname,
+		Status:        "online",
+		Providers:     string(providersJSON),
+		Capabilities:  string(capabilitiesJSON),
+		Capacity:      string(capacityJSON),
+		LastHeartbeat: time.Now().UTC(),
+	}); err != nil {
+		logger.Warn().Err(err).Msg("failed to register local worker")
 	}
 }
 

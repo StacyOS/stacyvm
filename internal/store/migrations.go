@@ -199,4 +199,23 @@ CREATE INDEX IF NOT EXISTS idx_operation_audit_logs_sandbox ON operation_audit_l
 CREATE INDEX IF NOT EXISTS idx_operation_audit_logs_action ON operation_audit_logs(action);
 `,
 	},
+	{
+		version: 8,
+		sql: `
+CREATE TABLE IF NOT EXISTS workers (
+    id             TEXT PRIMARY KEY,
+    hostname       TEXT NOT NULL DEFAULT '',
+    status         TEXT NOT NULL DEFAULT 'online',
+    providers      TEXT NOT NULL DEFAULT '[]',
+    capabilities   TEXT NOT NULL DEFAULT '[]',
+    capacity       TEXT NOT NULL DEFAULT '{}',
+    last_heartbeat DATETIME NOT NULL DEFAULT (datetime('now')),
+    created_at     DATETIME NOT NULL DEFAULT (datetime('now')),
+    updated_at     DATETIME NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_workers_status ON workers(status);
+CREATE INDEX IF NOT EXISTS idx_workers_last_heartbeat ON workers(last_heartbeat DESC);
+`,
+	},
 }

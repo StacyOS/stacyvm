@@ -53,6 +53,7 @@ type DiagnosticsResponse struct {
 	Store       map[string]interface{}             `json:"store"`
 	Limits      orchestrator.OperationalLimitsInfo `json:"limits"`
 	Providers   []ProviderHealth                   `json:"providers"`
+	Workers     map[string]interface{}             `json:"workers"`
 	Sandboxes   map[string]interface{}             `json:"sandboxes"`
 	Events      orchestrator.EventBusStats         `json:"events"`
 	Operations  []orchestrator.OperationMetrics    `json:"operations"`

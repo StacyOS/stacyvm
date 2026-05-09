@@ -1,5 +1,28 @@
 # Changelog
 
+## Phase 10 Multi-Worker Foundation - 2026-05-09
+
+This checkpoint starts the enterprise and multi-worker readiness track.
+
+### Added
+
+- SQLite-backed worker registry storage with heartbeat, provider, capability, and capacity fields.
+- Store-level worker CRUD methods for future scheduler and worker ownership work.
+- Local worker registration on API server startup so single-node deployments report as a worker.
+- Worker registry API:
+  - `GET /api/v1/workers`
+  - `GET /api/v1/workers/{workerID}`
+  - `POST /api/v1/admin/workers/{workerID}/heartbeat`
+  - `DELETE /api/v1/admin/workers/{workerID}`
+- Diagnostics worker summary with online, stale, unhealthy, and total counts.
+- Prometheus worker count metrics by status.
+- Phase 10 release notes under `docs/releases/phase-10-multi-worker-foundation.md`.
+
+### Changed
+
+- Diagnostics now include worker registry state alongside provider, sandbox, scheduler, quota, rate-limit, and operation data.
+- The public API exposes read-only worker discovery while heartbeat and delete operations live under the admin namespace.
+
 ## Phase 9 Public Self-Serve Release Trust - 2026-05-08
 
 This checkpoint starts the Phase 9 public self-serve production readiness track.

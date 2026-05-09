@@ -424,6 +424,8 @@ Exec requests default to backwards-compatible shell mode. Set `mode: "argv"` wit
 | `GET` | `/quotas/summary` | Redacted owner quota policy counts |
 | `PUT` | `/quotas/{ownerID}` | Create or update owner quota |
 | `GET` | `/quotas/{ownerID}/usage` | Owner usage against effective quota |
+| `GET` | `/workers` | List registered workers and heartbeat state |
+| `GET` | `/workers/{workerID}` | Get one worker registry record |
 | `GET` | `/pool/status` | Pool VM and user counts |
 | `GET` | `/snapshots` | Available VM snapshots |
 | `GET` | `/health` | Health check |
@@ -433,7 +435,7 @@ Exec requests default to backwards-compatible shell mode. Set `mode: "argv"` wit
 | `GET` | `/metrics/prometheus` | Prometheus-compatible metrics |
 | `GET` | `/events` | Server-sent events stream |
 
-Admin aliases for providers, quotas, diagnostics, and metrics are available under `/admin/*` and can be protected with `auth.admin_api_key`.
+Admin aliases for providers, quotas, workers, diagnostics, and metrics are available under `/admin/*` and can be protected with `auth.admin_api_key`. Worker heartbeat and registry deletion are admin-only operations under `/admin/workers/*`.
 For the operator dashboard, quota workflows, diagnostics, and persisted admin audit history, see [docs/admin-control-plane.md](docs/admin-control-plane.md).
 
 Full schemas, request/response examples, and error codes: **[docs/api.md](docs/api.md)**.

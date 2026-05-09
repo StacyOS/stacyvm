@@ -1540,6 +1540,155 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/workers": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Return worker registry records and heartbeat state",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workers"
+                ],
+                "summary": "List workers",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/internal_api_routes.WorkerResponse"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/workers/{workerID}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Return one worker registry record",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workers"
+                ],
+                "summary": "Get worker",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Worker ID",
+                        "name": "workerID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_routes.WorkerResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Remove a worker registry record",
+                "tags": [
+                    "workers"
+                ],
+                "summary": "Delete worker",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Worker ID",
+                        "name": "workerID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_routes.StatusResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                        }
+                    }
+                }
+            }
+        },
+        "/workers/{workerID}/heartbeat": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Create or update worker registry state for a worker",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "workers"
+                ],
+                "summary": "Heartbeat worker",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Worker ID",
+                        "name": "workerID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Worker heartbeat",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_routes.WorkerHeartbeatRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_routes.WorkerResponse"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
@@ -2269,6 +2418,10 @@ const docTemplate = `{
                 "store": {
                     "type": "object",
                     "additionalProperties": true
+                },
+                "workers": {
+                    "type": "object",
+                    "additionalProperties": true
                 }
             }
         },
@@ -2486,6 +2639,84 @@ const docTemplate = `{
                 "ttl": {
                     "type": "string",
                     "example": "30m"
+                }
+            }
+        },
+        "internal_api_routes.WorkerHeartbeatRequest": {
+            "type": "object",
+            "properties": {
+                "capabilities": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "capacity": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "hostname": {
+                    "type": "string",
+                    "example": "stacyvm-host-1"
+                },
+                "providers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "status": {
+                    "type": "string",
+                    "example": "online"
+                }
+            }
+        },
+        "internal_api_routes.WorkerResponse": {
+            "type": "object",
+            "properties": {
+                "capabilities": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "capacity": {
+                    "type": "object",
+                    "additionalProperties": true
+                },
+                "created_at": {
+                    "type": "string",
+                    "example": "2026-05-09T10:00:00Z"
+                },
+                "hostname": {
+                    "type": "string",
+                    "example": "stacyvm-host-1"
+                },
+                "id": {
+                    "type": "string",
+                    "example": "worker-local"
+                },
+                "last_heartbeat": {
+                    "type": "string",
+                    "example": "2026-05-09T10:30:00Z"
+                },
+                "providers": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "stale": {
+                    "type": "boolean",
+                    "example": false
+                },
+                "status": {
+                    "type": "string",
+                    "example": "online"
+                },
+                "updated_at": {
+                    "type": "string",
+                    "example": "2026-05-09T10:30:00Z"
                 }
             }
         }

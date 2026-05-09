@@ -18,6 +18,7 @@ This document is the source of truth for the StacyVM HTTP API. The Python and Ty
 - [Files](#files)
 - [Templates](#templates)
 - [Providers](#providers)
+- [Workers](#workers)
 - [Snapshots](#snapshots)
 - [Pool](#pool)
 - [System](#system)
@@ -631,6 +632,74 @@ POST /api/v1/providers/test
 
 ---
 
+## Workers
+
+Worker registry endpoints expose the control-plane view of StacyVM workers. In single-node mode the API server registers itself as the `local` worker at startup. Heartbeat and delete operations are admin-only aliases under `/api/v1/admin/workers/*`.
+
+### List workers
+
+```
+GET /api/v1/workers
+```
+
+**Response** `200 OK`:
+```json
+[
+  {
+    "id": "local",
+    "hostname": "stacyvm-host-1",
+    "status": "online",
+    "providers": ["docker", "mock"],
+    "capabilities": ["api", "single_node", "spawn", "exec", "files"],
+    "capacity": { "max_sandboxes": 100, "max_sandboxes_per_owner": 10 },
+    "last_heartbeat": "2026-05-08T10:30:00Z",
+    "created_at": "2026-05-08T10:00:00Z",
+    "updated_at": "2026-05-08T10:30:00Z",
+    "stale": false
+  }
+]
+```
+
+### Get a worker
+
+```
+GET /api/v1/workers/{workerID}
+```
+
+**Response** `200 OK`: one worker object.
+
+### Heartbeat a worker
+
+```
+POST /api/v1/admin/workers/{workerID}/heartbeat
+```
+
+**Request**:
+```json
+{
+  "hostname": "worker-a.internal",
+  "status": "online",
+  "providers": ["docker"],
+  "capabilities": ["spawn", "exec", "files"],
+  "capacity": { "max_sandboxes": 50, "max_sandboxes_per_owner": 5 }
+}
+```
+
+**Response** `200 OK`: updated worker object.
+
+### Delete a worker
+
+```
+DELETE /api/v1/admin/workers/{workerID}
+```
+
+**Response** `200 OK`:
+```json
+{ "status": "deleted" }
+```
+
+---
+
 ## Snapshots
 
 ### List Firecracker snapshots
@@ -819,6 +888,26 @@ GET /api/v1/diagnostics
       "runtime_count": 4
     }
   ],
+  "workers": {
+    "total": 1,
+    "online": 1,
+    "stale": 0,
+    "unhealthy": 0,
+    "items": [
+      {
+        "id": "local",
+        "hostname": "stacyvm-host-1",
+        "status": "online",
+        "providers": ["docker", "mock"],
+        "capabilities": ["api", "single_node", "spawn", "exec", "files"],
+        "capacity": { "max_sandboxes": 100, "max_sandboxes_per_owner": 10 },
+        "last_heartbeat": "2026-05-08T10:30:00Z",
+        "created_at": "2026-05-08T10:00:00Z",
+        "updated_at": "2026-05-08T10:30:00Z",
+        "stale": false
+      }
+    ]
+  },
   "sandboxes": {
     "total": 138,
     "active": 12,
@@ -876,6 +965,26 @@ GET /api/v1/metrics
     "items": [
       { "name": "docker", "healthy": true, "default": true },
       { "name": "firecracker", "healthy": false, "default": false }
+    ]
+  },
+  "workers": {
+    "total": 1,
+    "online": 1,
+    "stale": 0,
+    "unhealthy": 0,
+    "items": [
+      {
+        "id": "local",
+        "hostname": "stacyvm-host-1",
+        "status": "online",
+        "providers": ["docker", "mock"],
+        "capabilities": ["api", "single_node", "spawn", "exec", "files"],
+        "capacity": { "max_sandboxes": 100, "max_sandboxes_per_owner": 10 },
+        "last_heartbeat": "2026-05-08T10:30:00Z",
+        "created_at": "2026-05-08T10:00:00Z",
+        "updated_at": "2026-05-08T10:30:00Z",
+        "stale": false
+      }
     ]
   },
   "events": {
@@ -952,11 +1061,15 @@ stacyvm_spawn_queue_depth 3
 stacyvm_spawn_queue_wait_milliseconds_count 18
 stacyvm_owner_quotas_total 8
 stacyvm_rate_limit_blocked_total 27
+stacyvm_workers_total{status="total"} 1
+stacyvm_workers_total{status="online"} 1
+stacyvm_workers_total{status="stale"} 0
+stacyvm_workers_total{status="unhealthy"} 0
 stacyvm_operation_success_total{operation="exec",provider="docker"} 482
 stacyvm_operation_failure_total{operation="exec",provider="docker"} 7
 ```
 
-Use this endpoint for Prometheus-compatible scraping of runtime, provider, sandbox, event, and operation metrics.
+Use this endpoint for Prometheus-compatible scraping of runtime, provider, worker, sandbox, event, and operation metrics.
 
 ---
 

@@ -186,6 +186,7 @@ func (s *SystemRoutes) Diagnostics(w http.ResponseWriter, r *http.Request) {
 		"quotas":     metrics.quotaSummary,
 		"rate_limit": s.rateLimitStats(),
 		"providers":  metrics.providerHealth,
+		"workers":    metrics.workerSummary,
 		"sandboxes":  metrics.sandboxSummary(),
 		"events":     metrics.eventStats,
 		"operations": metrics.operationMetrics,
@@ -270,6 +271,7 @@ type systemMetricsSnapshot struct {
 	schedulerStatus     orchestrator.SchedulerStatus
 	quotaSummary        orchestrator.QuotaSummary
 	rateLimitStats      middleware.RateLimitStats
+	workerSummary       map[string]interface{}
 }
 
 func (s *SystemRoutes) collectMetrics(ctx context.Context) (systemMetricsSnapshot, error) {
@@ -300,6 +302,7 @@ func (s *SystemRoutes) collectMetrics(ctx context.Context) (systemMetricsSnapsho
 	if err != nil {
 		return systemMetricsSnapshot{}, err
 	}
+	workerSummary := s.workerSummary(ctx)
 
 	return systemMetricsSnapshot{
 		uptime:              time.Since(s.startTime),
@@ -319,6 +322,7 @@ func (s *SystemRoutes) collectMetrics(ctx context.Context) (systemMetricsSnapsho
 		schedulerStatus:     s.manager.SchedulerStatus(),
 		quotaSummary:        quotaSummary,
 		rateLimitStats:      s.rateLimitStats(),
+		workerSummary:       workerSummary,
 	}, nil
 }
 
@@ -336,6 +340,7 @@ func (m systemMetricsSnapshot) toResponse() map[string]interface{} {
 			"healthy": m.healthyProviders,
 			"items":   m.providerHealth,
 		},
+		"workers":    m.workerSummary,
 		"events":     m.eventStats,
 		"operations": m.operationMetrics,
 		"scheduler":  m.schedulerStatus,
@@ -362,6 +367,42 @@ func (s *SystemRoutes) rateLimitStats() middleware.RateLimitStats {
 		return middleware.RateLimitStats{}
 	}
 	return s.limiter.Stats()
+}
+
+func (s *SystemRoutes) workerSummary(ctx context.Context) map[string]interface{} {
+	summary := map[string]interface{}{
+		"total":     0,
+		"online":    0,
+		"stale":     0,
+		"unhealthy": 0,
+		"items":     []WorkerResponse{},
+	}
+	if s.store == nil {
+		return summary
+	}
+	workers, err := s.store.ListWorkers(ctx)
+	if err != nil {
+		summary["error"] = err.Error()
+		return summary
+	}
+	now := time.Now().UTC()
+	items := make([]WorkerResponse, 0, len(workers))
+	for _, rec := range workers {
+		item := workerResponse(rec, now)
+		items = append(items, item)
+		if item.Status == "online" {
+			summary["online"] = summary["online"].(int) + 1
+		}
+		if item.Stale {
+			summary["stale"] = summary["stale"].(int) + 1
+		}
+		if item.Status == "unhealthy" {
+			summary["unhealthy"] = summary["unhealthy"].(int) + 1
+		}
+	}
+	summary["total"] = len(workers)
+	summary["items"] = items
+	return summary
 }
 
 // Events serves Server-Sent Events for real-time updates.

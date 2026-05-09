@@ -502,6 +502,9 @@ definitions:
       store:
         additionalProperties: true
         type: object
+      workers:
+        additionalProperties: true
+        type: object
     type: object
   internal_api_routes.HealthResponse:
     properties:
@@ -655,6 +658,61 @@ definitions:
         type: string
       ttl:
         example: 30m
+        type: string
+    type: object
+  internal_api_routes.WorkerHeartbeatRequest:
+    properties:
+      capabilities:
+        items:
+          type: string
+        type: array
+      capacity:
+        additionalProperties: true
+        type: object
+      hostname:
+        example: stacyvm-host-1
+        type: string
+      providers:
+        items:
+          type: string
+        type: array
+      status:
+        example: online
+        type: string
+    type: object
+  internal_api_routes.WorkerResponse:
+    properties:
+      capabilities:
+        items:
+          type: string
+        type: array
+      capacity:
+        additionalProperties: true
+        type: object
+      created_at:
+        example: "2026-05-09T10:00:00Z"
+        type: string
+      hostname:
+        example: stacyvm-host-1
+        type: string
+      id:
+        example: worker-local
+        type: string
+      last_heartbeat:
+        example: "2026-05-09T10:30:00Z"
+        type: string
+      providers:
+        items:
+          type: string
+        type: array
+      stale:
+        example: false
+        type: boolean
+      status:
+        example: online
+        type: string
+      updated_at:
+        example: "2026-05-09T10:30:00Z"
         type: string
     type: object
 host: localhost:7423
@@ -1627,6 +1685,99 @@ paths:
       summary: Spawn from template
       tags:
       - templates
+  /workers:
+    get:
+      description: Return worker registry records and heartbeat state
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/internal_api_routes.WorkerResponse'
+            type: array
+      security:
+      - ApiKeyAuth: []
+      summary: List workers
+      tags:
+      - workers
+  /workers/{workerID}:
+    delete:
+      description: Remove a worker registry record
+      parameters:
+      - description: Worker ID
+        in: path
+        name: workerID
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_routes.StatusResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError'
+      security:
+      - ApiKeyAuth: []
+      summary: Delete worker
+      tags:
+      - workers
+    get:
+      description: Return one worker registry record
+      parameters:
+      - description: Worker ID
+        in: path
+        name: workerID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_routes.WorkerResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError'
+      security:
+      - ApiKeyAuth: []
+      summary: Get worker
+      tags:
+      - workers
+  /workers/{workerID}/heartbeat:
+    post:
+      consumes:
+      - application/json
+      description: Create or update worker registry state for a worker
+      parameters:
+      - description: Worker ID
+        in: path
+        name: workerID
+        required: true
+        type: string
+      - description: Worker heartbeat
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_api_routes.WorkerHeartbeatRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_routes.WorkerResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Heartbeat worker
+      tags:
+      - workers
 securityDefinitions:
   ApiKeyAuth:
     in: header

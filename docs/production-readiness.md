@@ -40,6 +40,18 @@ This checklist tracks the Phase 7 release-candidate hardening work needed before
 - SDK parity smoke tests run in CI without requiring a live runtime. Done in Phase 9 final polish.
 - GitHub issue templates request support bundle, config lint, upgrade rehearsal, runtime certification, and release verification evidence. Done in Phase 9 final polish.
 
+## Phase 10 Acceptance Criteria
+
+- Worker registration and heartbeat records are stored durably. Done in Phase 10 slice 1.
+- Single-node servers self-register as the `local` worker with provider and capacity metadata. Done in Phase 10 slice 1.
+- Read-only worker discovery is available through the normal API. Done in Phase 10 slice 1.
+- Worker heartbeat and deletion are protected by the admin namespace. Done in Phase 10 slice 1.
+- Diagnostics and Prometheus expose worker registry state. Done in Phase 10 slice 1.
+- Scheduler placement policy is worker-aware. Pending.
+- Sandbox ownership is tied to worker IDs. Pending.
+- Distributed leases prevent duplicate worker ownership. Pending.
+- Remote worker authentication and RPC are implemented. Pending.
+
 ## Current Release-Candidate Gates
 
 | Gate | Status | Notes |
@@ -51,6 +63,7 @@ This checklist tracks the Phase 7 release-candidate hardening work needed before
 | Runtime conformance | Partial | Harness and host certification script exist; Firecracker/PRoot remain platform-gated. |
 | Security posture | Partial | Admin governance, operation audit, path traversal checks, and explicit exec modes are implemented; OIDC/JWT implementation remains. |
 | Release automation | Passing | Release workflow signs binaries, checksums, and GHCR image digests; public verifier and installer verification exist. |
+| Worker registry | Partial | Durable worker registration, heartbeat, diagnostics, and metrics exist; scheduler ownership, leases, and remote worker RPC remain. |
 
 ## Required Before Single-Node Production
 
@@ -81,7 +94,7 @@ This checklist tracks the Phase 7 release-candidate hardening work needed before
 ## Required Before Enterprise/Multi-Worker
 
 - Postgres store implementation.
-- Worker registration and heartbeat model.
+- Worker registration and heartbeat model. Initial SQLite-backed version exists; production distributed mode still needs remote worker auth and ownership semantics.
 - Scheduler abstraction with placement policy.
 - Durable queue/pub-sub for lifecycle events.
 - Distributed leases to prevent double ownership.

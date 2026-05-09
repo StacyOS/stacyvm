@@ -131,10 +131,14 @@ func TestSystemRoutes_Diagnostics(t *testing.T) {
 	}
 	var body map[string]interface{}
 	decodeSystemResponse(t, w, &body)
-	for _, field := range []string{"generated_at", "build", "process", "store", "limits", "scheduler", "quotas", "rate_limit", "providers", "sandboxes", "events", "operations", "remediation", "redactions"} {
+	for _, field := range []string{"generated_at", "build", "process", "store", "limits", "scheduler", "quotas", "rate_limit", "providers", "workers", "sandboxes", "events", "operations", "remediation", "redactions"} {
 		if _, ok := body[field]; !ok {
 			t.Fatalf("diagnostics missing %s: %#v", field, body)
 		}
+	}
+	workers := body["workers"].(map[string]interface{})
+	if workers["total"].(float64) != 0 {
+		t.Fatalf("worker total = %v, want 0 before server registration", workers["total"])
 	}
 	remediation := body["remediation"].(map[string]interface{})
 	if remediation["runtime_certification"] != "docs/runtime-certification.md" {
@@ -200,6 +204,9 @@ func TestSystemRoutes_MetricsIncludesOperationalBreakdown(t *testing.T) {
 	if _, ok := body["rate_limit"].(map[string]interface{}); !ok {
 		t.Fatal("expected rate limit metrics")
 	}
+	if _, ok := body["workers"].(map[string]interface{}); !ok {
+		t.Fatal("expected worker metrics")
+	}
 	operations := body["operations"].([]interface{})
 	if len(operations) == 0 {
 		t.Fatal("expected operation metrics")
@@ -243,6 +250,7 @@ func TestSystemRoutes_PrometheusMetrics(t *testing.T) {
 		"stacyvm_spawn_queue_wait_milliseconds_count",
 		"stacyvm_owner_quotas_total",
 		`type="max_sandboxes"`,
+		"stacyvm_workers_total",
 		"stacyvm_rate_limit_allowed_total",
 		"stacyvm_operation_success_total",
 		`operation="spawn"`,

@@ -414,6 +414,80 @@ func (s *SQLiteStore) ListOperationAudit(ctx context.Context, query OperationAud
 	return records, rows.Err()
 }
 
+// --- Workers ---
+
+func (s *SQLiteStore) SaveWorker(ctx context.Context, rec *WorkerRecord) error {
+	now := time.Now().UTC()
+	if rec.CreatedAt.IsZero() {
+		rec.CreatedAt = now
+	}
+	if rec.LastHeartbeat.IsZero() {
+		rec.LastHeartbeat = now
+	}
+	rec.UpdatedAt = now
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO workers (id, hostname, status, providers, capabilities, capacity, last_heartbeat, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			hostname = excluded.hostname,
+			status = excluded.status,
+			providers = excluded.providers,
+			capabilities = excluded.capabilities,
+			capacity = excluded.capacity,
+			last_heartbeat = excluded.last_heartbeat,
+			updated_at = excluded.updated_at`,
+		rec.ID, rec.Hostname, rec.Status, rec.Providers, rec.Capabilities, rec.Capacity,
+		rec.LastHeartbeat.UTC(), rec.CreatedAt.UTC(), rec.UpdatedAt.UTC(),
+	)
+	return err
+}
+
+func (s *SQLiteStore) GetWorker(ctx context.Context, id string) (*WorkerRecord, error) {
+	rec := &WorkerRecord{}
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id, hostname, status, providers, capabilities, capacity, last_heartbeat, created_at, updated_at
+		FROM workers WHERE id = ?`, id,
+	).Scan(&rec.ID, &rec.Hostname, &rec.Status, &rec.Providers, &rec.Capabilities, &rec.Capacity,
+		&rec.LastHeartbeat, &rec.CreatedAt, &rec.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, NotFoundError("worker", id)
+	}
+	return rec, err
+}
+
+func (s *SQLiteStore) ListWorkers(ctx context.Context) ([]*WorkerRecord, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, hostname, status, providers, capabilities, capacity, last_heartbeat, created_at, updated_at
+		FROM workers ORDER BY id ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var records []*WorkerRecord
+	for rows.Next() {
+		rec := &WorkerRecord{}
+		if err := rows.Scan(&rec.ID, &rec.Hostname, &rec.Status, &rec.Providers, &rec.Capabilities,
+			&rec.Capacity, &rec.LastHeartbeat, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
+			return nil, err
+		}
+		records = append(records, rec)
+	}
+	return records, rows.Err()
+}
+
+func (s *SQLiteStore) DeleteWorker(ctx context.Context, id string) error {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM workers WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return NotFoundError("worker", id)
+	}
+	return nil
+}
+
 // --- Exec Logs ---
 
 func (s *SQLiteStore) CreateExecLog(ctx context.Context, log *ExecLogRecord) error {

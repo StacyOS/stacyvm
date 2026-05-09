@@ -155,6 +155,18 @@ type OperationAuditQuery struct {
 	Status    string
 }
 
+type WorkerRecord struct {
+	ID            string    `json:"id" example:"worker-local"`
+	Hostname      string    `json:"hostname" example:"stacyvm-host-1"`
+	Status        string    `json:"status" example:"online"`
+	Providers     string    `json:"providers"`    // JSON array
+	Capabilities  string    `json:"capabilities"` // JSON array
+	Capacity      string    `json:"capacity"`     // JSON object
+	LastHeartbeat time.Time `json:"last_heartbeat" example:"2026-05-09T10:30:00Z"`
+	CreatedAt     time.Time `json:"created_at" example:"2026-05-09T10:00:00Z"`
+	UpdatedAt     time.Time `json:"updated_at" example:"2026-05-09T10:30:00Z"`
+}
+
 // Store defines the persistence interface.
 type Store interface {
 	// Sandbox CRUD
@@ -182,6 +194,12 @@ type Store interface {
 	// Operation audit
 	CreateOperationAudit(ctx context.Context, rec *OperationAuditRecord) error
 	ListOperationAudit(ctx context.Context, query OperationAuditQuery) ([]*OperationAuditRecord, error)
+
+	// Workers
+	SaveWorker(ctx context.Context, rec *WorkerRecord) error
+	GetWorker(ctx context.Context, id string) (*WorkerRecord, error)
+	ListWorkers(ctx context.Context) ([]*WorkerRecord, error)
+	DeleteWorker(ctx context.Context, id string) error
 
 	// Exec logs
 	CreateExecLog(ctx context.Context, log *ExecLogRecord) error

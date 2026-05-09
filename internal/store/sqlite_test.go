@@ -93,6 +93,7 @@ func TestSQLiteStoreMigratesLegacyDatabase(t *testing.T) {
 		"owner_quotas",
 		"admin_audit_logs",
 		"operation_audit_logs",
+		"workers",
 	} {
 		if !sqliteTableExists(t, s.db, table) {
 			t.Fatalf("missing migrated table %s", table)
@@ -145,6 +146,64 @@ func sqliteTableExists(t *testing.T, db *sql.DB, table string) bool {
 		t.Fatalf("check table %s: %v", table, err)
 	}
 	return count == 1
+}
+
+func TestWorkerRegistryCRUD(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	now := time.Now().UTC().Add(-time.Minute)
+
+	rec := &WorkerRecord{
+		ID:            "worker-a",
+		Hostname:      "host-a",
+		Status:        "online",
+		Providers:     `["mock","docker"]`,
+		Capabilities:  `["spawn","exec"]`,
+		Capacity:      `{"max_sandboxes":10}`,
+		LastHeartbeat: now,
+	}
+	if err := s.SaveWorker(ctx, rec); err != nil {
+		t.Fatalf("save worker: %v", err)
+	}
+	if rec.CreatedAt.IsZero() || rec.UpdatedAt.IsZero() {
+		t.Fatalf("expected timestamps to be populated: %+v", rec)
+	}
+
+	got, err := s.GetWorker(ctx, "worker-a")
+	if err != nil {
+		t.Fatalf("get worker: %v", err)
+	}
+	if got.Hostname != "host-a" || got.Status != "online" || got.Providers != `["mock","docker"]` {
+		t.Fatalf("unexpected worker: %+v", got)
+	}
+
+	rec.Status = "draining"
+	rec.Capacity = `{"max_sandboxes":5}`
+	if err := s.SaveWorker(ctx, rec); err != nil {
+		t.Fatalf("update worker: %v", err)
+	}
+	got, err = s.GetWorker(ctx, "worker-a")
+	if err != nil {
+		t.Fatalf("get updated worker: %v", err)
+	}
+	if got.Status != "draining" || got.Capacity != `{"max_sandboxes":5}` {
+		t.Fatalf("unexpected updated worker: %+v", got)
+	}
+
+	workers, err := s.ListWorkers(ctx)
+	if err != nil {
+		t.Fatalf("list workers: %v", err)
+	}
+	if len(workers) != 1 || workers[0].ID != "worker-a" {
+		t.Fatalf("unexpected workers: %+v", workers)
+	}
+
+	if err := s.DeleteWorker(ctx, "worker-a"); err != nil {
+		t.Fatalf("delete worker: %v", err)
+	}
+	if _, err := s.GetWorker(ctx, "worker-a"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("get deleted worker err = %v, want ErrNotFound", err)
+	}
 }
 
 func TestSandboxCRUD(t *testing.T) {

@@ -49,6 +49,13 @@ func writePrometheusMetrics(w io.Writer, metrics systemMetricsSnapshot) {
 		}
 	}
 
+	if metrics.workerSummary != nil {
+		writePrometheusHelp(w, "stacyvm_workers_total", "Registered worker count by status bucket.")
+		for _, key := range []string{"total", "online", "stale", "unhealthy"} {
+			fmt.Fprintf(w, "stacyvm_workers_total{status=%q} %d\n", key, intMetric(metrics.workerSummary[key]))
+		}
+	}
+
 	writePrometheusHelp(w, "stacyvm_events_total", "Total events published by the in-process event bus.")
 	fmt.Fprintf(w, "stacyvm_events_total %d\n", metrics.eventStats.EventsTotal)
 	writePrometheusHelp(w, "stacyvm_event_subscribers", "Current event stream subscriber count.")
@@ -127,4 +134,17 @@ func boolLabel(value bool) string {
 		return "true"
 	}
 	return "false"
+}
+
+func intMetric(value interface{}) int {
+	switch v := value.(type) {
+	case int:
+		return v
+	case int64:
+		return int(v)
+	case float64:
+		return int(v)
+	default:
+		return 0
+	}
 }
