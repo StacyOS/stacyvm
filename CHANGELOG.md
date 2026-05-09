@@ -33,6 +33,7 @@ This checkpoint starts hardening remote worker identity for public and enterpris
 - Config lint checks for worker RPC TLS certificate and CA settings.
 - Cluster conformance coverage for signed-token migration lint warnings.
 - `scripts/certify-worker-identity.sh` for signed-token lifecycle certification reports on target hosts.
+- Cluster conformance coverage for worker identity certification report generation.
 - Phase 14 release notes under `docs/releases/phase-14-worker-identity-hardening.md`.
 
 ### Changed

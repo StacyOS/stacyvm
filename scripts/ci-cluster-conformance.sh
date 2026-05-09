@@ -116,6 +116,24 @@ sed \
   "$cluster_config" >"$signed_worker_config"
 go run ./cmd/stacyvm config lint --production --file "$signed_worker_config"
 
+echo "==> Running worker identity certification smoke"
+worker_identity_report="$tmpdir/worker-identity-certification.md"
+scripts/certify-worker-identity.sh worker-a --format markdown --output "$worker_identity_report"
+if [[ ! -s "$worker_identity_report" ]]; then
+  echo "expected worker identity certification report to be written" >&2
+  exit 1
+fi
+if [[ "$(cat "$worker_identity_report")" != *"Worker Identity Certification"* ]]; then
+  cat "$worker_identity_report"
+  echo "expected worker identity certification markdown report" >&2
+  exit 1
+fi
+if grep -q "stacyvm-worker-v1" "$worker_identity_report"; then
+  cat "$worker_identity_report"
+  echo "worker identity certification report must not include token values" >&2
+  exit 1
+fi
+
 echo "==> Linting signed-token worker identity migration warnings"
 mixed_worker_config="$tmpdir/stacyvm.signed-worker-mixed.yaml"
 sed \

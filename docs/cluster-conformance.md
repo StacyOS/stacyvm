@@ -25,6 +25,7 @@ It currently verifies:
 - Worker RPC mTLS completes a real client-authenticated request using generated certificates.
 - Worker lease renewal is guarded by `worker:lease`.
 - A production-aligned cluster config with `auth.worker_tokens` or `auth.worker_signing_key` passes `stacyvm config lint --production`.
+- Worker identity certification smoke produces a Markdown report without token values.
 - Signed-token migration lint warns when shared worker tokens or invalid signing-key rotation state remain configured.
 - Postgres configuration with a valid DSN passes `stacyvm config lint --production`.
 - Live Postgres passes the reusable store contract when `STACYVM_POSTGRES_TEST_DSN` is set.

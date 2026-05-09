@@ -80,6 +80,7 @@ Phase 14 begins the worker identity hardening lane for production multi-worker S
 - Added `scripts/certify-worker-identity.sh` for host-level signed-token lifecycle signoff with text, JSON, or Markdown report output.
 - Updated production readiness notes to reflect signed worker tokens and the remaining issuer/rotation and mTLS work.
 - Added cluster conformance coverage for signed-token migration lint warnings.
+- Added cluster conformance coverage for worker identity certification report generation.
 
 ## Code Areas Changed
 
