@@ -11,6 +11,8 @@ This checkpoint starts the enterprise multi-worker production track after Phase 
 - `database.dsn` config for future Postgres-backed cluster storage.
 - Explicit unsupported-driver errors for Postgres until a Postgres store implementation is linked.
 - Config validation for database driver selection and required Postgres DSN.
+- Reusable store contract test harness wired to SQLite.
+- Cross-store contract coverage for sandbox lifecycle, workers, leases, audits, exec logs, quotas, provider configs, templates, environment builds, artifacts, and registry connections.
 - Phase 13 release notes under `docs/releases/phase-13-cluster-store-and-worker-identity.md`.
 
 ### Changed
