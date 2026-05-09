@@ -5,9 +5,9 @@ Branch: `phase-11-remote-worker-runtime`
 
 ## Summary
 
-Phase 11 turns the Phase 10 worker RPC contract into a real remote-worker runtime path. The first slice adds a worker process, worker-specific authentication, and a heartbeat endpoint that is intentionally separate from regular API/admin keys.
+Phase 11 turns the Phase 10 worker RPC contract into a real remote-worker runtime path. It adds a worker process, worker-specific authentication, worker heartbeat, inbound worker RPC, and control-plane routing for remote spawn, status, destroy, lease renewal, and drain-mode shutdown.
 
-This is still a staging foundation. Remote spawn, destroy, status routing, and lease-token lifecycle mutations remain follow-up slices inside Phase 11.
+This is now suitable for internal two-process staging with the mock provider. It is not yet enterprise multi-worker production: remote exec/files/logs/previews, production-grade worker identity, Postgres-backed lease semantics, and assignment handoff remain future work.
 
 ## What Changed
 
@@ -82,7 +82,15 @@ This is still a staging foundation. Remote spawn, destroy, status routing, and l
 
 - `go test ./internal/config ./internal/api ./internal/worker ./cmd/stacyvm`
 - `go test ./internal/worker ./internal/config ./cmd/stacyvm`
+- `go test ./...`
+- `scripts/check-swagger.sh`
 - `bash -n scripts/smoke-remote-worker.sh`
+- `scripts/smoke-remote-worker.sh /private/tmp/stacyvm-phase11-smoke`
+- `npm run build` in `web`
+- `npm run build` in `sdk/js`
+- `PYTHONPYCACHEPREFIX=/private/tmp/stacyvm-pycache python3 -m compileall stacyvm` in `sdk/python`
+- `scripts/ci-upgrade-migration.sh`
+- `scripts/ci-public-release-sanity.sh`
 
 ## Remaining Phase 11 Direction
 
