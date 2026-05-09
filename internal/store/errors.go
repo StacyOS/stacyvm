@@ -29,5 +29,6 @@ func IsConstraintError(err error) bool {
 	msg := err.Error()
 	return strings.Contains(msg, "UNIQUE constraint") ||
 		strings.Contains(msg, "constraint failed") ||
-		strings.Contains(msg, "constraint violation")
+		strings.Contains(msg, "constraint violation") ||
+		strings.Contains(msg, "duplicate key value violates unique constraint")
 }

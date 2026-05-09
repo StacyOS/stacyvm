@@ -99,18 +99,19 @@ YAML
 echo "==> Linting production-aligned cluster config"
 go run ./cmd/stacyvm config lint --production --file "$cluster_config"
 
-echo "==> Verifying Postgres cluster store remains explicitly gated"
+echo "==> Linting production-aligned Postgres cluster config"
 postgres_config="$tmpdir/stacyvm.postgres.yaml"
 sed \
   -e 's/driver: "sqlite"/driver: "postgres"/' \
   -e 's|path: "'"$tmpdir"'/stacyvm-cluster.db"|dsn: "postgres://stacyvm:stacyvm@127.0.0.1:5432/stacyvm?sslmode=disable"|' \
   "$cluster_config" >"$postgres_config"
+go run ./cmd/stacyvm config lint --production --file "$postgres_config"
 
-go run ./cmd/stacyvm config lint --production --file "$postgres_config" >"$tmpdir/postgres-lint.out" 2>&1
-if ! grep -qi "does not link a postgres store driver" "$tmpdir/postgres-lint.out"; then
-	echo "expected Postgres driver gating message" >&2
-	cat "$tmpdir/postgres-lint.out" >&2
-	exit 1
+if [[ -n "${STACYVM_POSTGRES_TEST_DSN:-}" ]]; then
+  echo "==> Running live Postgres store contract"
+  go test ./internal/store -run TestPostgresStoreContract -count=1
+else
+  echo "==> Skipping live Postgres store contract; STACYVM_POSTGRES_TEST_DSN is not set"
 fi
 
 echo "==> Cluster conformance CI checks passed"

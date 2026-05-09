@@ -17,14 +17,15 @@ It currently verifies:
 - Worker-specific credentials override the shared staging token.
 - Worker lease renewal is guarded by `worker:lease`.
 - A production-aligned cluster config with `auth.worker_tokens` passes `stacyvm config lint --production`.
-- Postgres configuration remains explicitly gated until a Postgres store driver is linked.
+- Postgres configuration with a valid DSN passes `stacyvm config lint --production`.
+- Live Postgres passes the reusable store contract when `STACYVM_POSTGRES_TEST_DSN` is set.
 
 ## Store Matrix
 
 | Store | Status | Required Checks |
 |---|---|---|
 | SQLite | Supported for single-node and internal staging | `TestSQLiteStoreContract`, migration tests, backup/restore tests |
-| Postgres | Migration foundation present, driver pending | Postgres migration alignment tests, store contract harness, migration upgrade/downgrade rehearsal, lease takeover race tests, startup reconciliation with multiple workers |
+| Postgres | Contract-backed cluster store path | `TestPostgresStoreContract`, Postgres migration alignment tests, migration upgrade/downgrade rehearsal, lease takeover race tests, startup reconciliation with multiple workers |
 
 Postgres must not be marked production-ready until it runs the same store contract suite as SQLite and adds database-level lease semantics that are safe across multiple control-plane or worker processes.
 
@@ -67,13 +68,11 @@ Phase 13 has completed:
 - Driver-based store selection.
 - SQLite store contract coverage.
 - Postgres-native migration definitions.
+- Postgres store driver and live contract path.
 - Per-worker token authentication.
 - Cluster conformance CI scaffolding.
 
 Remaining cluster-storage work:
 
-- Add a linked Postgres store driver.
-- Add Postgres migrations.
-- Run the existing store contract harness against Postgres.
 - Add Postgres lease race/concurrency tests.
 - Add a real multi-worker conformance environment that runs control plane, worker, and Postgres together.

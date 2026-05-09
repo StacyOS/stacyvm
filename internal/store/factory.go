@@ -31,7 +31,10 @@ func Open(cfg Config) (Store, error) {
 		}
 		return NewSQLiteStore(cfg.Path)
 	case DriverPostgres, "postgresql":
-		return nil, fmt.Errorf("%w: postgres store driver is not linked in this build", ErrUnsupportedDriver)
+		if strings.TrimSpace(cfg.DSN) == "" {
+			return nil, fmt.Errorf("postgres database dsn is required")
+		}
+		return NewPostgresStore(cfg.DSN)
 	default:
 		return nil, fmt.Errorf("%w: %s", ErrUnsupportedDriver, driver)
 	}

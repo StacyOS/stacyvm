@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"errors"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -23,6 +24,48 @@ func TestSQLiteStoreContract(t *testing.T) {
 		t.Cleanup(func() { _ = st.Close() })
 		return st
 	})
+}
+
+func TestPostgresStoreContract(t *testing.T) {
+	dsn := os.Getenv("STACYVM_POSTGRES_TEST_DSN")
+	if dsn == "" {
+		t.Skip("set STACYVM_POSTGRES_TEST_DSN to run Postgres store contract")
+	}
+	runStoreContract(t, "postgres", func(t *testing.T) Store {
+		t.Helper()
+		st, err := Open(Config{Driver: DriverPostgres, DSN: dsn})
+		if err != nil {
+			t.Fatalf("open postgres store: %v", err)
+		}
+		if pg, ok := st.(*PostgresStore); ok {
+			resetPostgresContractStore(t, pg)
+		}
+		t.Cleanup(func() { _ = st.Close() })
+		return st
+	})
+}
+
+func resetPostgresContractStore(t *testing.T, st *PostgresStore) {
+	t.Helper()
+	_, err := st.db.Exec(`
+TRUNCATE
+	sandboxes,
+	exec_logs,
+	provider_configs,
+	templates,
+	environment_artifacts,
+	environment_builds,
+	environment_specs,
+	registry_connections,
+	owner_quotas,
+	admin_audit_logs,
+	operation_audit_logs,
+	workers,
+	leases
+RESTART IDENTITY CASCADE`)
+	if err != nil {
+		t.Fatalf("reset postgres contract store: %v", err)
+	}
 }
 
 func runStoreContract(t *testing.T, name string, open storeContractOpenFunc) {
@@ -257,6 +300,24 @@ func contractAuditsAndLogs(t *testing.T, st Store) {
 	ctx := context.Background()
 	now := time.Now().UTC().Add(-time.Minute)
 
+	if err := st.CreateSandbox(ctx, &SandboxRecord{
+		ID:        "sandbox-a",
+		State:     "running",
+		Provider:  "mock",
+		Image:     "alpine:3.20",
+		MemoryMB:  256,
+		VCPUs:     1,
+		Metadata:  `{}`,
+		OwnerID:   "owner-a",
+		VMID:      "vm-a",
+		WorkerID:  "worker-a",
+		CreatedAt: now,
+		ExpiresAt: now.Add(time.Hour),
+		UpdatedAt: now,
+	}); err != nil {
+		t.Fatalf("create sandbox for exec log: %v", err)
+	}
+
 	if err := st.CreateExecLog(ctx, &ExecLogRecord{
 		SandboxID: "sandbox-a",
 		Command:   "echo ok",
@@ -480,6 +541,27 @@ func contractEnvironmentsAndRegistry(t *testing.T, st Store) {
 		t.Fatalf("unexpected specs: %+v", specs)
 	}
 
+	deleteSpec := &EnvironmentSpecRecord{
+		ID:             "spec-delete",
+		OwnerID:        "owner-a",
+		Name:           "delete-me",
+		BaseImage:      "python:3.12-slim",
+		PythonPackages: `[]`,
+		AptPackages:    `[]`,
+		PythonVersion:  "3.12",
+		CreatedAt:      now,
+		UpdatedAt:      now,
+	}
+	if err := st.CreateEnvironmentSpec(ctx, deleteSpec); err != nil {
+		t.Fatalf("create deletable environment spec: %v", err)
+	}
+	if err := st.DeleteEnvironmentSpec(ctx, deleteSpec.ID); err != nil {
+		t.Fatalf("delete environment spec: %v", err)
+	}
+	if _, err := st.GetEnvironmentSpec(ctx, deleteSpec.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("get deleted environment spec error = %v, want ErrNotFound", err)
+	}
+
 	finishedAt := now.Add(time.Minute)
 	build := &EnvironmentBuildRecord{
 		ID:             "build-a",
@@ -578,10 +660,4 @@ func contractEnvironmentsAndRegistry(t *testing.T, st Store) {
 		t.Fatalf("get deleted registry connection error = %v, want ErrNotFound", err)
 	}
 
-	if err := st.DeleteEnvironmentSpec(ctx, spec.ID); err != nil {
-		t.Fatalf("delete environment spec: %v", err)
-	}
-	if _, err := st.GetEnvironmentSpec(ctx, spec.ID); !errors.Is(err, ErrNotFound) {
-		t.Fatalf("get deleted environment spec error = %v, want ErrNotFound", err)
-	}
 }

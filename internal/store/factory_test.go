@@ -1,8 +1,8 @@
 package store
 
 import (
-	"errors"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -19,10 +19,10 @@ func TestOpenDefaultsToSQLite(t *testing.T) {
 	}
 }
 
-func TestOpenPostgresReportsUnsupportedDriver(t *testing.T) {
-	_, err := Open(Config{Driver: DriverPostgres, DSN: "postgres://stacyvm@example/stacyvm"})
-	if !errors.Is(err, ErrUnsupportedDriver) {
-		t.Fatalf("err = %v, want ErrUnsupportedDriver", err)
+func TestOpenPostgresRejectsMissingDSN(t *testing.T) {
+	_, err := Open(Config{Driver: DriverPostgres})
+	if err == nil || !strings.Contains(err.Error(), "postgres database dsn is required") {
+		t.Fatalf("err = %v, want missing postgres dsn error", err)
 	}
 }
 

@@ -64,7 +64,7 @@ func TestLintConfigProductionCatchesUnsafeSettings(t *testing.T) {
 	}
 }
 
-func TestLintDatabaseConfigWarnsForPostgresUntilDriverLinked(t *testing.T) {
+func TestLintDatabaseConfigPassesForPostgresWithDSN(t *testing.T) {
 	cfg := validProductionConfig()
 	cfg.Database = config.DatabaseConfig{
 		Driver: "postgres",
@@ -75,7 +75,7 @@ func TestLintDatabaseConfigWarnsForPostgresUntilDriverLinked(t *testing.T) {
 	if len(checks) != 1 {
 		t.Fatalf("checks = %+v, want one check", checks)
 	}
-	if checks[0].Name != "database.driver" || checks[0].Status != doctorWarn {
+	if checks[0].Name != "database.driver" || checks[0].Status != doctorPass {
 		t.Fatalf("unexpected check: %+v", checks[0])
 	}
 }
