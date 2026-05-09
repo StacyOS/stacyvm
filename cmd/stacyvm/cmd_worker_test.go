@@ -1,6 +1,9 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
+	"os"
 	"testing"
 	"time"
 
@@ -72,6 +75,28 @@ func TestIssueWorkerTokenRejectsInvalidInputs(t *testing.T) {
 				t.Fatal("expected error")
 			}
 		})
+	}
+}
+
+func TestWorkerTokenCommandReadsSigningKeyFile(t *testing.T) {
+	keyPath := writeTestSecret(t, "worker-signing-key-with-at-least-32-bytes\n")
+	cmd := newWorkerTokenCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetArgs([]string{"worker-a", "--signing-key-file", keyPath, "--token-id", "token-id-1", "--format", "json"})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("execute worker token command: %v", err)
+	}
+	var result workerTokenIssueResult
+	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
+		t.Fatalf("decode worker token json: %v", err)
+	}
+	if result.TokenID != "token-id-1" || result.WorkerID != "worker-a" {
+		t.Fatalf("unexpected token result: %+v", result)
+	}
+	if _, ok := middleware.VerifyWorkerToken("worker-signing-key-with-at-least-32-bytes", result.Token, time.Now().UTC()); !ok {
+		t.Fatal("issued token did not verify with signing key from file")
 	}
 }
 
@@ -199,4 +224,64 @@ func TestVerifyWorkerTokenRejectsWrongAudienceAndWorker(t *testing.T) {
 	}); err == nil {
 		t.Fatal("expected wrong worker to fail verification")
 	}
+}
+
+func TestWorkerTokenVerifyCommandReadsSigningKeyFiles(t *testing.T) {
+	now := time.Now().UTC()
+	issued, err := issueWorkerToken(workerTokenIssueOptions{
+		WorkerID:   "worker-a",
+		SigningKey: "old-worker-signing-key-with-at-least-32-bytes",
+		TTL:        "5m",
+		Audience:   middleware.WorkerTokenAudienceRPC,
+		TokenID:    "token-id-1",
+		Now:        func() time.Time { return now },
+	})
+	if err != nil {
+		t.Fatalf("issue worker token: %v", err)
+	}
+	activeKeyPath := writeTestSecret(t, "new-worker-signing-key-with-at-least-32-bytes")
+	oldKeyPath := writeTestSecret(t, "old-worker-signing-key-with-at-least-32-bytes\n")
+	cmd := newWorkerTokenVerifyCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetArgs([]string{
+		issued.Token,
+		"--signing-key-file", activeKeyPath,
+		"--verification-key-file", oldKeyPath,
+		"--worker-id", "worker-a",
+		"--audience", middleware.WorkerTokenAudienceRPC,
+	})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("execute worker token verify command: %v", err)
+	}
+	var result workerTokenInspectResult
+	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
+		t.Fatalf("decode worker token verify json: %v", err)
+	}
+	if !result.SignatureVerified || result.TokenID != "token-id-1" {
+		t.Fatalf("unexpected verify result: %+v", result)
+	}
+}
+
+func TestReadSecretFileRejectsEmptySecret(t *testing.T) {
+	path := writeTestSecret(t, "\n")
+	if _, err := readSecretFile(path); err == nil {
+		t.Fatal("expected empty secret file to fail")
+	}
+}
+
+func writeTestSecret(t *testing.T, value string) string {
+	t.Helper()
+	file, err := os.CreateTemp(t.TempDir(), "secret-*")
+	if err != nil {
+		t.Fatalf("create secret file: %v", err)
+	}
+	if _, err := file.WriteString(value); err != nil {
+		t.Fatalf("write secret file: %v", err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatalf("close secret file: %v", err)
+	}
+	return file.Name()
 }

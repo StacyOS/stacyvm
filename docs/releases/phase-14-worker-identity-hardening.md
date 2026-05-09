@@ -25,6 +25,7 @@ Phase 14 begins the worker identity hardening lane for production multi-worker S
 - Added worker token issuer `--format json`, `--token-id`, and `--not-before` options for incident-response runbooks.
 - Added `stacyvm worker token inspect <token>` to recover unverified signed-token metadata and `jti` values during incident response.
 - Added `stacyvm worker token verify <token>` to validate signed tokens against active and rotation keys, expected worker IDs, expected audiences, and revoked token IDs.
+- Added worker secret file flags for token issuance, token verification, and worker runtime startup so operators can use secret-mounted files instead of command-line or environment secrets.
 - Filtered signed-token scopes so tokens cannot grant user, API, or admin scopes.
 - Added `stacyvm worker token <worker-id>` to issue signed worker tokens from the CLI.
 
@@ -41,6 +42,7 @@ Phase 14 begins the worker identity hardening lane for production multi-worker S
 
 - Added dynamic worker token generation for `stacyvm worker` heartbeat and lease-renewal calls.
 - When no static `--worker-token` or `auth.worker_token` is configured, a worker can derive short-lived signed control-plane tokens from `auth.worker_signing_key`.
+- Workers can read static worker tokens from `--worker-token-file` or signing keys from `--worker-signing-key-file`.
 - Worker RPC servers now accept signed control-plane-to-worker tokens.
 - Control planes can mint short-lived worker RPC tokens from `auth.worker_signing_key` when no shared `auth.worker_token` is configured.
 - Existing static token behavior is unchanged.

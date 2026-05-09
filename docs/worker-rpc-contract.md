@@ -107,12 +107,14 @@ Issued tokens include a `jti` token ID. During an incident, add a compromised to
 Token incident-response runbook:
 
 ```bash
-stacyvm worker token worker-a --ttl 5m --format json
+stacyvm worker token worker-a --signing-key-file /run/secrets/stacyvm-worker-signing-key --ttl 5m --format json
 stacyvm worker token inspect '<signed-worker-token>'
-stacyvm worker token verify '<signed-worker-token>' --worker-id worker-a --audience worker:control-plane
+stacyvm worker token verify '<signed-worker-token>' --signing-key-file /run/secrets/stacyvm-worker-signing-key --worker-id worker-a --audience worker:control-plane
 ```
 
 `stacyvm worker token inspect` decodes token metadata without verifying the signature. Use it to recover `worker_id`, `jti`, `aud`, and expiry metadata from an already-captured token before adding the `jti` value to `auth.worker_revoked_token_ids`; do not treat inspected claims as authenticated identity. `stacyvm worker token verify` validates the signature against `auth.worker_signing_key`, accepts `auth.worker_signing_keys` during rotation, applies optional `--worker-id` and `--audience` expectations, and rejects configured revoked token IDs.
+
+For production services, prefer `--worker-token-file`, `--worker-signing-key-file`, `--signing-key-file`, and `--verification-key-file` with secret-mounted files over passing long-lived worker secrets directly in shell history or environment variables.
 
 No-downtime signing-key rotation uses a two-key window:
 

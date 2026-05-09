@@ -21,6 +21,8 @@ func newWorkerCmd() *cobra.Command {
 	var id string
 	var controlPlaneURL string
 	var token string
+	var tokenFile string
+	var signingKeyFile string
 	var heartbeatInterval string
 	var listenAddr string
 	var previewDomain string
@@ -46,6 +48,22 @@ func newWorkerCmd() *cobra.Command {
 			if token == "" {
 				token = cfg.Auth.WorkerToken
 			}
+			if tokenFile != "" {
+				if cmd.Flags().Changed("worker-token") {
+					return fmt.Errorf("worker token must be set with either --worker-token or --worker-token-file, not both")
+				}
+				token, err = readSecretFile(tokenFile)
+				if err != nil {
+					return fmt.Errorf("worker token file: %w", err)
+				}
+			}
+			signingKey := cfg.Auth.WorkerSigningKey
+			if signingKeyFile != "" {
+				signingKey, err = readSecretFile(signingKeyFile)
+				if err != nil {
+					return fmt.Errorf("worker signing key file: %w", err)
+				}
+			}
 			if heartbeatInterval == "" {
 				heartbeatInterval = cfg.Worker.HeartbeatInterval
 			}
@@ -64,7 +82,7 @@ func newWorkerCmd() *cobra.Command {
 			}
 			logger := newCommandLogger(cfg)
 			registry := buildWorkerRegistry(cfg, logger, previewDomain)
-			tokenFunc := signedWorkerTokenFunc(id, cfg.Auth.WorkerSigningKey)
+			tokenFunc := signedWorkerTokenFunc(id, signingKey)
 			if token != "" {
 				tokenFunc = nil
 			}
@@ -86,7 +104,7 @@ func newWorkerCmd() *cobra.Command {
 				},
 				Registry:        registry,
 				RPCTLS:          workerTLSConfig(cfg.Worker.RPCTLS),
-				SigningKey:      cfg.Auth.WorkerSigningKey,
+				SigningKey:      signingKey,
 				SigningKeys:     cfg.Auth.WorkerSigningKeys,
 				RevokedTokenIDs: cfg.Auth.WorkerRevokedTokenIDs,
 			}
@@ -102,6 +120,8 @@ func newWorkerCmd() *cobra.Command {
 	cmd.Flags().StringVar(&id, "id", "", "worker ID; defaults to worker.id or hostname")
 	cmd.Flags().StringVar(&controlPlaneURL, "control-plane", "", "control plane URL; defaults to worker.control_plane_url")
 	cmd.Flags().StringVar(&token, "worker-token", os.Getenv("STACYVM_AUTH_WORKER_TOKEN"), "worker bearer token; defaults to auth.worker_token")
+	cmd.Flags().StringVar(&tokenFile, "worker-token-file", "", "file containing the worker bearer token")
+	cmd.Flags().StringVar(&signingKeyFile, "worker-signing-key-file", "", "file containing the worker signing key used to derive short-lived signed tokens")
 	cmd.Flags().StringVar(&heartbeatInterval, "heartbeat-interval", "", "worker heartbeat interval")
 	cmd.Flags().StringVar(&listenAddr, "listen", "", "worker RPC listen address; defaults to worker.listen_addr")
 	cmd.Flags().StringVar(&previewDomain, "preview-domain", "", "worker preview domain; defaults to worker.preview_domain or server.preview_domain")
@@ -112,6 +132,7 @@ func newWorkerCmd() *cobra.Command {
 
 func newWorkerTokenCmd() *cobra.Command {
 	var signingKey string
+	var signingKeyFile string
 	var ttl string
 	var scopes []string
 	var audience string
@@ -129,6 +150,15 @@ func newWorkerTokenCmd() *cobra.Command {
 			}
 			if signingKey == "" {
 				signingKey = cfg.Auth.WorkerSigningKey
+			}
+			if signingKeyFile != "" {
+				if cmd.Flags().Changed("signing-key") {
+					return fmt.Errorf("worker signing key must be set with either --signing-key or --signing-key-file, not both")
+				}
+				signingKey, err = readSecretFile(signingKeyFile)
+				if err != nil {
+					return fmt.Errorf("worker signing key file: %w", err)
+				}
 			}
 			result, err := issueWorkerToken(workerTokenIssueOptions{
 				WorkerID:   args[0],
@@ -157,6 +187,7 @@ func newWorkerTokenCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&signingKey, "signing-key", os.Getenv("STACYVM_AUTH_WORKER_SIGNING_KEY"), "worker signing key; defaults to auth.worker_signing_key")
+	cmd.Flags().StringVar(&signingKeyFile, "signing-key-file", "", "file containing the worker signing key")
 	cmd.Flags().StringVar(&ttl, "ttl", "5m", "token lifetime")
 	cmd.Flags().StringVar(&audience, "audience", middleware.WorkerTokenAudienceControlPlane, "token audience: worker:control-plane or worker:rpc")
 	cmd.Flags().StringVar(&tokenID, "token-id", "", "explicit token id for incident-response tracking; generated when empty")
@@ -187,7 +218,9 @@ func newWorkerTokenInspectCmd() *cobra.Command {
 
 func newWorkerTokenVerifyCmd() *cobra.Command {
 	var signingKey string
+	var signingKeyFile string
 	var verificationKeys []string
+	var verificationKeyFiles []string
 	var audience string
 	var workerID string
 	var revokedTokenIDs []string
@@ -202,6 +235,22 @@ func newWorkerTokenVerifyCmd() *cobra.Command {
 			}
 			if signingKey == "" {
 				signingKey = cfg.Auth.WorkerSigningKey
+			}
+			if signingKeyFile != "" {
+				if cmd.Flags().Changed("signing-key") {
+					return fmt.Errorf("worker signing key must be set with either --signing-key or --signing-key-file, not both")
+				}
+				signingKey, err = readSecretFile(signingKeyFile)
+				if err != nil {
+					return fmt.Errorf("worker signing key file: %w", err)
+				}
+			}
+			for _, path := range verificationKeyFiles {
+				key, err := readSecretFile(path)
+				if err != nil {
+					return fmt.Errorf("worker verification key file: %w", err)
+				}
+				verificationKeys = append(verificationKeys, key)
 			}
 			verificationKeys = append(append([]string{}, cfg.Auth.WorkerSigningKeys...), verificationKeys...)
 			revokedTokenIDs = append(append([]string{}, cfg.Auth.WorkerRevokedTokenIDs...), revokedTokenIDs...)
@@ -223,7 +272,9 @@ func newWorkerTokenVerifyCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&signingKey, "signing-key", os.Getenv("STACYVM_AUTH_WORKER_SIGNING_KEY"), "active worker signing key; defaults to auth.worker_signing_key")
+	cmd.Flags().StringVar(&signingKeyFile, "signing-key-file", "", "file containing the active worker signing key")
 	cmd.Flags().StringArrayVar(&verificationKeys, "verification-key", nil, "additional verification key accepted during rotation; repeatable")
+	cmd.Flags().StringArrayVar(&verificationKeyFiles, "verification-key-file", nil, "file containing an additional verification key accepted during rotation; repeatable")
 	cmd.Flags().StringVar(&audience, "audience", "", "expected token audience: worker:control-plane or worker:rpc")
 	cmd.Flags().StringVar(&workerID, "worker-id", "", "expected worker ID")
 	cmd.Flags().StringArrayVar(&revokedTokenIDs, "revoked-token-id", nil, "revoked token ID to reject; repeatable")
@@ -414,6 +465,22 @@ func cleanStrings(values []string) []string {
 		}
 	}
 	return clean
+}
+
+func readSecretFile(path string) (string, error) {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return "", fmt.Errorf("path is required")
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return "", err
+	}
+	secret := strings.TrimSpace(string(data))
+	if secret == "" {
+		return "", fmt.Errorf("secret file is empty")
+	}
+	return secret, nil
 }
 
 func unixTimeString(sec int64) string {

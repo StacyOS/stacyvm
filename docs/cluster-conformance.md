@@ -92,6 +92,7 @@ Phase 14 starts worker identity hardening on top of that foundation:
 - HMAC-signed worker tokens.
 - Signed-token config lint awareness.
 - Worker runtime token derivation for heartbeat and lease renewal.
+- Secret-file inputs for worker tokens and signing keys.
 - Signed control-plane-to-worker RPC token derivation for remote worker calls.
 - Worker RPC mTLS config, transport wiring, and production lint checks.
 - Worker RPC mTLS conformance using generated CA, server, and client certificates.
