@@ -237,7 +237,7 @@ func (m *Manager) Reconcile(ctx context.Context) error {
 
 		sb := recordToSandbox(rec)
 		sb.State = state
-		sb.PreviewDomain = m.previewDomain
+		m.applyPreviewDomain(ctx, sb)
 		m.mu.Lock()
 		m.sandboxes[rec.ID] = sb
 		m.mu.Unlock()
@@ -533,7 +533,7 @@ func (m *Manager) spawnRemote(ctx context.Context, workerID string, req SpawnReq
 		CreatedAt:     now,
 		ExpiresAt:     expiresAt,
 		Metadata:      req.Metadata,
-		PreviewDomain: m.previewDomain,
+		PreviewDomain: m.previewDomainForWorker(ctx, workerID),
 	}
 	if sb.Provider == "" {
 		sb.Provider = providerName
@@ -2303,12 +2303,34 @@ func (m *Manager) remoteConsoleLog(ctx context.Context, sb *Sandbox, lines int) 
 	return result.Lines, nil
 }
 
+func (m *Manager) applyPreviewDomain(ctx context.Context, sb *Sandbox) {
+	if sb == nil {
+		return
+	}
+	sb.PreviewDomain = m.previewDomainForWorker(ctx, sb.WorkerID)
+}
+
+func (m *Manager) previewDomainForWorker(ctx context.Context, workerID string) string {
+	if strings.TrimSpace(workerID) == "" || workerID == m.workerID {
+		return m.previewDomain
+	}
+	rec, err := m.store.GetWorker(ctx, workerID)
+	if err != nil {
+		return m.previewDomain
+	}
+	if domain := workerPreviewDomain(rec); domain != "" {
+		return domain
+	}
+	return m.previewDomain
+}
+
 func (m *Manager) Get(ctx context.Context, id string) (*Sandbox, error) {
 	m.mu.RLock()
 	sb, ok := m.sandboxes[id]
 	m.mu.RUnlock()
 
 	if ok {
+		m.applyPreviewDomain(ctx, sb)
 		if refreshed, err := m.refreshRemoteSandboxStatus(ctx, sb); err == nil {
 			return refreshed, nil
 		}
@@ -2321,6 +2343,7 @@ func (m *Manager) Get(ctx context.Context, id string) (*Sandbox, error) {
 		return nil, providers.SandboxNotFoundError(id)
 	}
 	sb = recordToSandbox(rec)
+	m.applyPreviewDomain(ctx, sb)
 	if sb.State == StateDestroyed {
 		return nil, providers.SandboxDestroyedError(id)
 	}
@@ -2331,6 +2354,7 @@ func (m *Manager) Get(ctx context.Context, id string) (*Sandbox, error) {
 }
 
 func (m *Manager) refreshRemoteSandboxStatus(ctx context.Context, sb *Sandbox) (*Sandbox, error) {
+	m.applyPreviewDomain(ctx, sb)
 	if sb == nil || strings.TrimSpace(sb.WorkerID) == "" || sb.WorkerID == m.workerID {
 		return sb, nil
 	}
@@ -2390,6 +2414,7 @@ func (m *Manager) List(ctx context.Context) ([]*Sandbox, error) {
 	sandboxes := make([]*Sandbox, len(records))
 	for i, r := range records {
 		sandboxes[i] = recordToSandbox(r)
+		m.applyPreviewDomain(ctx, sandboxes[i])
 	}
 	return sandboxes, nil
 }

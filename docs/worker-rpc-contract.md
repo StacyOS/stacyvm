@@ -119,7 +119,8 @@ Remote workers advertise their control-plane callback endpoint through heartbeat
 {
   "capacity": {
     "max_sandboxes": 10,
-    "rpc_url": "http://worker-a.internal:7430"
+    "rpc_url": "http://worker-a.internal:7430",
+    "preview_domain": "worker-a.preview.example.com"
   }
 }
 ```
@@ -137,6 +138,8 @@ Remote exec stream currently uses `worker.exec_stream`, which buffers stdout/std
 Remote file APIs use the same ownership tuple. The control plane validates/scopes paths, then sends the provider runtime ID and requested file operation to the owning worker. Dedicated remote sandboxes are not treated as pool sandboxes just because `VMID` stores the provider runtime ID; pool workspace scoping remains local-pool only.
 
 Remote console logs use `worker.logs` with the persisted provider runtime ID, so workers read logs from the runtime they actually own instead of the control-plane sandbox ID.
+
+Remote preview metadata uses `capacity.preview_domain` from the owning worker. The control plane returns that domain on remote-owned sandboxes so SDKs and the dashboard build URLs for the worker or cluster ingress that can actually reach the runtime. If a worker does not advertise a preview domain, the control plane falls back to `server.preview_domain`.
 
 `worker.shutdown` is a drain signal. After receiving it, the worker rejects new `worker.spawn` assignments and reports `draining` in future heartbeats, which keeps it out of scheduler placement. Existing sandboxes are not reassigned automatically in Phase 11.
 
@@ -165,4 +168,4 @@ In Postgres terms, lease acquire should be implemented with a unique key on `res
 
 ## Current Limits
 
-Remote placement returns `remote_worker_rpc_unavailable` unless the selected worker advertises `rpc_url` and `auth.worker_token` is configured. True live remote streaming, previews, Postgres-backed cluster storage, and production worker identity are still outside the current transport.
+Remote placement returns `remote_worker_rpc_unavailable` unless the selected worker advertises `rpc_url` and `auth.worker_token` is configured. True live remote streaming, Postgres-backed cluster storage, and production worker identity are still outside the current transport.

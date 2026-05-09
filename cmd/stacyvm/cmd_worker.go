@@ -21,6 +21,7 @@ func newWorkerCmd() *cobra.Command {
 	var token string
 	var heartbeatInterval string
 	var listenAddr string
+	var previewDomain string
 	var once bool
 	cmd := &cobra.Command{
 		Use:   "worker",
@@ -49,12 +50,18 @@ func newWorkerCmd() *cobra.Command {
 			if listenAddr == "" {
 				listenAddr = cfg.Worker.ListenAddr
 			}
+			if previewDomain == "" {
+				previewDomain = cfg.Worker.PreviewDomain
+			}
+			if previewDomain == "" {
+				previewDomain = cfg.Server.PreviewDomain
+			}
 			interval, err := time.ParseDuration(heartbeatInterval)
 			if err != nil {
 				return fmt.Errorf("worker heartbeat interval: %w", err)
 			}
-			registry := buildWorkerRegistry(cfg)
 			logger := newCommandLogger(cfg)
+			registry := buildWorkerRegistry(cfg, logger, previewDomain)
 			rt := worker.Runtime{
 				Client: worker.Client{
 					BaseURL:  strings.TrimRight(controlPlaneURL, "/"),
@@ -68,6 +75,7 @@ func newWorkerCmd() *cobra.Command {
 				Capacity: map[string]interface{}{
 					"max_sandboxes":           cfg.Defaults.MaxSandboxes,
 					"max_sandboxes_per_owner": cfg.Defaults.MaxSandboxesPerOwner,
+					"preview_domain":          previewDomain,
 				},
 				Registry: registry,
 			}
@@ -85,6 +93,7 @@ func newWorkerCmd() *cobra.Command {
 	cmd.Flags().StringVar(&token, "worker-token", os.Getenv("STACYVM_AUTH_WORKER_TOKEN"), "worker bearer token; defaults to auth.worker_token")
 	cmd.Flags().StringVar(&heartbeatInterval, "heartbeat-interval", "", "worker heartbeat interval")
 	cmd.Flags().StringVar(&listenAddr, "listen", "", "worker RPC listen address; defaults to worker.listen_addr")
+	cmd.Flags().StringVar(&previewDomain, "preview-domain", "", "worker preview domain; defaults to worker.preview_domain or server.preview_domain")
 	cmd.Flags().BoolVar(&once, "once", false, "send one heartbeat and exit")
 	return cmd
 }
@@ -125,10 +134,39 @@ func enabledProviderNames(cfg *config.Config) []string {
 	return providers
 }
 
-func buildWorkerRegistry(cfg *config.Config) *providers.Registry {
+func buildWorkerRegistry(cfg *config.Config, logger zerolog.Logger, previewDomain string) *providers.Registry {
 	registry := providers.NewRegistry()
 	if cfg.Providers.Mock.Enabled {
 		registry.Register(providers.NewMockProvider())
+	}
+	if cfg.Providers.Docker.Enabled {
+		docker, err := providers.NewDockerProvider(providers.DockerProviderConfig{
+			Socket:         cfg.Providers.Docker.Socket,
+			Runtime:        cfg.Providers.Docker.Runtime,
+			DefaultImage:   cfg.Providers.Docker.DefaultImage,
+			NetworkMode:    cfg.Providers.Docker.NetworkMode,
+			SeccompProfile: cfg.Providers.Docker.SeccompProfile,
+			ReadOnlyRootfs: cfg.Providers.Docker.ReadOnlyRootfs,
+			Memory:         cfg.Providers.Docker.Memory,
+			CPUs:           cfg.Providers.Docker.CPUs,
+			PidsLimit:      cfg.Providers.Docker.PidsLimit,
+			User:           cfg.Providers.Docker.User,
+			DroppedCaps:    cfg.Providers.Docker.DroppedCaps,
+			AddedCaps:      cfg.Providers.Docker.AddedCaps,
+			Tmpfs:          cfg.Providers.Docker.Tmpfs,
+			PoolSecurity: providers.PoolSecurityProviderConfig{
+				PerUserUID:           cfg.Providers.Docker.PoolSecurity.PerUserUID,
+				PIDNamespace:         cfg.Providers.Docker.PoolSecurity.PIDNamespace,
+				WorkspacePermissions: cfg.Providers.Docker.PoolSecurity.WorkspacePermissions,
+				HidePID:              cfg.Providers.Docker.PoolSecurity.HidePID,
+			},
+			PreviewDomain: previewDomain,
+		}, logger)
+		if err != nil {
+			logger.Error().Err(err).Msg("failed to create worker docker provider")
+		} else {
+			registry.Register(docker)
+		}
 	}
 	if len(registry.List()) > 0 {
 		if err := registry.SetDefault(cfg.Providers.Default); err != nil {

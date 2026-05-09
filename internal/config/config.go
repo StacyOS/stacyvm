@@ -47,6 +47,7 @@ type WorkerConfig struct {
 	ID                string `mapstructure:"id"`
 	ControlPlaneURL   string `mapstructure:"control_plane_url"`
 	ListenAddr        string `mapstructure:"listen_addr"`
+	PreviewDomain     string `mapstructure:"preview_domain"`
 	HeartbeatInterval string `mapstructure:"heartbeat_interval"`
 	ShutdownTimeout   string `mapstructure:"shutdown_timeout"`
 }
@@ -177,6 +178,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("worker.id", "")
 	v.SetDefault("worker.control_plane_url", "http://localhost:7423")
 	v.SetDefault("worker.listen_addr", "")
+	v.SetDefault("worker.preview_domain", "")
 	v.SetDefault("worker.heartbeat_interval", "30s")
 	v.SetDefault("worker.shutdown_timeout", "10s")
 

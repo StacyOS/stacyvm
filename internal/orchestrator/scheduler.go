@@ -18,8 +18,9 @@ type workerPlacement struct {
 }
 
 type workerCapacity struct {
-	MaxSandboxes int    `json:"max_sandboxes"`
-	RPCURL       string `json:"rpc_url"`
+	MaxSandboxes  int    `json:"max_sandboxes"`
+	RPCURL        string `json:"rpc_url"`
+	PreviewDomain string `json:"preview_domain"`
 }
 
 func (m *Manager) evaluateWorkerPlacement(ctx context.Context, provider string, sandboxes []*store.SandboxRecord) workerPlacement {
@@ -99,6 +100,10 @@ func workerMaxSandboxes(worker *store.WorkerRecord) int {
 
 func workerRPCURL(worker *store.WorkerRecord) string {
 	return strings.TrimSpace(workerCapacityFromRecord(worker).RPCURL)
+}
+
+func workerPreviewDomain(worker *store.WorkerRecord) string {
+	return strings.TrimSpace(workerCapacityFromRecord(worker).PreviewDomain)
 }
 
 func workerCapacityFromRecord(worker *store.WorkerRecord) workerCapacity {

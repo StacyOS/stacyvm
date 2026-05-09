@@ -54,6 +54,7 @@ worker:
   id: "worker-a"
   control_plane_url: "http://127.0.0.1:7423"
   listen_addr: "127.0.0.1:7430"
+  preview_domain: "localhost"
   heartbeat_interval: "2s"
 
 providers:
@@ -105,6 +106,7 @@ Expected response fields:
 ```json
 {
   "worker_id": "worker-a",
+  "preview_domain": "localhost",
   "state": "running"
 }
 ```
@@ -180,7 +182,7 @@ The script starts both processes, waits for worker registration, spawns a mock s
 - Remote streaming exec is routed through buffered worker RPC responses, not a true live stream transport yet.
 - Remote file APIs are routed to remote workers.
 - Remote logs are routed to remote workers.
-- Remote previews are not routed to remote workers yet.
+- Remote preview URL metadata is routed from worker heartbeat capacity. The actual preview ingress still depends on the worker/provider ingress setup, such as Docker plus Traefik on the worker host.
 - Worker auth is a shared token suitable for staging; production enterprise mode should move to signed worker identity or mTLS.
 - SQLite remains a staging/single-node store. Enterprise multi-worker mode still needs Postgres-grade lease semantics.
 - Worker shutdown enters drain mode and rejects new spawns; full assignment handoff to another worker is still pending.

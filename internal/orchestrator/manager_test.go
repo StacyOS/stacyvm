@@ -140,8 +140,9 @@ func TestManager_RemoteSpawnUsesWorkerRPC(t *testing.T) {
 	})
 	providersJSON, _ := json.Marshal([]string{"mock"})
 	capacityJSON, _ := json.Marshal(map[string]interface{}{
-		"max_sandboxes": 10,
-		"rpc_url":       server.URL,
+		"max_sandboxes":  10,
+		"rpc_url":        server.URL,
+		"preview_domain": "worker-preview.localhost",
 	})
 	now := time.Now().UTC()
 	if err := m.store.SaveWorker(context.Background(), &store.WorkerRecord{
@@ -163,6 +164,9 @@ func TestManager_RemoteSpawnUsesWorkerRPC(t *testing.T) {
 	if sb.WorkerID != "worker-remote" {
 		t.Fatalf("worker id = %q, want worker-remote", sb.WorkerID)
 	}
+	if sb.PreviewDomain != "worker-preview.localhost" {
+		t.Fatalf("preview domain = %q, want worker-preview.localhost", sb.PreviewDomain)
+	}
 	if sb.VMID == "" {
 		t.Fatal("expected remote runtime id in VMID")
 	}
@@ -175,6 +179,20 @@ func TestManager_RemoteSpawnUsesWorkerRPC(t *testing.T) {
 	}
 	if rec.WorkerID != "worker-remote" || rec.VMID != sb.VMID {
 		t.Fatalf("unexpected record ownership: %+v", rec)
+	}
+	got, err := m.Get(context.Background(), sb.ID)
+	if err != nil {
+		t.Fatalf("get sandbox: %v", err)
+	}
+	if got.PreviewDomain != "worker-preview.localhost" {
+		t.Fatalf("get preview domain = %q, want worker-preview.localhost", got.PreviewDomain)
+	}
+	listed, err := m.List(context.Background())
+	if err != nil {
+		t.Fatalf("list sandboxes: %v", err)
+	}
+	if len(listed) != 1 || listed[0].PreviewDomain != "worker-preview.localhost" {
+		t.Fatalf("listed preview domain = %+v, want worker-preview.localhost", listed)
 	}
 	lease, err := m.store.GetLease(context.Background(), sb.ID)
 	if err != nil {
