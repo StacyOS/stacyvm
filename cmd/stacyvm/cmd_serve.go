@@ -226,6 +226,7 @@ func runServe() error {
 		AdminAPIKey:           cfg.Auth.AdminAPIKey,
 		AdminFallbackDisabled: !cfg.Auth.AdminFallbackEnabled,
 		AdminAuditRetention:   adminAuditRetention,
+		WorkerToken:           cfg.Auth.WorkerToken,
 		Version:               version,
 		RateLimit: middleware.RateLimitConfig{
 			Enabled:           cfg.RateLimit.Enabled,

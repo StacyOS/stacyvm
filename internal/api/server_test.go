@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -76,6 +77,56 @@ func setupTestServerWithStore(t *testing.T, cfg ServerConfig) (*Server, *store.S
 	pool := orchestrator.NewPoolManager(manager, templates, zerolog.Nop())
 
 	return NewServer(cfg, registry, manager, events, templates, pool, st, noopBuildStarter{}, zerolog.Nop()), st
+}
+
+func TestWorkerHeartbeatUsesWorkerTokenNotAPIKey(t *testing.T) {
+	srv, st := setupTestServerWithStore(t, ServerConfig{
+		APIKey:      "client-key",
+		AdminAPIKey: "admin-key",
+		WorkerToken: "worker-secret",
+		Version:     "test",
+	})
+	body := []byte(`{"hostname":"worker-host","status":"online","providers":["mock"],"capabilities":["heartbeat"],"capacity":{"max_sandboxes":1}}`)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/worker/worker-a/heartbeat", bytes.NewReader(body))
+	req.Header.Set("X-Worker-ID", "worker-a")
+	req.Header.Set("X-Worker-Token", "worker-secret")
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	rec, err := st.GetWorker(context.Background(), "worker-a")
+	if err != nil {
+		t.Fatalf("get worker: %v", err)
+	}
+	if rec.Hostname != "worker-host" {
+		t.Fatalf("hostname = %q, want worker-host", rec.Hostname)
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/worker/worker-b/heartbeat", bytes.NewReader(body))
+	req.Header.Set("X-API-Key", "client-key")
+	w = httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("api key status = %d, want %d", w.Code, http.StatusUnauthorized)
+	}
+}
+
+func TestWorkerHeartbeatRejectsWorkerIDMismatch(t *testing.T) {
+	srv := setupTestServer(t, ServerConfig{
+		WorkerToken: "worker-secret",
+		Version:     "test",
+	})
+	body := []byte(`{"hostname":"worker-host"}`)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/worker/worker-a/heartbeat", bytes.NewReader(body))
+	req.Header.Set("X-Worker-ID", "worker-b")
+	req.Header.Set("X-Worker-Token", "worker-secret")
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d: %s", w.Code, http.StatusForbidden, w.Body.String())
+	}
 }
 
 func TestAdminRoutesRequireAdminAPIKeyWhenConfigured(t *testing.T) {

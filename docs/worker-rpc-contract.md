@@ -1,6 +1,8 @@
 # Worker RPC Contract
 
-Phase 10 defines the control-plane to worker contract without committing to a network transport. The current implementation keeps execution local, but the data model, placement, leases, and message shapes are now explicit enough for a future worker service.
+Phase 10 defined the control-plane to worker contract. Phase 11 starts wiring that contract into a real worker runtime: `stacyvm worker` can authenticate to the control plane and submit heartbeat state through a worker-only HTTP endpoint.
+
+Execution is still local for sandbox lifecycle mutations. Remote spawn, destroy, status, and lease renewal remain gated until the full worker RPC transport is implemented.
 
 ## Contract Package
 
@@ -54,7 +56,7 @@ Recommended transport headers for the future network worker:
 | Header | Purpose |
 |---|---|
 | `X-Worker-ID` | Stable worker ID that must match the token subject. |
-| `Authorization: Bearer <token>` | Worker token signed by the control plane or trusted issuer. |
+| `X-Worker-Token` or `Authorization: Bearer <token>` | Worker token signed by the control plane or trusted issuer. |
 | `X-Request-ID` | Request correlation across control plane and worker logs. |
 
 Validated worker tokens should produce `workerproto.AuthClaims`:
@@ -73,6 +75,14 @@ Initial scopes:
 
 Workers must not accept user API keys or admin API keys for worker RPC. Control-plane admin access and worker execution access are separate trust boundaries.
 
+Current Phase 11 heartbeat endpoint:
+
+```text
+POST /api/v1/worker/{workerID}/heartbeat
+```
+
+The endpoint requires `X-Worker-ID` plus `X-Worker-Token` and rejects requests where the authenticated worker ID differs from the `{workerID}` path.
+
 ## Cluster Store Semantics
 
 SQLite remains suitable for single-node and local development. Enterprise multi-worker mode should use Postgres or another store with equivalent guarantees.
@@ -88,6 +98,6 @@ Required lease guarantees:
 
 In Postgres terms, lease acquire should be implemented with a unique key on `resource_id`, transactional upsert semantics, and row-level contention safety. Clock skew must be bounded because expiry is time-based.
 
-## Phase 10 Limits
+## Current Limits
 
-Phase 10 does not ship a network worker daemon. Remote placement intentionally returns `remote_worker_rpc_unavailable` until transport and execution are implemented. This prevents StacyVM from silently pretending a remote worker can run work before the trust boundary and lease enforcement are wired end to end.
+Remote placement intentionally returns `remote_worker_rpc_unavailable` until remote spawn and lifecycle RPC are implemented. This prevents StacyVM from silently pretending a remote worker can run work before the trust boundary and lease enforcement are wired end to end.

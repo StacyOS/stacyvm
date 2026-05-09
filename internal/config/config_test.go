@@ -108,3 +108,32 @@ pool:
 		t.Fatalf("admin audit retention = %q, want 2160h", cfg.Auth.AdminAuditRetention)
 	}
 }
+
+func TestLoadAcceptsWorkerRuntimeConfig(t *testing.T) {
+	t.Chdir(t.TempDir())
+	if err := os.WriteFile("stacyvm.yaml", []byte(`
+worker:
+  id: "worker-a"
+  control_plane_url: "http://control-plane:7423"
+  heartbeat_interval: "5s"
+  shutdown_timeout: "15s"
+auth:
+  worker_token: "worker-secret"
+`), 0644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.Worker.ID != "worker-a" {
+		t.Fatalf("worker id = %q, want worker-a", cfg.Worker.ID)
+	}
+	if cfg.Worker.ControlPlaneURL != "http://control-plane:7423" {
+		t.Fatalf("control plane URL = %q", cfg.Worker.ControlPlaneURL)
+	}
+	if cfg.Auth.WorkerToken != "worker-secret" {
+		t.Fatalf("worker token = %q, want worker-secret", cfg.Auth.WorkerToken)
+	}
+}

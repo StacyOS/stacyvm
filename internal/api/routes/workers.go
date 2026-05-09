@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/StacyOs/stacyvm/internal/api/middleware"
 	"github.com/StacyOs/stacyvm/internal/httputil"
 	"github.com/StacyOs/stacyvm/internal/store"
 	"github.com/go-chi/chi/v5"
@@ -131,6 +132,10 @@ func (w *WorkerRoutes) Heartbeat(rw http.ResponseWriter, r *http.Request) {
 	workerID := strings.TrimSpace(chi.URLParam(r, "workerID"))
 	if workerID == "" {
 		httputil.WriteError(rw, http.StatusBadRequest, httputil.CodeBadRequest, "worker id is required")
+		return
+	}
+	if identity := middleware.AuthIdentityFromContext(r.Context()); identity.Role == middleware.AuthRoleWorker && identity.WorkerID != workerID {
+		httputil.WriteError(rw, http.StatusForbidden, httputil.CodeUnauth, "worker credential does not match requested worker")
 		return
 	}
 	var req WorkerHeartbeatRequest

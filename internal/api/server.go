@@ -27,6 +27,7 @@ type ServerConfig struct {
 	AdminAPIKey           string
 	AdminFallbackDisabled bool
 	AdminAuditRetention   time.Duration
+	WorkerToken           string
 	Version               string
 	RateLimit             middleware.RateLimitConfig
 	WorkerHeartbeat       time.Duration
@@ -69,6 +70,13 @@ func NewServer(cfg ServerConfig, registry *providers.Registry, manager *orchestr
 		httpSwagger.URL("/swagger/doc.json"),
 	))
 
+	workerRoutes := routes.NewWorkerRoutes(st)
+	r.Route("/api/v1/worker", func(r chi.Router) {
+		r.Use(middleware.WorkerAuth(cfg.WorkerToken))
+		r.Use(middleware.RequireScope(middleware.ScopeWorkerHeartbeat))
+		r.Post("/{workerID}/heartbeat", workerRoutes.Heartbeat)
+	})
+
 	// API routes — with auth and CORS
 	r.Group(func(r chi.Router) {
 		if cfg.APIKey != "" || cfg.AdminAPIKey != "" {
@@ -104,7 +112,6 @@ func NewServer(cfg ServerConfig, registry *providers.Registry, manager *orchestr
 		environmentRoutes := routes.NewEnvironmentRoutes(st, envBuild)
 		quotaRoutes := routes.NewQuotaRoutes(manager)
 		adminAuditRoutes := routes.NewAdminAuditRoutes(st)
-		workerRoutes := routes.NewWorkerRoutes(st)
 		r.Route("/api/v1", func(r chi.Router) {
 			r.Mount("/sandboxes", sandboxRoutes.Routes())
 			r.Mount("/providers", providerRoutes.Routes())

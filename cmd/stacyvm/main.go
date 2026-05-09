@@ -26,6 +26,7 @@ func main() {
 
 	root.AddCommand(
 		newServeCmd(),
+		newWorkerCmd(),
 		newSpawnCmd(),
 		newExecCmd(),
 		newKillCmd(),

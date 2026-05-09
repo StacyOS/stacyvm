@@ -426,6 +426,7 @@ Exec requests default to backwards-compatible shell mode. Set `mode: "argv"` wit
 | `GET` | `/quotas/{ownerID}/usage` | Owner usage against effective quota |
 | `GET` | `/workers` | List registered workers and heartbeat state |
 | `GET` | `/workers/{workerID}` | Get one worker registry record |
+| `POST` | `/worker/{workerID}/heartbeat` | Remote worker heartbeat with worker token |
 | `GET` | `/pool/status` | Pool VM and user counts |
 | `GET` | `/snapshots` | Available VM snapshots |
 | `GET` | `/health` | Health check |
@@ -435,7 +436,7 @@ Exec requests default to backwards-compatible shell mode. Set `mode: "argv"` wit
 | `GET` | `/metrics/prometheus` | Prometheus-compatible metrics |
 | `GET` | `/events` | Server-sent events stream |
 
-Admin aliases for providers, quotas, workers, diagnostics, and metrics are available under `/admin/*` and can be protected with `auth.admin_api_key`. Worker heartbeat and registry deletion are admin-only operations under `/admin/workers/*`.
+Admin aliases for providers, quotas, workers, diagnostics, and metrics are available under `/admin/*` and can be protected with `auth.admin_api_key`. Worker registry deletion remains admin-only under `/admin/workers/*`; remote worker heartbeat uses the worker-only `/worker/{workerID}/heartbeat` endpoint.
 For the operator dashboard, quota workflows, diagnostics, and persisted admin audit history, see [docs/admin-control-plane.md](docs/admin-control-plane.md).
 
 Full schemas, request/response examples, and error codes: **[docs/api.md](docs/api.md)**.
@@ -447,6 +448,7 @@ OpenAPI spec: [docs/swagger.yaml](docs/swagger.yaml).
 
 ```bash
 stacyvm serve                                  # start the API server
+stacyvm worker --once                          # send one remote-worker heartbeat
 stacyvm spawn --image python:3.12 --ttl 1h     # spawn
 stacyvm exec sb-a1b2c3d4 -- python3 app.py     # run argv mode in a sandbox
 stacyvm exec sb-a1b2c3d4 --shell -- "echo $HOME && pwd"
@@ -475,6 +477,12 @@ server:
   host: "0.0.0.0"
   port: 7423
   preview_domain: "localhost"   # used to build live-preview URLs
+
+worker:
+  id: ""                         # defaults to hostname
+  control_plane_url: "http://localhost:7423"
+  heartbeat_interval: "30s"
+  shutdown_timeout: "10s"
 
 providers:
   default: "docker"
@@ -534,6 +542,7 @@ auth:
   enabled: false
   api_key: ""
   admin_api_key: ""       # optional separate key for /api/v1/admin/*
+  worker_token: ""         # required for stacyvm worker heartbeat
   admin_fallback_enabled: true  # false requires admin_api_key for admin routes
   admin_audit_retention: "0s"  # 0s disables native audit pruning
 

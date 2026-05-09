@@ -13,15 +13,18 @@ const (
 	AuthRoleAnonymous AuthRole = "anonymous"
 	AuthRoleAPI       AuthRole = "api"
 	AuthRoleAdmin     AuthRole = "admin"
+	AuthRoleWorker    AuthRole = "worker"
 
-	ScopeAPI   = "api:*"
-	ScopeAdmin = "admin:*"
+	ScopeAPI             = "api:*"
+	ScopeAdmin           = "admin:*"
+	ScopeWorkerHeartbeat = "worker:heartbeat"
 )
 
 type AuthIdentity struct {
-	Role   AuthRole
-	Header string
-	Scopes []string
+	Role     AuthRole
+	Header   string
+	WorkerID string
+	Scopes   []string
 }
 
 type authIdentityContextKey struct{}
@@ -88,6 +91,47 @@ func AdminAuth(adminAPIKey, fallbackAPIKey string, fallbackEnabled bool) func(ht
 			}
 
 			r = r.WithContext(WithAuthIdentity(r.Context(), identity))
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func WorkerAuth(workerToken string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if workerToken == "" {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusServiceUnavailable)
+				json.NewEncoder(w).Encode(map[string]string{
+					"code":    "UNAVAILABLE",
+					"message": "worker token is not configured",
+				})
+				return
+			}
+			workerID := r.Header.Get("X-Worker-ID")
+			token := r.Header.Get("X-Worker-Token")
+			if token == "" {
+				const prefix = "Bearer "
+				authz := r.Header.Get("Authorization")
+				if len(authz) > len(prefix) && authz[:len(prefix)] == prefix {
+					token = authz[len(prefix):]
+				}
+			}
+			if workerID == "" || subtle.ConstantTimeCompare([]byte(token), []byte(workerToken)) != 1 {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusUnauthorized)
+				json.NewEncoder(w).Encode(map[string]string{
+					"code":    "UNAUTHORIZED",
+					"message": "invalid or missing worker credentials",
+				})
+				return
+			}
+			r = r.WithContext(WithAuthIdentity(r.Context(), AuthIdentity{
+				Role:     AuthRoleWorker,
+				Header:   "X-Worker-Token",
+				WorkerID: workerID,
+				Scopes:   []string{ScopeWorkerHeartbeat},
+			}))
 			next.ServeHTTP(w, r)
 		})
 	}
@@ -166,6 +210,8 @@ func scopesForRole(role AuthRole) []string {
 		return []string{ScopeAPI, ScopeAdmin}
 	case AuthRoleAPI:
 		return []string{ScopeAPI}
+	case AuthRoleWorker:
+		return []string{ScopeWorkerHeartbeat}
 	default:
 		return nil
 	}

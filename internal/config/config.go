@@ -13,6 +13,7 @@ import (
 
 type Config struct {
 	Server    ServerConfig    `mapstructure:"server"`
+	Worker    WorkerConfig    `mapstructure:"worker"`
 	Providers ProvidersConfig `mapstructure:"providers"`
 	Defaults  DefaultsConfig  `mapstructure:"defaults"`
 	Auth      AuthConfig      `mapstructure:"auth"`
@@ -40,6 +41,13 @@ type ServerConfig struct {
 
 func (s ServerConfig) Addr() string {
 	return fmt.Sprintf("%s:%d", s.Host, s.Port)
+}
+
+type WorkerConfig struct {
+	ID                string `mapstructure:"id"`
+	ControlPlaneURL   string `mapstructure:"control_plane_url"`
+	HeartbeatInterval string `mapstructure:"heartbeat_interval"`
+	ShutdownTimeout   string `mapstructure:"shutdown_timeout"`
 }
 
 type ProvidersConfig struct {
@@ -138,6 +146,7 @@ type AuthConfig struct {
 	Enabled              bool   `mapstructure:"enabled"`
 	APIKey               string `mapstructure:"api_key"`
 	AdminAPIKey          string `mapstructure:"admin_api_key"`
+	WorkerToken          string `mapstructure:"worker_token"`
 	AdminFallbackEnabled bool   `mapstructure:"admin_fallback_enabled"`
 	AdminAuditRetention  string `mapstructure:"admin_audit_retention"`
 }
@@ -164,6 +173,10 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("server.host", "0.0.0.0")
 	v.SetDefault("server.port", 7423)
 	v.SetDefault("server.preview_domain", "localhost")
+	v.SetDefault("worker.id", "")
+	v.SetDefault("worker.control_plane_url", "http://localhost:7423")
+	v.SetDefault("worker.heartbeat_interval", "30s")
+	v.SetDefault("worker.shutdown_timeout", "10s")
 
 	v.SetDefault("providers.default", "docker")
 	v.SetDefault("providers.mock.enabled", false)
@@ -229,6 +242,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("auth.enabled", false)
 	v.SetDefault("auth.api_key", "")
 	v.SetDefault("auth.admin_api_key", "")
+	v.SetDefault("auth.worker_token", "")
 	v.SetDefault("auth.admin_fallback_enabled", true)
 	v.SetDefault("auth.admin_audit_retention", "0s")
 
@@ -346,6 +360,8 @@ func (c *Config) Validate() error {
 		"rate_limit.bucket_ttl":           c.RateLimit.BucketTTL,
 		"rate_limit.cleanup_interval":     c.RateLimit.CleanupInterval,
 		"auth.admin_audit_retention":      c.Auth.AdminAuditRetention,
+		"worker.heartbeat_interval":       c.Worker.HeartbeatInterval,
+		"worker.shutdown_timeout":         c.Worker.ShutdownTimeout,
 		"providers.custom.timeout":        c.Providers.Custom.Timeout,
 		"providers.proot.default_timeout": c.Providers.PRoot.DefaultTimeout,
 	}

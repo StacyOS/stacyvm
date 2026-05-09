@@ -634,7 +634,7 @@ POST /api/v1/providers/test
 
 ## Workers
 
-Worker registry endpoints expose the control-plane view of StacyVM workers. In single-node mode the API server registers itself as the `local` worker at startup. Heartbeat and delete operations are admin-only aliases under `/api/v1/admin/workers/*`.
+Worker registry endpoints expose the control-plane view of StacyVM workers. In single-node mode the API server registers itself as the `local` worker at startup. Remote workers heartbeat through `/api/v1/worker/*` using worker credentials. Admins can still manage registry records under `/api/v1/admin/workers/*`.
 
 ### List workers
 
@@ -671,7 +671,14 @@ GET /api/v1/workers/{workerID}
 ### Heartbeat a worker
 
 ```
-POST /api/v1/admin/workers/{workerID}/heartbeat
+POST /api/v1/worker/{workerID}/heartbeat
+```
+
+Required headers:
+
+```text
+X-Worker-ID: worker-a
+X-Worker-Token: <auth.worker_token>
 ```
 
 **Request**:
@@ -686,6 +693,8 @@ POST /api/v1/admin/workers/{workerID}/heartbeat
 ```
 
 **Response** `200 OK`: updated worker object.
+
+Admin heartbeat aliases remain available at `/api/v1/admin/workers/{workerID}/heartbeat` for controlled registry repair and test setup.
 
 ### Delete a worker
 
