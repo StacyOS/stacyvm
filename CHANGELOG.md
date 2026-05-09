@@ -21,6 +21,7 @@ This checkpoint starts hardening remote worker identity for public and enterpris
 - Signed-token audience separation for worker-to-control-plane and control-plane-to-worker RPC calls.
 - Worker scope filtering so signed tokens cannot grant non-worker scopes.
 - Worker runtime token derivation for heartbeat and lease-renewal calls when `auth.worker_signing_key` is configured and no static worker token is provided.
+- Worker token-file reload support so sidecar-issued short-lived worker tokens can rotate without restarting workers.
 - Signed control-plane-to-worker RPC tokens for remote worker calls when no shared `auth.worker_token` is configured.
 - `stacyvm worker token <worker-id>` for issuing signed worker tokens.
 - Config loading and defaults for `auth.worker_signing_key` and `auth.worker_signing_keys`.
@@ -48,6 +49,7 @@ This checkpoint starts hardening remote worker identity for public and enterpris
 - Cluster conformance documentation now treats signed worker tokens as the production-aligned worker identity path.
 - API and worker RPC docs now describe signed worker token behavior, signing-key rotation, and worker RPC mTLS.
 - Threat model and remote-worker staging docs now treat signed worker tokens as implemented Phase 14 identity controls instead of future work.
+- Runtime certification and public support guidance now document reloadable worker token files for external issuer handoff.
 
 ## Phase 13 Cluster Store And Worker Identity - 2026-05-09
 

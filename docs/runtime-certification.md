@@ -28,6 +28,8 @@ scripts/certify-worker-identity.sh worker-a --format markdown --output worker-id
 
 This verifies token issue, inspect, verify, revocation rejection, and rotation-plan generation using secret files. Set `STACYVM_WORKER_SIGNING_KEY_FILE`, `STACYVM_OLD_WORKER_SIGNING_KEY_FILE`, `STACYVM_WORKER_IDENTITY_AUDIENCE`, or `STACYVM_WORKER_IDENTITY_TTL` to point at deployment-specific values.
 
+Workers that receive signed tokens from an external issuer can run with `stacyvm worker --worker-token-file /run/secrets/stacyvm-worker-token`. The worker reloads that file for every heartbeat and lease-renewal request, allowing a sidecar to replace short-lived token files before expiry without a worker restart.
+
 The script exits non-zero when any required check fails. Warnings are included in
 the artifact but do not fail the command. Attach the generated artifact to the
 release checklist, support ticket, or infrastructure change record for the host

@@ -45,6 +45,7 @@ Phase 14 begins the worker identity hardening lane for production multi-worker S
 - Added dynamic worker token generation for `stacyvm worker` heartbeat and lease-renewal calls.
 - When no static `--worker-token` or `auth.worker_token` is configured, a worker can derive short-lived signed control-plane tokens from `auth.worker_signing_key`.
 - Workers can read static worker tokens from `--worker-token-file` or signing keys from `--worker-signing-key-file`.
+- `stacyvm worker --worker-token-file` reloads the token file for each heartbeat and lease-renewal request, so a sidecar or external issuer can rotate short-lived signed tokens without restarting the worker process.
 - Worker RPC servers now accept signed control-plane-to-worker tokens.
 - Control planes can mint short-lived worker RPC tokens from `auth.worker_signing_key` when no shared `auth.worker_token` is configured.
 - Existing static token behavior is unchanged.
@@ -83,6 +84,7 @@ Phase 14 begins the worker identity hardening lane for production multi-worker S
 - Added cluster conformance coverage for signed-token migration lint warnings.
 - Added cluster conformance coverage for worker identity certification report generation.
 - Updated the threat model and remote-worker staging guide so worker impersonation controls and staging guidance reflect the implemented signed-token and mTLS paths.
+- Documented reloadable worker token files as the handoff path for external worker-token issuers.
 
 ## Code Areas Changed
 
@@ -102,6 +104,7 @@ The new signed-token path is additive:
 - Existing `auth.worker_token` deployments continue to work.
 - Existing `auth.worker_tokens.<worker_id>` deployments continue to work.
 - Signed tokens can be introduced gradually by setting `auth.worker_signing_key`.
+- Workers can also consume externally issued short-lived tokens through reloadable `--worker-token-file` secrets.
 - Key rotation can be introduced gradually by adding old keys to `auth.worker_signing_keys`.
 - Worker RPC mTLS is opt-in; local HTTP worker RPC remains available for local development and internal staging.
 

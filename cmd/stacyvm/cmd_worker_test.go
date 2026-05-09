@@ -310,6 +310,30 @@ func TestReadSecretFileRejectsEmptySecret(t *testing.T) {
 	}
 }
 
+func TestFileWorkerTokenFuncReloadsTokenFile(t *testing.T) {
+	path := writeTestSecret(t, "first-token\n")
+	tokenFunc := fileWorkerTokenFunc(path)
+
+	got, err := tokenFunc()
+	if err != nil {
+		t.Fatalf("read first token: %v", err)
+	}
+	if got != "first-token" {
+		t.Fatalf("first token = %q, want first-token", got)
+	}
+
+	if err := os.WriteFile(path, []byte("second-token\n"), 0o600); err != nil {
+		t.Fatalf("rotate token file: %v", err)
+	}
+	got, err = tokenFunc()
+	if err != nil {
+		t.Fatalf("read rotated token: %v", err)
+	}
+	if got != "second-token" {
+		t.Fatalf("rotated token = %q, want second-token", got)
+	}
+}
+
 func writeTestSecret(t *testing.T, value string) string {
 	t.Helper()
 	file, err := os.CreateTemp(t.TempDir(), "secret-*")

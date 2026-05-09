@@ -48,14 +48,13 @@ func newWorkerCmd() *cobra.Command {
 			if token == "" {
 				token = cfg.Auth.WorkerToken
 			}
+			var tokenFunc func() (string, error)
 			if tokenFile != "" {
 				if cmd.Flags().Changed("worker-token") {
 					return fmt.Errorf("worker token must be set with either --worker-token or --worker-token-file, not both")
 				}
-				token, err = readSecretFile(tokenFile)
-				if err != nil {
-					return fmt.Errorf("worker token file: %w", err)
-				}
+				token = ""
+				tokenFunc = fileWorkerTokenFunc(tokenFile)
 			}
 			signingKey := cfg.Auth.WorkerSigningKey
 			if signingKeyFile != "" {
@@ -82,9 +81,11 @@ func newWorkerCmd() *cobra.Command {
 			}
 			logger := newCommandLogger(cfg)
 			registry := buildWorkerRegistry(cfg, logger, previewDomain)
-			tokenFunc := signedWorkerTokenFunc(id, signingKey)
-			if token != "" {
-				tokenFunc = nil
+			if tokenFunc == nil {
+				tokenFunc = signedWorkerTokenFunc(id, signingKey)
+				if token != "" {
+					tokenFunc = nil
+				}
 			}
 			rt := worker.Runtime{
 				Client: worker.Client{
@@ -536,6 +537,16 @@ func readSecretFile(path string) (string, error) {
 		return "", fmt.Errorf("secret file is empty")
 	}
 	return secret, nil
+}
+
+func fileWorkerTokenFunc(path string) func() (string, error) {
+	return func() (string, error) {
+		token, err := readSecretFile(path)
+		if err != nil {
+			return "", fmt.Errorf("worker token file: %w", err)
+		}
+		return token, nil
+	}
 }
 
 func workerTokenRotationPlan(opts workerTokenRotationPlanOptions) (workerTokenRotationPlanResult, error) {

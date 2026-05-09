@@ -115,7 +115,7 @@ stacyvm worker token rotation-plan --new-key-ref /run/secrets/stacyvm-worker-sig
 
 `stacyvm worker token inspect` decodes token metadata without verifying the signature. Use it to recover `worker_id`, `jti`, `aud`, and expiry metadata from an already-captured token before adding the `jti` value to `auth.worker_revoked_token_ids`; do not treat inspected claims as authenticated identity. `stacyvm worker token verify` validates the signature against `auth.worker_signing_key`, accepts `auth.worker_signing_keys` during rotation, applies optional `--worker-id` and `--audience` expectations, and rejects configured revoked token IDs.
 
-For production services, prefer `--worker-token-file`, `--worker-signing-key-file`, `--signing-key-file`, and `--verification-key-file` with secret-mounted files over passing long-lived worker secrets directly in shell history or environment variables.
+For production services, prefer `--worker-token-file`, `--worker-signing-key-file`, `--signing-key-file`, and `--verification-key-file` with secret-mounted files over passing long-lived worker secrets directly in shell history or environment variables. `stacyvm worker --worker-token-file` reloads the token file for each heartbeat and lease-renewal request, so an external issuer or sidecar can rotate short-lived signed worker tokens without restarting the worker process.
 
 `stacyvm worker token rotation-plan` emits a no-secret checklist, config sketch, and validation commands for a two-key rotation window. No-downtime signing-key rotation uses this sequence:
 

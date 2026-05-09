@@ -36,6 +36,7 @@ Before treating a self-serve install as supported, operators should capture:
 - `stacyvm support bundle --output support.json` when opening a support issue.
 - Runtime certification output for gVisor, Kata, Firecracker, or PRoot hosts.
 - Worker identity certification output from `scripts/certify-worker-identity.sh <worker-id> --format markdown --output worker-identity-certification.md` for multi-worker previews.
+- Evidence that externally issued worker token files refresh before expiry when workers rely on `stacyvm worker --worker-token-file` instead of local signing keys.
 
 GitHub bug and production support issue templates ask for this same evidence. Reports without the relevant artifacts may need an extra triage round before maintainers can reproduce or classify the issue.
 
