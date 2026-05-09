@@ -159,6 +159,96 @@ func TestRPCClientExecStream(t *testing.T) {
 	}
 }
 
+func TestRPCClientFileOperations(t *testing.T) {
+	registry := providers.NewRegistry()
+	mock := providers.NewMockProvider()
+	registry.Register(mock)
+	if err := registry.SetDefault("mock"); err != nil {
+		t.Fatalf("set default: %v", err)
+	}
+	runtimeID, err := mock.Spawn(context.Background(), providers.SpawnOptions{Image: "alpine:latest"})
+	if err != nil {
+		t.Fatalf("spawn mock: %v", err)
+	}
+	server := httptest.NewServer((&RPCServer{
+		WorkerID: "worker-a",
+		Token:    "worker-secret",
+		Registry: registry,
+	}).Handler())
+	defer server.Close()
+
+	client := RPCClient{
+		BaseURL:  server.URL,
+		WorkerID: "worker-a",
+		Token:    "worker-secret",
+	}
+	base := workerproto.FileParams{
+		SandboxID: "sb-control-plane",
+		RuntimeID: runtimeID,
+		Provider:  "mock",
+	}
+	write := base
+	write.Path = "/workspace/client.txt"
+	write.Content = []byte("client file")
+	write.Mode = "0644"
+	if err := client.FileWrite(context.Background(), "req-write", write); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	read := base
+	read.Path = "/workspace/client.txt"
+	readResult, err := client.FileRead(context.Background(), "req-read", read)
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if string(readResult.Content) != "client file" {
+		t.Fatalf("content = %q, want client file", string(readResult.Content))
+	}
+	list := base
+	list.Path = "/workspace"
+	listResult, err := client.FileList(context.Background(), "req-list", list)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(listResult.Files) == 0 {
+		t.Fatal("expected listed files")
+	}
+	stat := base
+	stat.Path = "/workspace/client.txt"
+	statResult, err := client.FileStat(context.Background(), "req-stat", stat)
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if statResult.File.Size != int64(len("client file")) {
+		t.Fatalf("stat size = %d, want %d", statResult.File.Size, len("client file"))
+	}
+	glob := base
+	glob.Pattern = "/workspace/*.txt"
+	globResult, err := client.FileGlob(context.Background(), "req-glob", glob)
+	if err != nil {
+		t.Fatalf("glob: %v", err)
+	}
+	if len(globResult.Matches) != 1 {
+		t.Fatalf("matches = %+v, want one match", globResult.Matches)
+	}
+	move := base
+	move.OldPath = "/workspace/client.txt"
+	move.NewPath = "/workspace/client-moved.txt"
+	if err := client.FileMove(context.Background(), "req-move", move); err != nil {
+		t.Fatalf("move: %v", err)
+	}
+	chmod := base
+	chmod.Path = "/workspace/client-moved.txt"
+	chmod.Mode = "0755"
+	if err := client.FileChmod(context.Background(), "req-chmod", chmod); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+	deleteParams := base
+	deleteParams.Path = "/workspace/client-moved.txt"
+	if err := client.FileDelete(context.Background(), "req-delete", deleteParams); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+}
+
 func TestRPCClientDestroy(t *testing.T) {
 	registry := providers.NewRegistry()
 	mock := providers.NewMockProvider()

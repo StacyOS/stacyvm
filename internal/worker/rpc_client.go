@@ -89,6 +89,114 @@ func (c RPCClient) ExecStream(ctx context.Context, reqID string, params workerpr
 	return result, nil
 }
 
+func (c RPCClient) FileWrite(ctx context.Context, reqID string, params workerproto.FileParams) error {
+	_, err := c.call(ctx, workerproto.Request{
+		ID:       reqID,
+		Method:   workerproto.MethodFileWrite,
+		WorkerID: c.WorkerID,
+		Params:   mustRawMessage(params),
+	})
+	return err
+}
+
+func (c RPCClient) FileRead(ctx context.Context, reqID string, params workerproto.FileParams) (workerproto.FileReadResult, error) {
+	var result workerproto.FileReadResult
+	resp, err := c.call(ctx, workerproto.Request{
+		ID:       reqID,
+		Method:   workerproto.MethodFileRead,
+		WorkerID: c.WorkerID,
+		Params:   mustRawMessage(params),
+	})
+	if err != nil {
+		return result, err
+	}
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		return result, err
+	}
+	return result, nil
+}
+
+func (c RPCClient) FileList(ctx context.Context, reqID string, params workerproto.FileParams) (workerproto.FileListResult, error) {
+	var result workerproto.FileListResult
+	resp, err := c.call(ctx, workerproto.Request{
+		ID:       reqID,
+		Method:   workerproto.MethodFileList,
+		WorkerID: c.WorkerID,
+		Params:   mustRawMessage(params),
+	})
+	if err != nil {
+		return result, err
+	}
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		return result, err
+	}
+	return result, nil
+}
+
+func (c RPCClient) FileDelete(ctx context.Context, reqID string, params workerproto.FileParams) error {
+	_, err := c.call(ctx, workerproto.Request{
+		ID:       reqID,
+		Method:   workerproto.MethodFileDelete,
+		WorkerID: c.WorkerID,
+		Params:   mustRawMessage(params),
+	})
+	return err
+}
+
+func (c RPCClient) FileMove(ctx context.Context, reqID string, params workerproto.FileParams) error {
+	_, err := c.call(ctx, workerproto.Request{
+		ID:       reqID,
+		Method:   workerproto.MethodFileMove,
+		WorkerID: c.WorkerID,
+		Params:   mustRawMessage(params),
+	})
+	return err
+}
+
+func (c RPCClient) FileChmod(ctx context.Context, reqID string, params workerproto.FileParams) error {
+	_, err := c.call(ctx, workerproto.Request{
+		ID:       reqID,
+		Method:   workerproto.MethodFileChmod,
+		WorkerID: c.WorkerID,
+		Params:   mustRawMessage(params),
+	})
+	return err
+}
+
+func (c RPCClient) FileStat(ctx context.Context, reqID string, params workerproto.FileParams) (workerproto.FileStatResult, error) {
+	var result workerproto.FileStatResult
+	resp, err := c.call(ctx, workerproto.Request{
+		ID:       reqID,
+		Method:   workerproto.MethodFileStat,
+		WorkerID: c.WorkerID,
+		Params:   mustRawMessage(params),
+	})
+	if err != nil {
+		return result, err
+	}
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		return result, err
+	}
+	return result, nil
+}
+
+func (c RPCClient) FileGlob(ctx context.Context, reqID string, params workerproto.FileParams) (workerproto.FileGlobResult, error) {
+	var result workerproto.FileGlobResult
+	resp, err := c.call(ctx, workerproto.Request{
+		ID:       reqID,
+		Method:   workerproto.MethodFileGlob,
+		WorkerID: c.WorkerID,
+		Params:   mustRawMessage(params),
+	})
+	if err != nil {
+		return result, err
+	}
+	if err := json.Unmarshal(resp.Result, &result); err != nil {
+		return result, err
+	}
+	return result, nil
+}
+
 func (c RPCClient) Destroy(ctx context.Context, reqID string, lease workerproto.LeaseToken, params workerproto.DestroyParams) error {
 	_, err := c.call(ctx, workerproto.Request{
 		ID:       reqID,

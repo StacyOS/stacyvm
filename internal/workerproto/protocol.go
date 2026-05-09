@@ -20,6 +20,14 @@ const (
 	MethodStatus     = "worker.status"
 	MethodExec       = "worker.exec"
 	MethodExecStream = "worker.exec_stream"
+	MethodFileWrite  = "worker.file_write"
+	MethodFileRead   = "worker.file_read"
+	MethodFileList   = "worker.file_list"
+	MethodFileDelete = "worker.file_delete"
+	MethodFileMove   = "worker.file_move"
+	MethodFileChmod  = "worker.file_chmod"
+	MethodFileStat   = "worker.file_stat"
+	MethodFileGlob   = "worker.file_glob"
 	MethodRenewLease = "worker.renew_lease"
 	MethodShutdown   = "worker.shutdown"
 )
@@ -30,6 +38,7 @@ const (
 	ScopeDestroy   = "worker:destroy"
 	ScopeStatus    = "worker:status"
 	ScopeExec      = "worker:exec"
+	ScopeFiles     = "worker:files"
 	ScopeLease     = "worker:lease"
 )
 
@@ -151,6 +160,53 @@ type ExecStreamResult struct {
 	Chunks    []StreamChunk `json:"chunks"`
 }
 
+// FileParams asks a worker to perform a file operation in an owned runtime.
+type FileParams struct {
+	SandboxID string `json:"sandbox_id"`
+	Provider  string `json:"provider"`
+	RuntimeID string `json:"runtime_id,omitempty"`
+	Path      string `json:"path,omitempty"`
+	Content   []byte `json:"content,omitempty"`
+	Mode      string `json:"mode,omitempty"`
+	Recursive bool   `json:"recursive,omitempty"`
+	OldPath   string `json:"old_path,omitempty"`
+	NewPath   string `json:"new_path,omitempty"`
+	Pattern   string `json:"pattern,omitempty"`
+}
+
+// FileInfo describes one file returned by worker file APIs.
+type FileInfo struct {
+	Path    string `json:"path"`
+	Size    int64  `json:"size"`
+	Mode    string `json:"mode"`
+	IsDir   bool   `json:"is_dir"`
+	ModTime string `json:"mod_time"`
+}
+
+// FileReadResult contains file content read from a worker runtime.
+type FileReadResult struct {
+	SandboxID string `json:"sandbox_id"`
+	Content   []byte `json:"content"`
+}
+
+// FileListResult contains file entries returned by a worker runtime.
+type FileListResult struct {
+	SandboxID string     `json:"sandbox_id"`
+	Files     []FileInfo `json:"files"`
+}
+
+// FileStatResult contains one file entry returned by a worker runtime.
+type FileStatResult struct {
+	SandboxID string   `json:"sandbox_id"`
+	File      FileInfo `json:"file"`
+}
+
+// FileGlobResult contains glob matches returned by a worker runtime.
+type FileGlobResult struct {
+	SandboxID string   `json:"sandbox_id"`
+	Matches   []string `json:"matches"`
+}
+
 // RenewLeaseParams asks a worker to confirm it still owns work and needs a
 // renewed lease window.
 type RenewLeaseParams struct {
@@ -206,6 +262,8 @@ func ValidateRequest(req Request) error {
 		return validateParams[ExecParams](req.Params)
 	case MethodExecStream:
 		return validateParams[ExecParams](req.Params)
+	case MethodFileWrite, MethodFileRead, MethodFileList, MethodFileDelete, MethodFileMove, MethodFileChmod, MethodFileStat, MethodFileGlob:
+		return validateParams[FileParams](req.Params)
 	case MethodRenewLease:
 		if req.Lease == nil {
 			return fmt.Errorf("%w: lease is required for renew_lease", ErrInvalidMessage)

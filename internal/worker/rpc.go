@@ -1,10 +1,12 @@
 package worker
 
 import (
+	"bytes"
 	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"strings"
 	"sync/atomic"
@@ -77,6 +79,10 @@ func (s *RPCServer) handleRPC(w http.ResponseWriter, r *http.Request) {
 		s.handleExec(w, r.Context(), req)
 	case workerproto.MethodExecStream:
 		s.handleExecStream(w, r.Context(), req)
+	case workerproto.MethodFileWrite, workerproto.MethodFileRead, workerproto.MethodFileList,
+		workerproto.MethodFileDelete, workerproto.MethodFileMove, workerproto.MethodFileChmod,
+		workerproto.MethodFileStat, workerproto.MethodFileGlob:
+		s.handleFile(w, r.Context(), req)
 	case workerproto.MethodRenewLease:
 		s.handleRenewLease(w, r.Context(), req)
 	case workerproto.MethodSpawn:
@@ -256,6 +262,98 @@ func (s *RPCServer) handleExecStream(w http.ResponseWriter, ctx context.Context,
 		Chunks:    chunks,
 	})
 	httputil.WriteJSON(w, http.StatusOK, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Result: result})
+}
+
+func (s *RPCServer) handleFile(w http.ResponseWriter, ctx context.Context, req workerproto.Request) {
+	var params workerproto.FileParams
+	if err := json.Unmarshal(req.Params, &params); err != nil {
+		httputil.WriteJSON(w, http.StatusBadRequest, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Error: err.Error()})
+		return
+	}
+	if s.Registry == nil {
+		httputil.WriteJSON(w, http.StatusServiceUnavailable, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Error: "provider registry unavailable"})
+		return
+	}
+	provider, err := s.Registry.Get(params.Provider)
+	if err != nil {
+		httputil.WriteJSON(w, http.StatusNotFound, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Error: err.Error()})
+		return
+	}
+	runtimeID := strings.TrimSpace(params.RuntimeID)
+	if runtimeID == "" {
+		runtimeID = params.SandboxID
+	}
+	result, err := runFileOperation(ctx, provider, runtimeID, req.Method, params)
+	if err != nil {
+		code := http.StatusInternalServerError
+		if errors.Is(err, providers.ErrSandboxNotFound) {
+			code = http.StatusNotFound
+		}
+		httputil.WriteJSON(w, code, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Error: err.Error()})
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, workerproto.Response{ID: req.ID, WorkerID: s.WorkerID, Result: result})
+}
+
+func runFileOperation(ctx context.Context, provider providers.Provider, runtimeID, method string, params workerproto.FileParams) (json.RawMessage, error) {
+	switch method {
+	case workerproto.MethodFileWrite:
+		if err := provider.WriteFile(ctx, runtimeID, params.Path, bytes.NewReader(params.Content), params.Mode); err != nil {
+			return nil, err
+		}
+		return nil, nil
+	case workerproto.MethodFileRead:
+		rc, err := provider.ReadFile(ctx, runtimeID, params.Path)
+		if err != nil {
+			return nil, err
+		}
+		defer rc.Close()
+		content, err := io.ReadAll(rc)
+		if err != nil {
+			return nil, err
+		}
+		return json.Marshal(workerproto.FileReadResult{SandboxID: params.SandboxID, Content: content})
+	case workerproto.MethodFileList:
+		files, err := provider.ListFiles(ctx, runtimeID, params.Path)
+		if err != nil {
+			return nil, err
+		}
+		return json.Marshal(workerproto.FileListResult{SandboxID: params.SandboxID, Files: toWorkerFileInfo(files)})
+	case workerproto.MethodFileDelete:
+		return nil, provider.DeleteFile(ctx, runtimeID, params.Path, params.Recursive)
+	case workerproto.MethodFileMove:
+		return nil, provider.MoveFile(ctx, runtimeID, params.OldPath, params.NewPath)
+	case workerproto.MethodFileChmod:
+		return nil, provider.ChmodFile(ctx, runtimeID, params.Path, params.Mode)
+	case workerproto.MethodFileStat:
+		file, err := provider.StatFile(ctx, runtimeID, params.Path)
+		if err != nil {
+			return nil, err
+		}
+		return json.Marshal(workerproto.FileStatResult{SandboxID: params.SandboxID, File: toWorkerFileInfo([]providers.FileInfo{*file})[0]})
+	case workerproto.MethodFileGlob:
+		matches, err := provider.GlobFiles(ctx, runtimeID, params.Pattern)
+		if err != nil {
+			return nil, err
+		}
+		return json.Marshal(workerproto.FileGlobResult{SandboxID: params.SandboxID, Matches: matches})
+	default:
+		return nil, workerproto.ErrUnknownMethod
+	}
+}
+
+func toWorkerFileInfo(files []providers.FileInfo) []workerproto.FileInfo {
+	out := make([]workerproto.FileInfo, len(files))
+	for i, file := range files {
+		out[i] = workerproto.FileInfo{
+			Path:    file.Path,
+			Size:    file.Size,
+			Mode:    file.Mode,
+			IsDir:   file.IsDir,
+			ModTime: file.ModTime,
+		}
+	}
+	return out
 }
 
 func (s *RPCServer) handleSpawn(w http.ResponseWriter, ctx context.Context, req workerproto.Request) {

@@ -429,6 +429,101 @@ func TestManager_ExecStreamRoutesToRemoteWorker(t *testing.T) {
 	}
 }
 
+func TestManager_FileOperationsRouteToRemoteWorker(t *testing.T) {
+	remoteRegistry := providers.NewRegistry()
+	remoteMock := providers.NewMockProvider()
+	remoteRegistry.Register(remoteMock)
+	if err := remoteRegistry.SetDefault("mock"); err != nil {
+		t.Fatalf("set remote default: %v", err)
+	}
+	server := httptest.NewServer((&worker.RPCServer{
+		WorkerID: "worker-remote",
+		Token:    "worker-secret",
+		Registry: remoteRegistry,
+	}).Handler())
+	defer server.Close()
+
+	m := setupManagerWithConfig(t, ManagerConfig{
+		DefaultTTL:    5 * time.Minute,
+		DefaultImage:  "alpine:latest",
+		DefaultMemory: 512,
+		DefaultVCPUs:  1,
+		WorkerToken:   "worker-secret",
+	})
+	providersJSON, _ := json.Marshal([]string{"mock"})
+	capacityJSON, _ := json.Marshal(map[string]interface{}{
+		"max_sandboxes": 10,
+		"rpc_url":       server.URL,
+	})
+	now := time.Now().UTC()
+	if err := m.store.SaveWorker(context.Background(), &store.WorkerRecord{
+		ID:            "worker-remote",
+		Hostname:      "remote-host",
+		Status:        "online",
+		Providers:     string(providersJSON),
+		Capabilities:  `["remote_worker","spawn","status","files"]`,
+		Capacity:      string(capacityJSON),
+		LastHeartbeat: now,
+	}); err != nil {
+		t.Fatalf("save worker: %v", err)
+	}
+	sb, err := m.Spawn(context.Background(), SpawnRequest{Image: "alpine:latest"})
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+
+	if err := m.WriteFile(context.Background(), sb.ID, FileWriteRequest{Path: "/workspace/remote.txt", Content: "remote file", Mode: "0644"}); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	content, err := m.ReadFile(context.Background(), sb.ID, "/workspace/remote.txt")
+	if err != nil {
+		t.Fatalf("read: %v", err)
+	}
+	if string(content) != "remote file" {
+		t.Fatalf("content = %q, want remote file", string(content))
+	}
+	files, err := m.ListFiles(context.Background(), sb.ID, "/workspace")
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(files) == 0 {
+		t.Fatal("expected listed files")
+	}
+	if err := m.ChmodFile(context.Background(), sb.ID, FileChmodRequest{Path: "/workspace/remote.txt", Mode: "0755"}); err != nil {
+		t.Fatalf("chmod: %v", err)
+	}
+	stat, err := m.StatFile(context.Background(), sb.ID, "/workspace/remote.txt")
+	if err != nil {
+		t.Fatalf("stat: %v", err)
+	}
+	if stat.Size != int64(len("remote file")) {
+		t.Fatalf("stat size = %d, want %d", stat.Size, len("remote file"))
+	}
+	matches, err := m.GlobFiles(context.Background(), sb.ID, "/workspace/*.txt")
+	if err != nil {
+		t.Fatalf("glob: %v", err)
+	}
+	if len(matches) != 1 {
+		t.Fatalf("matches = %+v, want one match", matches)
+	}
+	if err := m.MoveFile(context.Background(), sb.ID, FileMoveRequest{OldPath: "/workspace/remote.txt", NewPath: "/workspace/moved.txt"}); err != nil {
+		t.Fatalf("move: %v", err)
+	}
+	content, err = m.ReadFile(context.Background(), sb.ID, "/workspace/moved.txt")
+	if err != nil {
+		t.Fatalf("read moved: %v", err)
+	}
+	if string(content) != "remote file" {
+		t.Fatalf("moved content = %q, want remote file", string(content))
+	}
+	if err := m.DeleteFile(context.Background(), sb.ID, FileDeleteRequest{Path: "/workspace/moved.txt"}); err != nil {
+		t.Fatalf("delete: %v", err)
+	}
+	if _, err := m.ReadFile(context.Background(), sb.ID, "/workspace/moved.txt"); err == nil {
+		t.Fatal("expected read deleted file to fail")
+	}
+}
+
 func TestManager_List(t *testing.T) {
 	m := setupManager(t)
 	ctx := context.Background()

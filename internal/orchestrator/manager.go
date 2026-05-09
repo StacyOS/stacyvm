@@ -966,7 +966,12 @@ func (m *Manager) WriteFile(ctx context.Context, sandboxID string, req FileWrite
 		m.auditOperation(ctx, "file.write", sb, sandboxID, req.Path, "failure", err.Error())
 		return err
 	}
-	if err := prov.WriteFile(ctx, m.resolveVMID(sb), path, strings.NewReader(req.Content), mode); err != nil {
+	if m.isRemoteOwnedSandbox(sb) {
+		err = m.remoteFileWrite(ctx, sb, path, []byte(req.Content), mode)
+	} else {
+		err = prov.WriteFile(ctx, m.resolveVMID(sb), path, strings.NewReader(req.Content), mode)
+	}
+	if err != nil {
 		metricsErr = err
 		m.publishOperationFailure(EventOperationFailed, sandboxID, OperationFileWrite, metricsProvider, err)
 		m.auditOperation(ctx, "file.write", sb, sandboxID, req.Path, "failure", err.Error())
@@ -1004,20 +1009,31 @@ func (m *Manager) ReadFile(ctx context.Context, sandboxID string, path string) (
 		m.auditOperation(ctx, "file.read", sb, sandboxID, path, "failure", err.Error())
 		return nil, err
 	}
-	rc, err := prov.ReadFile(ctx, m.resolveVMID(sb), scopedPath)
-	if err != nil {
-		metricsErr = err
-		m.publishOperationFailure(EventOperationFailed, sandboxID, OperationFileRead, metricsProvider, err)
-		m.auditOperation(ctx, "file.read", sb, sandboxID, path, "failure", err.Error())
-		return nil, fmt.Errorf("reading file: %w", err)
-	}
-	defer rc.Close()
+	var buf []byte
+	if m.isRemoteOwnedSandbox(sb) {
+		buf, err = m.remoteFileRead(ctx, sb, scopedPath)
+		if err != nil {
+			metricsErr = err
+			m.publishOperationFailure(EventOperationFailed, sandboxID, OperationFileRead, metricsProvider, err)
+			m.auditOperation(ctx, "file.read", sb, sandboxID, path, "failure", err.Error())
+			return nil, fmt.Errorf("reading file: %w", err)
+		}
+	} else {
+		rc, err := prov.ReadFile(ctx, m.resolveVMID(sb), scopedPath)
+		if err != nil {
+			metricsErr = err
+			m.publishOperationFailure(EventOperationFailed, sandboxID, OperationFileRead, metricsProvider, err)
+			m.auditOperation(ctx, "file.read", sb, sandboxID, path, "failure", err.Error())
+			return nil, fmt.Errorf("reading file: %w", err)
+		}
+		defer rc.Close()
 
-	buf, err := io.ReadAll(rc)
-	if err != nil {
-		metricsErr = err
-		m.publishOperationFailure(EventOperationFailed, sandboxID, OperationFileRead, metricsProvider, err)
-		return nil, fmt.Errorf("reading file content: %w", err)
+		buf, err = io.ReadAll(rc)
+		if err != nil {
+			metricsErr = err
+			m.publishOperationFailure(EventOperationFailed, sandboxID, OperationFileRead, metricsProvider, err)
+			return nil, fmt.Errorf("reading file content: %w", err)
+		}
 	}
 
 	m.events.Publish(Event{
@@ -1051,7 +1067,12 @@ func (m *Manager) ListFiles(ctx context.Context, sandboxID string, path string) 
 		m.auditOperation(ctx, "file.list", sb, sandboxID, path, "failure", err.Error())
 		return nil, err
 	}
-	pFiles, err := prov.ListFiles(ctx, m.resolveVMID(sb), scopedPath)
+	var pFiles []providers.FileInfo
+	if m.isRemoteOwnedSandbox(sb) {
+		pFiles, err = m.remoteFileList(ctx, sb, scopedPath)
+	} else {
+		pFiles, err = prov.ListFiles(ctx, m.resolveVMID(sb), scopedPath)
+	}
 	if err != nil {
 		metricsErr = err
 		m.publishOperationFailure(EventOperationFailed, sandboxID, OperationFileList, metricsProvider, err)
@@ -1096,7 +1117,11 @@ func (m *Manager) DeleteFile(ctx context.Context, sandboxID string, req FileDele
 		m.auditOperation(ctx, "file.delete", sb, sandboxID, req.Path, "failure", err.Error())
 		return err
 	}
-	metricsErr = prov.DeleteFile(ctx, m.resolveVMID(sb), path, req.Recursive)
+	if m.isRemoteOwnedSandbox(sb) {
+		metricsErr = m.remoteFileDelete(ctx, sb, path, req.Recursive)
+	} else {
+		metricsErr = prov.DeleteFile(ctx, m.resolveVMID(sb), path, req.Recursive)
+	}
 	if metricsErr != nil {
 		m.publishOperationFailure(EventOperationFailed, sandboxID, OperationFileDelete, metricsProvider, metricsErr)
 		m.auditOperation(ctx, "file.delete", sb, sandboxID, req.Path, "failure", metricsErr.Error())
@@ -1136,7 +1161,11 @@ func (m *Manager) MoveFile(ctx context.Context, sandboxID string, req FileMoveRe
 		m.auditOperation(ctx, "file.move", sb, sandboxID, req.NewPath, "failure", err.Error())
 		return err
 	}
-	metricsErr = prov.MoveFile(ctx, m.resolveVMID(sb), oldPath, newPath)
+	if m.isRemoteOwnedSandbox(sb) {
+		metricsErr = m.remoteFileMove(ctx, sb, oldPath, newPath)
+	} else {
+		metricsErr = prov.MoveFile(ctx, m.resolveVMID(sb), oldPath, newPath)
+	}
 	if metricsErr != nil {
 		m.publishOperationFailure(EventOperationFailed, sandboxID, OperationFileMove, metricsProvider, metricsErr)
 		m.auditOperation(ctx, "file.move", sb, sandboxID, req.OldPath+" -> "+req.NewPath, "failure", metricsErr.Error())
@@ -1169,7 +1198,11 @@ func (m *Manager) ChmodFile(ctx context.Context, sandboxID string, req FileChmod
 		m.auditOperation(ctx, "file.chmod", sb, sandboxID, req.Path, "failure", err.Error())
 		return err
 	}
-	metricsErr = prov.ChmodFile(ctx, m.resolveVMID(sb), path, req.Mode)
+	if m.isRemoteOwnedSandbox(sb) {
+		metricsErr = m.remoteFileChmod(ctx, sb, path, req.Mode)
+	} else {
+		metricsErr = prov.ChmodFile(ctx, m.resolveVMID(sb), path, req.Mode)
+	}
 	if metricsErr != nil {
 		m.publishOperationFailure(EventOperationFailed, sandboxID, OperationFileChmod, metricsProvider, metricsErr)
 		m.auditOperation(ctx, "file.chmod", sb, sandboxID, req.Path, "failure", metricsErr.Error())
@@ -1202,7 +1235,12 @@ func (m *Manager) StatFile(ctx context.Context, sandboxID string, path string) (
 		m.auditOperation(ctx, "file.stat", sb, sandboxID, path, "failure", err.Error())
 		return nil, err
 	}
-	fi, err := prov.StatFile(ctx, m.resolveVMID(sb), scopedPath)
+	var fi *providers.FileInfo
+	if m.isRemoteOwnedSandbox(sb) {
+		fi, err = m.remoteFileStat(ctx, sb, scopedPath)
+	} else {
+		fi, err = prov.StatFile(ctx, m.resolveVMID(sb), scopedPath)
+	}
 	if err != nil {
 		metricsErr = err
 		m.publishOperationFailure(EventOperationFailed, sandboxID, OperationFileStat, metricsProvider, err)
@@ -1242,7 +1280,12 @@ func (m *Manager) GlobFiles(ctx context.Context, sandboxID string, pattern strin
 		m.auditOperation(ctx, "file.glob", sb, sandboxID, pattern, "failure", err.Error())
 		return nil, err
 	}
-	matches, err := prov.GlobFiles(ctx, m.resolveVMID(sb), scopedPattern)
+	var matches []string
+	if m.isRemoteOwnedSandbox(sb) {
+		matches, err = m.remoteFileGlob(ctx, sb, scopedPattern)
+	} else {
+		matches, err = prov.GlobFiles(ctx, m.resolveVMID(sb), scopedPattern)
+	}
 	metricsErr = err
 	if err != nil {
 		m.publishOperationFailure(EventOperationFailed, sandboxID, OperationFileGlob, metricsProvider, err)
@@ -1253,9 +1296,143 @@ func (m *Manager) GlobFiles(ctx context.Context, sandboxID string, pattern strin
 	return matches, err
 }
 
+func (m *Manager) remoteFileParams(sb *Sandbox) workerproto.FileParams {
+	runtimeID := strings.TrimSpace(sb.VMID)
+	if runtimeID == "" {
+		runtimeID = sb.ID
+	}
+	return workerproto.FileParams{
+		SandboxID: sb.ID,
+		Provider:  sb.Provider,
+		RuntimeID: runtimeID,
+	}
+}
+
+func (m *Manager) remoteFileWrite(ctx context.Context, sb *Sandbox, path string, content []byte, mode string) error {
+	client, err := m.remoteWorkerRPCClient(ctx, sb.WorkerID)
+	if err != nil {
+		return err
+	}
+	params := m.remoteFileParams(sb)
+	params.Path = path
+	params.Content = content
+	params.Mode = mode
+	return client.FileWrite(ctx, "file-write-"+sb.ID, params)
+}
+
+func (m *Manager) remoteFileRead(ctx context.Context, sb *Sandbox, path string) ([]byte, error) {
+	client, err := m.remoteWorkerRPCClient(ctx, sb.WorkerID)
+	if err != nil {
+		return nil, err
+	}
+	params := m.remoteFileParams(sb)
+	params.Path = path
+	result, err := client.FileRead(ctx, "file-read-"+sb.ID, params)
+	if err != nil {
+		return nil, err
+	}
+	return result.Content, nil
+}
+
+func (m *Manager) remoteFileList(ctx context.Context, sb *Sandbox, path string) ([]providers.FileInfo, error) {
+	client, err := m.remoteWorkerRPCClient(ctx, sb.WorkerID)
+	if err != nil {
+		return nil, err
+	}
+	params := m.remoteFileParams(sb)
+	params.Path = path
+	result, err := client.FileList(ctx, "file-list-"+sb.ID, params)
+	if err != nil {
+		return nil, err
+	}
+	return fromWorkerFileInfo(result.Files), nil
+}
+
+func (m *Manager) remoteFileDelete(ctx context.Context, sb *Sandbox, path string, recursive bool) error {
+	client, err := m.remoteWorkerRPCClient(ctx, sb.WorkerID)
+	if err != nil {
+		return err
+	}
+	params := m.remoteFileParams(sb)
+	params.Path = path
+	params.Recursive = recursive
+	return client.FileDelete(ctx, "file-delete-"+sb.ID, params)
+}
+
+func (m *Manager) remoteFileMove(ctx context.Context, sb *Sandbox, oldPath, newPath string) error {
+	client, err := m.remoteWorkerRPCClient(ctx, sb.WorkerID)
+	if err != nil {
+		return err
+	}
+	params := m.remoteFileParams(sb)
+	params.OldPath = oldPath
+	params.NewPath = newPath
+	return client.FileMove(ctx, "file-move-"+sb.ID, params)
+}
+
+func (m *Manager) remoteFileChmod(ctx context.Context, sb *Sandbox, path, mode string) error {
+	client, err := m.remoteWorkerRPCClient(ctx, sb.WorkerID)
+	if err != nil {
+		return err
+	}
+	params := m.remoteFileParams(sb)
+	params.Path = path
+	params.Mode = mode
+	return client.FileChmod(ctx, "file-chmod-"+sb.ID, params)
+}
+
+func (m *Manager) remoteFileStat(ctx context.Context, sb *Sandbox, path string) (*providers.FileInfo, error) {
+	client, err := m.remoteWorkerRPCClient(ctx, sb.WorkerID)
+	if err != nil {
+		return nil, err
+	}
+	params := m.remoteFileParams(sb)
+	params.Path = path
+	result, err := client.FileStat(ctx, "file-stat-"+sb.ID, params)
+	if err != nil {
+		return nil, err
+	}
+	file := providers.FileInfo{
+		Path:    result.File.Path,
+		Size:    result.File.Size,
+		Mode:    result.File.Mode,
+		IsDir:   result.File.IsDir,
+		ModTime: result.File.ModTime,
+	}
+	return &file, nil
+}
+
+func (m *Manager) remoteFileGlob(ctx context.Context, sb *Sandbox, pattern string) ([]string, error) {
+	client, err := m.remoteWorkerRPCClient(ctx, sb.WorkerID)
+	if err != nil {
+		return nil, err
+	}
+	params := m.remoteFileParams(sb)
+	params.Pattern = pattern
+	result, err := client.FileGlob(ctx, "file-glob-"+sb.ID, params)
+	if err != nil {
+		return nil, err
+	}
+	return result.Matches, nil
+}
+
+func fromWorkerFileInfo(files []workerproto.FileInfo) []providers.FileInfo {
+	out := make([]providers.FileInfo, len(files))
+	for i, file := range files {
+		out[i] = providers.FileInfo{
+			Path:    file.Path,
+			Size:    file.Size,
+			Mode:    file.Mode,
+			IsDir:   file.IsDir,
+			ModTime: file.ModTime,
+		}
+	}
+	return out
+}
+
 // scopedPath prefixes a path with the sandbox workspace when running in pool mode.
 func (m *Manager) scopedPath(sb *Sandbox, path string) string {
-	if sb.VMID == "" {
+	if sb.VMID == "" || m.isRemoteOwnedSandbox(sb) {
 		return path // dedicated VM, no scoping
 	}
 	base := "/workspace/" + sb.ID
@@ -1270,7 +1447,7 @@ func (m *Manager) scopedPathForOperation(sb *Sandbox, path string) (string, erro
 	if strings.TrimSpace(path) == "" {
 		return "", InvalidInputError("path is required")
 	}
-	if sb.VMID == "" {
+	if sb.VMID == "" || m.isRemoteOwnedSandbox(sb) {
 		return path, nil
 	}
 	base := "/workspace/" + sb.ID

@@ -13,8 +13,10 @@ This checkpoint starts extending remote worker routing beyond sandbox lifecycle 
 - Worker-side buffered streaming exec handling through the provider registry.
 - Typed worker RPC client support for exec calls.
 - Typed worker RPC client support for buffered exec-stream calls.
+- Worker RPC contract and client support for file write, read, list, delete, move, chmod, stat, and glob.
 - Control-plane routing for non-streaming exec on remote-owned sandboxes.
 - Control-plane routing for exec-stream calls on remote-owned sandboxes.
+- Control-plane routing for remote-owned sandbox file APIs.
 - Phase 12 release notes under `docs/releases/phase-12-remote-sandbox-io-routing.md`.
 
 ### Changed
@@ -22,6 +24,7 @@ This checkpoint starts extending remote worker routing beyond sandbox lifecycle 
 - Remote-owned sandbox exec now uses persisted worker ownership and provider runtime ID instead of the local provider.
 - Remote exec preserves existing event, audit, metric, timeout, and exec-log behavior.
 - Remote exec-stream keeps the manager streaming API shape while buffering chunks over worker RPC.
+- Remote file APIs now use persisted worker ownership and provider runtime ID instead of local provider state.
 - Pool-mode default workdir is no longer applied to remote sandboxes just because their provider runtime ID is stored in `VMID`.
 
 ## Phase 11 Remote Worker Runtime - 2026-05-09
