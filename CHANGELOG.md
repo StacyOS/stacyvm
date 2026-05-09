@@ -14,6 +14,7 @@ This checkpoint starts hardening remote worker identity for public and enterpris
 - Worker token issuer JSON output, explicit token IDs, and delayed-validity `nbf` support.
 - `stacyvm worker token inspect <token>` for unverified signed-token metadata and `jti` recovery during incident response.
 - `stacyvm worker token verify <token>` for signature, rotation-key, audience, worker ID, and revocation validation.
+- `stacyvm worker token rotation-plan` for no-secret signing-key rotation checklists and validation commands.
 - Worker secret file flags for runtime worker tokens, runtime signing keys, token issuance signing keys, and verification rotation keys.
 - Signed-token worker ID matching and expiry enforcement.
 - Signed-token not-before, future issued-at, clock-skew, and max-lifetime enforcement.
@@ -36,6 +37,7 @@ This checkpoint starts hardening remote worker identity for public and enterpris
 - Worker auth now accepts signed tokens, per-worker static tokens, or the shared staging token while preserving existing compatibility.
 - Config lint now warns when revoked signed-token IDs are configured without signed worker-token verification.
 - Worker RPC docs now include an issue, inspect, verify, and revoke runbook for signed worker tokens.
+- Worker RPC docs now include a generated no-secret rotation-plan workflow for signed worker token keys.
 - Worker token runbooks now prefer secret-mounted files over shell history or environment variables for long-lived worker secrets.
 - Cluster conformance documentation now treats signed worker tokens as the production-aligned worker identity path.
 - API and worker RPC docs now describe signed worker token behavior, signing-key rotation, and worker RPC mTLS.

@@ -93,6 +93,7 @@ Phase 14 starts worker identity hardening on top of that foundation:
 - Signed-token config lint awareness.
 - Worker runtime token derivation for heartbeat and lease renewal.
 - Secret-file inputs for worker tokens and signing keys.
+- No-secret signing-key rotation plan generation.
 - Signed control-plane-to-worker RPC token derivation for remote worker calls.
 - Worker RPC mTLS config, transport wiring, and production lint checks.
 - Worker RPC mTLS conformance using generated CA, server, and client certificates.
@@ -101,5 +102,5 @@ Remaining cluster-storage and identity work after Phase 14:
 
 - Extend multi-worker conformance beyond the mock provider into certified Docker, gVisor/Kata, and Firecracker hosts.
 - Add backup/restore-specific Postgres migration rehearsal before enterprise production rollout.
-- Add token issuer and rotation workflows so workers do not need direct access to the signing key in hardened deployments.
+- Add a centralized token issuer service so workers do not need direct access to the signing key in hardened deployments.
 - Run worker RPC mTLS smoke tests with deployment-issued certificates in the target enterprise network.

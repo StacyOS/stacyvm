@@ -25,6 +25,7 @@ Phase 14 begins the worker identity hardening lane for production multi-worker S
 - Added worker token issuer `--format json`, `--token-id`, and `--not-before` options for incident-response runbooks.
 - Added `stacyvm worker token inspect <token>` to recover unverified signed-token metadata and `jti` values during incident response.
 - Added `stacyvm worker token verify <token>` to validate signed tokens against active and rotation keys, expected worker IDs, expected audiences, and revoked token IDs.
+- Added `stacyvm worker token rotation-plan` to print a no-secret signing-key rotation checklist, config sketch, and validation commands.
 - Added worker secret file flags for token issuance, token verification, and worker runtime startup so operators can use secret-mounted files instead of command-line or environment secrets.
 - Filtered signed-token scopes so tokens cannot grant user, API, or admin scopes.
 - Added `stacyvm worker token <worker-id>` to issue signed worker tokens from the CLI.
@@ -51,6 +52,7 @@ Phase 14 begins the worker identity hardening lane for production multi-worker S
 
 - New signed tokens are minted with `auth.worker_signing_key`.
 - Old tokens can continue verifying through `auth.worker_signing_keys` during a rotation window.
+- Operators can generate a concrete no-secret rollout checklist with `stacyvm worker token rotation-plan`.
 - The documented rotation sequence is:
   - promote the new key into `auth.worker_signing_key`
   - move the old key into `auth.worker_signing_keys`

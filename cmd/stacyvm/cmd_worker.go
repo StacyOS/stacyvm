@@ -196,6 +196,7 @@ func newWorkerTokenCmd() *cobra.Command {
 	cmd.Flags().StringArrayVar(&scopes, "scope", nil, "worker scope to include; repeatable, defaults to all worker scopes")
 	cmd.AddCommand(newWorkerTokenInspectCmd())
 	cmd.AddCommand(newWorkerTokenVerifyCmd())
+	cmd.AddCommand(newWorkerTokenRotationPlanCmd())
 	return cmd
 }
 
@@ -281,6 +282,44 @@ func newWorkerTokenVerifyCmd() *cobra.Command {
 	return cmd
 }
 
+func newWorkerTokenRotationPlanCmd() *cobra.Command {
+	var newKeyRef string
+	var previousKeyRef string
+	var ttl string
+	var outputFormat string
+	cmd := &cobra.Command{
+		Use:   "rotation-plan",
+		Short: "Print a no-secret signed worker token rotation plan",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			result, err := workerTokenRotationPlan(workerTokenRotationPlanOptions{
+				NewKeyRef:      newKeyRef,
+				PreviousKeyRef: previousKeyRef,
+				TTL:            ttl,
+			})
+			if err != nil {
+				return err
+			}
+			switch strings.ToLower(strings.TrimSpace(outputFormat)) {
+			case "", "text":
+				_, err = fmt.Fprint(cmd.OutOrStdout(), result.Text)
+			case "json":
+				encoder := json.NewEncoder(cmd.OutOrStdout())
+				encoder.SetIndent("", "  ")
+				err = encoder.Encode(result)
+			default:
+				err = fmt.Errorf("worker token rotation-plan output format must be text or json")
+			}
+			return err
+		},
+	}
+	cmd.Flags().StringVar(&newKeyRef, "new-key-ref", "auth.worker_signing_key", "operator-visible reference for the new active signing key")
+	cmd.Flags().StringVar(&previousKeyRef, "previous-key-ref", "auth.worker_signing_keys[0]", "operator-visible reference for the previous verification key")
+	cmd.Flags().StringVar(&ttl, "ttl", "5m", "maximum signed worker token lifetime to wait before removing the previous key")
+	cmd.Flags().StringVar(&outputFormat, "format", "text", "output format: text or json")
+	return cmd
+}
+
 type workerTokenIssueOptions struct {
 	WorkerID   string
 	SigningKey string
@@ -322,6 +361,22 @@ type workerTokenVerifyOptions struct {
 	WorkerID        string
 	RevokedTokenIDs []string
 	Now             func() time.Time
+}
+
+type workerTokenRotationPlanOptions struct {
+	NewKeyRef      string
+	PreviousKeyRef string
+	TTL            string
+}
+
+type workerTokenRotationPlanResult struct {
+	NewKeyRef      string   `json:"new_key_ref"`
+	PreviousKeyRef string   `json:"previous_key_ref"`
+	MaxTokenTTL    string   `json:"max_token_ttl"`
+	Steps          []string `json:"steps"`
+	ConfigSnippet  string   `json:"config_snippet"`
+	Validation     []string `json:"validation"`
+	Text           string   `json:"text,omitempty"`
 }
 
 func issueWorkerToken(opts workerTokenIssueOptions) (workerTokenIssueResult, error) {
@@ -481,6 +536,74 @@ func readSecretFile(path string) (string, error) {
 		return "", fmt.Errorf("secret file is empty")
 	}
 	return secret, nil
+}
+
+func workerTokenRotationPlan(opts workerTokenRotationPlanOptions) (workerTokenRotationPlanResult, error) {
+	newKeyRef := strings.TrimSpace(opts.NewKeyRef)
+	previousKeyRef := strings.TrimSpace(opts.PreviousKeyRef)
+	if newKeyRef == "" {
+		return workerTokenRotationPlanResult{}, fmt.Errorf("new key reference is required")
+	}
+	if previousKeyRef == "" {
+		return workerTokenRotationPlanResult{}, fmt.Errorf("previous key reference is required")
+	}
+	ttl := strings.TrimSpace(opts.TTL)
+	if ttl == "" {
+		ttl = "5m"
+	}
+	duration, err := time.ParseDuration(ttl)
+	if err != nil {
+		return workerTokenRotationPlanResult{}, fmt.Errorf("worker token rotation ttl: %w", err)
+	}
+	if duration <= 0 {
+		return workerTokenRotationPlanResult{}, fmt.Errorf("worker token rotation ttl must be positive")
+	}
+	if duration > middleware.MaxWorkerTokenTTL {
+		return workerTokenRotationPlanResult{}, fmt.Errorf("worker token rotation ttl must be <= %s", middleware.MaxWorkerTokenTTL)
+	}
+	steps := []string{
+		fmt.Sprintf("Put the new active signing key at %s.", newKeyRef),
+		fmt.Sprintf("Move the previous active signing key into %s.", previousKeyRef),
+		"Restart or reload control-plane and worker processes so new tokens are minted with the new key.",
+		fmt.Sprintf("Wait at least %s, plus clock skew, before removing the previous verification key.", duration),
+		"Remove the previous verification key after old signed worker tokens have expired.",
+	}
+	configSnippet := fmt.Sprintf("auth:\n  worker_signing_key: \"<new key from %s>\"\n  worker_signing_keys:\n    - \"<previous key from %s>\"\n", newKeyRef, previousKeyRef)
+	validation := []string{
+		"stacyvm config lint --production",
+		"stacyvm worker token <worker-id> --ttl " + duration.String() + " --format json",
+		"stacyvm worker token verify '<signed-worker-token>' --worker-id <worker-id> --audience worker:control-plane",
+	}
+	result := workerTokenRotationPlanResult{
+		NewKeyRef:      newKeyRef,
+		PreviousKeyRef: previousKeyRef,
+		MaxTokenTTL:    duration.String(),
+		Steps:          steps,
+		ConfigSnippet:  configSnippet,
+		Validation:     validation,
+	}
+	result.Text = formatWorkerTokenRotationPlan(result)
+	return result, nil
+}
+
+func formatWorkerTokenRotationPlan(result workerTokenRotationPlanResult) string {
+	var b strings.Builder
+	b.WriteString("Signed worker token rotation plan\n\n")
+	b.WriteString("Key references:\n")
+	b.WriteString(fmt.Sprintf("- new active key: %s\n", result.NewKeyRef))
+	b.WriteString(fmt.Sprintf("- previous verification key: %s\n", result.PreviousKeyRef))
+	b.WriteString(fmt.Sprintf("- maximum token TTL: %s\n\n", result.MaxTokenTTL))
+	b.WriteString("Steps:\n")
+	for i, step := range result.Steps {
+		b.WriteString(fmt.Sprintf("%d. %s\n", i+1, step))
+	}
+	b.WriteString("\nConfig sketch:\n")
+	b.WriteString(result.ConfigSnippet)
+	b.WriteString("\nValidation:\n")
+	for _, command := range result.Validation {
+		b.WriteString("- " + command + "\n")
+	}
+	return b.String()
 }
 
 func unixTimeString(sec int64) string {

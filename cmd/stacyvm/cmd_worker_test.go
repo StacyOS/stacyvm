@@ -264,6 +264,45 @@ func TestWorkerTokenVerifyCommandReadsSigningKeyFiles(t *testing.T) {
 	}
 }
 
+func TestWorkerTokenRotationPlanCommandOutputsJSON(t *testing.T) {
+	cmd := newWorkerTokenRotationPlanCmd()
+	var out bytes.Buffer
+	cmd.SetOut(&out)
+	cmd.SetArgs([]string{
+		"--new-key-ref", "/run/secrets/worker-signing-key-new",
+		"--previous-key-ref", "/run/secrets/worker-signing-key-old",
+		"--ttl", "10m",
+		"--format", "json",
+	})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("execute worker token rotation-plan command: %v", err)
+	}
+	var result workerTokenRotationPlanResult
+	if err := json.Unmarshal(out.Bytes(), &result); err != nil {
+		t.Fatalf("decode rotation plan json: %v", err)
+	}
+	if result.NewKeyRef != "/run/secrets/worker-signing-key-new" || result.PreviousKeyRef != "/run/secrets/worker-signing-key-old" {
+		t.Fatalf("unexpected key refs: %+v", result)
+	}
+	if result.MaxTokenTTL != "10m0s" {
+		t.Fatalf("max token ttl = %q, want 10m0s", result.MaxTokenTTL)
+	}
+	if len(result.Steps) != 5 || len(result.Validation) != 3 || result.ConfigSnippet == "" {
+		t.Fatalf("unexpected rotation plan: %+v", result)
+	}
+}
+
+func TestWorkerTokenRotationPlanRejectsInvalidTTL(t *testing.T) {
+	if _, err := workerTokenRotationPlan(workerTokenRotationPlanOptions{
+		NewKeyRef:      "new",
+		PreviousKeyRef: "old",
+		TTL:            (middleware.MaxWorkerTokenTTL + time.Second).String(),
+	}); err == nil {
+		t.Fatal("expected overlong ttl to fail")
+	}
+}
+
 func TestReadSecretFileRejectsEmptySecret(t *testing.T) {
 	path := writeTestSecret(t, "\n")
 	if _, err := readSecretFile(path); err == nil {
