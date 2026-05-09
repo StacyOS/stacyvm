@@ -9,26 +9,31 @@ import (
 
 func TestIssueWorkerTokenSignsExpectedClaims(t *testing.T) {
 	now := time.Date(2026, 5, 9, 10, 0, 0, 0, time.UTC)
-	token, err := issueWorkerToken(workerTokenIssueOptions{
+	result, err := issueWorkerToken(workerTokenIssueOptions{
 		WorkerID:   " worker-a ",
 		SigningKey: "worker-signing-key-with-at-least-32-bytes",
 		TTL:        "10m",
 		Scopes:     []string{middleware.ScopeWorkerHeartbeat},
+		TokenID:    "token-id-1",
+		NotBefore:  "2m",
 		Now:        func() time.Time { return now },
 	})
 	if err != nil {
 		t.Fatalf("issue worker token: %v", err)
 	}
 
-	claims, ok := middleware.VerifyWorkerToken("worker-signing-key-with-at-least-32-bytes", token, now.Add(time.Minute))
+	if result.TokenID != "token-id-1" || result.NotBefore != now.Add(2*time.Minute).Format(time.RFC3339) {
+		t.Fatalf("unexpected token issue result: %+v", result)
+	}
+	claims, ok := middleware.VerifyWorkerToken("worker-signing-key-with-at-least-32-bytes", result.Token, now.Add(3*time.Minute))
 	if !ok {
-		t.Fatal("issued token did not verify")
+		t.Fatal("issued token did not verify after not-before")
 	}
 	if claims.WorkerID != "worker-a" {
 		t.Fatalf("worker id = %q, want worker-a", claims.WorkerID)
 	}
-	if claims.TokenID == "" {
-		t.Fatal("token id is empty")
+	if claims.TokenID != "token-id-1" {
+		t.Fatalf("token id = %q, want token-id-1", claims.TokenID)
 	}
 	if claims.Audience != middleware.WorkerTokenAudienceControlPlane {
 		t.Fatalf("audience = %q, want %q", claims.Audience, middleware.WorkerTokenAudienceControlPlane)
@@ -38,6 +43,9 @@ func TestIssueWorkerTokenSignsExpectedClaims(t *testing.T) {
 	}
 	if claims.ExpiresAt != now.Add(10*time.Minute).Unix() {
 		t.Fatalf("expires at = %d, want %d", claims.ExpiresAt, now.Add(10*time.Minute).Unix())
+	}
+	if claims.NotBefore != now.Add(2*time.Minute).Unix() {
+		t.Fatalf("not before = %d, want %d", claims.NotBefore, now.Add(2*time.Minute).Unix())
 	}
 	if len(claims.Scopes) != 1 || claims.Scopes[0] != middleware.ScopeWorkerHeartbeat {
 		t.Fatalf("scopes = %#v, want heartbeat scope", claims.Scopes)
@@ -55,6 +63,8 @@ func TestIssueWorkerTokenRejectsInvalidInputs(t *testing.T) {
 		{name: "zero ttl", opts: workerTokenIssueOptions{WorkerID: "worker-a", SigningKey: "worker-signing-key-with-at-least-32-bytes", TTL: "0s"}},
 		{name: "too long ttl", opts: workerTokenIssueOptions{WorkerID: "worker-a", SigningKey: "worker-signing-key-with-at-least-32-bytes", TTL: (middleware.MaxWorkerTokenTTL + time.Second).String()}},
 		{name: "bad audience", opts: workerTokenIssueOptions{WorkerID: "worker-a", SigningKey: "worker-signing-key-with-at-least-32-bytes", TTL: "5m", Audience: "admin"}},
+		{name: "bad not before", opts: workerTokenIssueOptions{WorkerID: "worker-a", SigningKey: "worker-signing-key-with-at-least-32-bytes", TTL: "5m", NotBefore: "later"}},
+		{name: "negative not before", opts: workerTokenIssueOptions{WorkerID: "worker-a", SigningKey: "worker-signing-key-with-at-least-32-bytes", TTL: "5m", NotBefore: "-1s"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

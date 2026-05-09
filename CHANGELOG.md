@@ -11,6 +11,7 @@ This checkpoint starts hardening remote worker identity for public and enterpris
 - Worker auth verification for signed tokens through `auth.worker_signing_key`.
 - Additional signed-token verification keys through `auth.worker_signing_keys` for no-downtime key rotation.
 - Emergency signed-token revocation through `auth.worker_revoked_token_ids`.
+- Worker token issuer JSON output, explicit token IDs, and delayed-validity `nbf` support.
 - Signed-token worker ID matching and expiry enforcement.
 - Signed-token not-before, future issued-at, clock-skew, and max-lifetime enforcement.
 - Signed-token audience separation for worker-to-control-plane and control-plane-to-worker RPC calls.

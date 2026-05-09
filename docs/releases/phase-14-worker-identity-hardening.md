@@ -22,6 +22,7 @@ Phase 14 begins the worker identity hardening lane for production multi-worker S
 - Enforced that signed `worker_id` must match the `X-Worker-ID` request header.
 - Enforced token audience separation between worker-to-control-plane routes and control-plane-to-worker RPC.
 - Added `auth.worker_revoked_token_ids` emergency revocation for signed worker token IDs.
+- Added worker token issuer `--format json`, `--token-id`, and `--not-before` options for incident-response runbooks.
 - Filtered signed-token scopes so tokens cannot grant user, API, or admin scopes.
 - Added `stacyvm worker token <worker-id>` to issue signed worker tokens from the CLI.
 

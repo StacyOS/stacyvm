@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/signal"
@@ -114,6 +115,9 @@ func newWorkerTokenCmd() *cobra.Command {
 	var ttl string
 	var scopes []string
 	var audience string
+	var tokenID string
+	var notBefore string
+	var outputFormat string
 	cmd := &cobra.Command{
 		Use:   "token <worker-id>",
 		Short: "Issue a signed worker token",
@@ -126,24 +130,38 @@ func newWorkerTokenCmd() *cobra.Command {
 			if signingKey == "" {
 				signingKey = cfg.Auth.WorkerSigningKey
 			}
-			token, err := issueWorkerToken(workerTokenIssueOptions{
+			result, err := issueWorkerToken(workerTokenIssueOptions{
 				WorkerID:   args[0],
 				SigningKey: signingKey,
 				TTL:        ttl,
 				Scopes:     scopes,
 				Audience:   audience,
+				TokenID:    tokenID,
+				NotBefore:  notBefore,
 				Now:        time.Now,
 			})
 			if err != nil {
 				return err
 			}
-			_, err = fmt.Fprintln(cmd.OutOrStdout(), token)
+			switch strings.ToLower(strings.TrimSpace(outputFormat)) {
+			case "", "token":
+				_, err = fmt.Fprintln(cmd.OutOrStdout(), result.Token)
+			case "json":
+				encoder := json.NewEncoder(cmd.OutOrStdout())
+				encoder.SetIndent("", "  ")
+				err = encoder.Encode(result)
+			default:
+				err = fmt.Errorf("worker token output format must be token or json")
+			}
 			return err
 		},
 	}
 	cmd.Flags().StringVar(&signingKey, "signing-key", os.Getenv("STACYVM_AUTH_WORKER_SIGNING_KEY"), "worker signing key; defaults to auth.worker_signing_key")
 	cmd.Flags().StringVar(&ttl, "ttl", "5m", "token lifetime")
 	cmd.Flags().StringVar(&audience, "audience", middleware.WorkerTokenAudienceControlPlane, "token audience: worker:control-plane or worker:rpc")
+	cmd.Flags().StringVar(&tokenID, "token-id", "", "explicit token id for incident-response tracking; generated when empty")
+	cmd.Flags().StringVar(&notBefore, "not-before", "0s", "delay before token becomes valid")
+	cmd.Flags().StringVar(&outputFormat, "format", "token", "output format: token or json")
 	cmd.Flags().StringArrayVar(&scopes, "scope", nil, "worker scope to include; repeatable, defaults to all worker scopes")
 	return cmd
 }
@@ -154,52 +172,97 @@ type workerTokenIssueOptions struct {
 	TTL        string
 	Scopes     []string
 	Audience   string
+	TokenID    string
+	NotBefore  string
 	Now        func() time.Time
 }
 
-func issueWorkerToken(opts workerTokenIssueOptions) (string, error) {
+type workerTokenIssueResult struct {
+	Token     string   `json:"token"`
+	TokenID   string   `json:"token_id"`
+	WorkerID  string   `json:"worker_id"`
+	Audience  string   `json:"audience"`
+	Scopes    []string `json:"scopes,omitempty"`
+	IssuedAt  string   `json:"issued_at"`
+	NotBefore string   `json:"not_before,omitempty"`
+	ExpiresAt string   `json:"expires_at"`
+}
+
+func issueWorkerToken(opts workerTokenIssueOptions) (workerTokenIssueResult, error) {
 	workerID := strings.TrimSpace(opts.WorkerID)
 	signingKey := strings.TrimSpace(opts.SigningKey)
 	if workerID == "" {
-		return "", fmt.Errorf("worker id is required")
+		return workerTokenIssueResult{}, fmt.Errorf("worker id is required")
 	}
 	if signingKey == "" {
-		return "", fmt.Errorf("worker signing key is required")
+		return workerTokenIssueResult{}, fmt.Errorf("worker signing key is required")
 	}
 	ttl, err := time.ParseDuration(opts.TTL)
 	if err != nil {
-		return "", fmt.Errorf("worker token ttl: %w", err)
+		return workerTokenIssueResult{}, fmt.Errorf("worker token ttl: %w", err)
 	}
 	if ttl <= 0 {
-		return "", fmt.Errorf("worker token ttl must be positive")
+		return workerTokenIssueResult{}, fmt.Errorf("worker token ttl must be positive")
 	}
 	if ttl > middleware.MaxWorkerTokenTTL {
-		return "", fmt.Errorf("worker token ttl must be <= %s", middleware.MaxWorkerTokenTTL)
+		return workerTokenIssueResult{}, fmt.Errorf("worker token ttl must be <= %s", middleware.MaxWorkerTokenTTL)
 	}
 	audience := strings.TrimSpace(opts.Audience)
 	if audience == "" {
 		audience = middleware.WorkerTokenAudienceControlPlane
 	}
 	if audience != middleware.WorkerTokenAudienceControlPlane && audience != middleware.WorkerTokenAudienceRPC {
-		return "", fmt.Errorf("worker token audience must be %q or %q", middleware.WorkerTokenAudienceControlPlane, middleware.WorkerTokenAudienceRPC)
+		return workerTokenIssueResult{}, fmt.Errorf("worker token audience must be %q or %q", middleware.WorkerTokenAudienceControlPlane, middleware.WorkerTokenAudienceRPC)
+	}
+	notBefore := strings.TrimSpace(opts.NotBefore)
+	if notBefore == "" {
+		notBefore = "0s"
+	}
+	notBeforeDelay, err := time.ParseDuration(notBefore)
+	if err != nil {
+		return workerTokenIssueResult{}, fmt.Errorf("worker token not-before: %w", err)
+	}
+	if notBeforeDelay < 0 {
+		return workerTokenIssueResult{}, fmt.Errorf("worker token not-before must be non-negative")
 	}
 	now := opts.Now
 	if now == nil {
 		now = time.Now
 	}
 	issuedAt := now().UTC()
-	tokenID, err := middleware.NewWorkerTokenID()
-	if err != nil {
-		return "", fmt.Errorf("worker token id: %w", err)
+	tokenID := strings.TrimSpace(opts.TokenID)
+	if tokenID == "" {
+		tokenID, err = middleware.NewWorkerTokenID()
+		if err != nil {
+			return workerTokenIssueResult{}, fmt.Errorf("worker token id: %w", err)
+		}
 	}
-	return middleware.SignWorkerToken(signingKey, middleware.WorkerTokenClaims{
+	notBeforeAt := issuedAt.Add(notBeforeDelay)
+	claims := middleware.WorkerTokenClaims{
 		WorkerID:  workerID,
 		TokenID:   tokenID,
 		Audience:  audience,
 		Scopes:    opts.Scopes,
 		IssuedAt:  issuedAt.Unix(),
 		ExpiresAt: issuedAt.Add(ttl).Unix(),
-	})
+	}
+	result := workerTokenIssueResult{
+		TokenID:   tokenID,
+		WorkerID:  workerID,
+		Audience:  audience,
+		Scopes:    opts.Scopes,
+		IssuedAt:  issuedAt.Format(time.RFC3339),
+		ExpiresAt: issuedAt.Add(ttl).Format(time.RFC3339),
+	}
+	if notBeforeDelay > 0 {
+		claims.NotBefore = notBeforeAt.Unix()
+		result.NotBefore = notBeforeAt.Format(time.RFC3339)
+	}
+	result.Token, err = middleware.SignWorkerToken(signingKey, claims)
+	if err != nil {
+		return workerTokenIssueResult{}, err
+	}
+	return result, nil
 }
 
 func signedWorkerTokenFunc(workerID, signingKey string) func() (string, error) {
