@@ -15,7 +15,7 @@ On bare metal? Firecracker microVMs in ~28ms.<br>
 On Kubernetes? gVisor or Kata containers.<br>
 Need 100 sandboxes but only have 20 VMs? Pool mode.<br>
 Need to expose <code>localhost:3000</code> from inside the sandbox? Live preview, one method call.<br><br>
-Self-hosted. Single binary. Python &amp; TypeScript SDKs. MIT licensed. No cloud required.
+Self-hosted. Single binary. Python &amp; TypeScript SDKs. Apache 2.0 licensed. No cloud required.
 </p>
 
 <p align="center">
@@ -23,7 +23,7 @@ Self-hosted. Single binary. Python &amp; TypeScript SDKs. MIT licensed. No cloud
   <a href="https://github.com/StacyOs/stacyvm/network/members"><img src="https://img.shields.io/github/forks/StacyOs/stacyvm?style=flat-square" alt="Forks"/></a>
   <a href="https://github.com/StacyOs/stacyvm/issues"><img src="https://img.shields.io/github/issues/StacyOs/stacyvm?style=flat-square" alt="Issues"/></a>
   <img src="https://img.shields.io/badge/go-1.25+-00ADD8?style=flat-square&logo=go&logoColor=white" alt="Go"/>
-  <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="MIT"/>
+  <img src="https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square" alt="Apache 2.0"/>
   <img src="https://img.shields.io/badge/platform-linux%20%7C%20mac%20%7C%20windows-blue?style=flat-square" alt="Platform"/>
 </p>
 
@@ -136,7 +136,7 @@ You're building an AI agent. It generates code. That code needs to run somewhere
 | File API (read/write/glob) | ✅ 9 methods | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Python + TS SDKs | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ |
 | Your data stays local | ✅ | ❌ | ✅ | ✅ | ❌ | ✅ |
-| License | MIT | Partial | Apache 2.0 | Apache 2.0 | Proprietary | N/A |
+| License | Apache 2.0 | Partial | Apache 2.0 | Apache 2.0 | Proprietary | N/A |
 
 > **On speed:** Zeroboot's 0.8ms is real — they bypass Firecracker's VMM entirely and `mmap(MAP_PRIVATE)` the snapshot memory as copy-on-write. But there's no disk, no network, and I/O is serial UART only. StacyVM's 28ms gives you a full sandbox with networking, file system, virtio, and multi-vCPU. Different tools for different jobs.
 
@@ -919,7 +919,7 @@ If you find a security issue, do **not** open a public issue — follow [SECURIT
 
 ## License
 
-[MIT](LICENSE) — use it however you want.
+[Apache 2.0](LICENSE) — use it however you want.
 
 ---
 
