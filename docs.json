@@ -1,0 +1,101 @@
+{
+  "$schema": "https://mintlify.com/docs.json",
+  "theme": "mint",
+  "name": "StacyVM",
+  "description": "Deterministic execution infrastructure for autonomous software systems.",
+  "colors": {
+    "primary": "#0EA5E9"
+  },
+  "icons": {
+    "library": "lucide"
+  },
+  "navigation": {
+    "groups": [
+      {
+        "group": "Get Started",
+        "pages": [
+          "index",
+          "docs/deployment",
+          "docs/api"
+        ]
+      },
+      {
+        "group": "Production Readiness",
+        "pages": [
+          "docs/production-readiness",
+          "docs/public-readiness-evidence",
+          "docs/public-support-matrix",
+          "docs/releasing",
+          "docs/security-governance",
+          "docs/threat-model"
+        ]
+      },
+      {
+        "group": "Runtime And Conformance",
+        "pages": [
+          "docs/provider-contract",
+          "docs/runtime-certification",
+          "docs/runtime-conformance",
+          "docs/cluster-conformance",
+          "docs/remote-worker-staging",
+          "docs/worker-rpc-contract"
+        ]
+      },
+      {
+        "group": "Architecture",
+        "pages": [
+          "docs/admin-control-plane",
+          "docs/live-preview-architecture",
+          "docs/snapshot-restore",
+          "docs/enterprise-signoff-runbook"
+        ]
+      },
+      {
+        "group": "Release Notes",
+        "pages": [
+          "docs/releases/phase-14-worker-identity-hardening",
+          "docs/releases/phase-13-cluster-store-and-worker-identity",
+          "docs/releases/phase-12-remote-sandbox-io-routing",
+          "docs/releases/phase-11-remote-worker-runtime",
+          "docs/releases/phase-10-multi-worker-foundation",
+          "docs/releases/phase-9-public-self-serve-release-trust",
+          "docs/releases/phase-8-single-node-production",
+          "docs/releases/phase-7-release-candidate-hardening",
+          "docs/releases/phase-6-security-governance",
+          "docs/releases/phase-5-admin-control-plane",
+          "docs/releases/phase-4-production-deployment",
+          "docs/releases/phase-3-quotas-and-scheduling",
+          "docs/releases/phase-2-observability-and-ops",
+          "docs/releases/phase-1-foundation-hardening"
+        ]
+      },
+      {
+        "group": "Project",
+        "pages": [
+          "docs/releases/phase-14-worker-identity-hardening"
+        ]
+      }
+    ]
+  },
+  "api": {
+    "openapi": "docs/swagger.json",
+    "playground": {
+      "display": "simple"
+    }
+  },
+  "navbar": {
+    "links": [
+      {
+        "label": "GitHub",
+        "href": "https://github.com/StacyOS/stacyvm"
+      },
+      {
+        "label": "Releases",
+        "href": "https://github.com/StacyOS/stacyvm/releases"
+      }
+    ]
+  },
+  "seo": {
+    "indexing": "navigable"
+  }
+}
