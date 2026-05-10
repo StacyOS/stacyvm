@@ -118,7 +118,7 @@ run_gate "Public release sanity" scripts/ci-public-release-sanity.sh
 run_gate "Upgrade and migration sanity" env -u STACYVM_AUTH_API_KEY -u STACYVM_AUTH_ADMIN_API_KEY scripts/ci-upgrade-migration.sh
 
 if [[ "$RUN_CLUSTER" == "true" ]]; then
-  run_gate "Cluster conformance" scripts/ci-cluster-conformance.sh
+  run_gate "Cluster conformance" env -u STACYVM_AUTH_API_KEY -u STACYVM_AUTH_ADMIN_API_KEY scripts/ci-cluster-conformance.sh
 else
   skip_gate "Cluster conformance" "Set \`STACYVM_RUN_CLUSTER_CONFORMANCE=true\` to capture this gate; it opens local listener ports."
 fi
