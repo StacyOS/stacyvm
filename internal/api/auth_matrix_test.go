@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/StacyOs/stacyvm/internal/api/middleware"
+	"github.com/StacyOs/stacyvm/internal/store"
 )
 
 // ── RSA JWT helpers ──────────────────────────────────────────────────────────
@@ -72,6 +73,18 @@ func matrixJSON(t *testing.T, v any) []byte {
 func matrixDo(t *testing.T, srv *Server, method, path string, headers map[string]string) int {
 	t.Helper()
 	req := httptest.NewRequest(method, path, nil)
+	for k, v := range headers {
+		req.Header.Set(k, v)
+	}
+	rr := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(rr, req)
+	return rr.Code
+}
+
+func matrixDoJSON(t *testing.T, srv *Server, method, path, body string, headers map[string]string) int {
+	t.Helper()
+	req := httptest.NewRequest(method, path, strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
 	for k, v := range headers {
 		req.Header.Set(k, v)
 	}
@@ -314,6 +327,83 @@ func TestAuthMatrix_TokenIssuer_RejectsNonWorkerScopes(t *testing.T) {
 
 	if rr2.Code != http.StatusOK {
 		t.Errorf("worker scope in token request: want 200, got %d: %s", rr2.Code, rr2.Body.String())
+	}
+}
+
+// ── 6. Tenant policy enforcement on real sandbox routes ─────────────────────
+
+func TestAuthMatrix_TenantPolicyBlocksSandboxSpawn(t *testing.T) {
+	const apiKey = "api-key-32-bytes-long-enough-!!"
+	srv, st := setupTestServerWithStore(t, ServerConfig{
+		Addr:    "127.0.0.1:0",
+		APIKey:  apiKey,
+		Version: "test",
+	})
+	if err := st.CreatePolicy(t.Context(), &store.PolicyRecord{
+		ID:           "pol-deny-acme-image",
+		TenantID:     "tenant-acme",
+		ResourceType: "image",
+		Effect:       "deny",
+		Pattern:      "blocked:*",
+		Priority:     1,
+	}); err != nil {
+		t.Fatalf("create tenant policy: %v", err)
+	}
+
+	headers := map[string]string{
+		"X-API-Key":   apiKey,
+		"X-Tenant-ID": "tenant-acme",
+	}
+	blockedBody := `{"image":"blocked:latest","provider":"mock","ttl":"1m"}`
+	if code := matrixDoJSON(t, srv, http.MethodPost, "/api/v1/sandboxes", blockedBody, headers); code != http.StatusForbidden {
+		t.Fatalf("tenant-denied image spawn status = %d, want %d", code, http.StatusForbidden)
+	}
+
+	allowedBody := `{"image":"allowed:latest","provider":"mock","ttl":"1m"}`
+	if code := matrixDoJSON(t, srv, http.MethodPost, "/api/v1/sandboxes", allowedBody, headers); code != http.StatusCreated {
+		t.Fatalf("tenant-allowed image spawn status = %d, want %d", code, http.StatusCreated)
+	}
+}
+
+func TestAuthMatrix_TenantPolicyDoesNotLeakAcrossTenantsButGlobalDoes(t *testing.T) {
+	const apiKey = "api-key-32-bytes-long-enough-!!"
+	srv, st := setupTestServerWithStore(t, ServerConfig{
+		Addr:    "127.0.0.1:0",
+		APIKey:  apiKey,
+		Version: "test",
+	})
+	if err := st.CreatePolicy(t.Context(), &store.PolicyRecord{
+		ID:           "pol-deny-acme-image",
+		TenantID:     "tenant-acme",
+		ResourceType: "image",
+		Effect:       "deny",
+		Pattern:      "blocked:*",
+		Priority:     1,
+	}); err != nil {
+		t.Fatalf("create tenant policy: %v", err)
+	}
+	if err := st.CreatePolicy(t.Context(), &store.PolicyRecord{
+		ID:           "pol-deny-global-network",
+		ResourceType: "network",
+		Effect:       "deny",
+		Pattern:      "host",
+		Priority:     1,
+	}); err != nil {
+		t.Fatalf("create global policy: %v", err)
+	}
+
+	otherTenantHeaders := map[string]string{
+		"X-API-Key":   apiKey,
+		"X-Tenant-ID": "tenant-other",
+	}
+	blockedForAcmeBody := `{"image":"blocked:latest","provider":"mock","ttl":"1m"}`
+	if code := matrixDoJSON(t, srv, http.MethodPost, "/api/v1/sandboxes", blockedForAcmeBody, otherTenantHeaders); code != http.StatusCreated {
+		t.Fatalf("tenant-specific image policy leaked to other tenant: status = %d, want %d", code, http.StatusCreated)
+	}
+
+	globalBlockedBody := `{"image":"allowed:latest","provider":"mock","network_mode":"host","ttl":"1m"}`
+	if code := matrixDoJSON(t, srv, http.MethodPost, "/api/v1/sandboxes", globalBlockedBody, otherTenantHeaders); code != http.StatusForbidden {
+		t.Fatalf("global network policy status = %d, want %d", code, http.StatusForbidden)
 	}
 }
 
