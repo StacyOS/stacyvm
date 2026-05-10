@@ -1,0 +1,152 @@
+---
+title: "Quickstart"
+description: "Create your first StacyVM sandbox, run code, move files, and clean up in a few minutes."
+---
+
+This guide gets you from a running StacyVM server to a verified sandbox workflow.
+
+## Prerequisites
+
+- A StacyVM server listening on `http://localhost:7423`.
+- Docker installed and available to the StacyVM process when using the default Docker provider.
+- An API key if `auth.enabled` is set in your config.
+- Python 3.9+ or Node.js 18+ if you want to use an SDK.
+
+## 1. Check The Server
+
+```bash
+curl -sS http://localhost:7423/api/v1/live
+```
+
+A healthy local server returns a success response. If auth is enabled, send your API key on protected routes:
+
+```bash
+export STACYVM_API_KEY="sk_test_YOUR_API_KEY"
+```
+
+## 2. Create A Sandbox
+
+<CodeGroup>
+```bash cURL
+curl -sS -X POST http://localhost:7423/api/v1/sandboxes \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: ${STACYVM_API_KEY}" \
+  -d '{"image":"python:3.12","ttl":"10m","memory_mb":512,"vcpus":1}'
+```
+
+```python Python
+from stacyvm import Client
+
+client = Client(
+    base_url="http://localhost:7423",
+    api_key="sk_test_YOUR_API_KEY",
+)
+
+sandbox = client.spawn(
+    image="python:3.12",
+    ttl="10m",
+    memory_mb=512,
+    vcpus=1,
+)
+print(sandbox.id)
+```
+
+```typescript TypeScript
+import { Client } from "stacyvm";
+
+const client = new Client({
+  baseUrl: "http://localhost:7423",
+  apiKey: "sk_test_YOUR_API_KEY",
+});
+
+const sandbox = await client.spawn({
+  image: "python:3.12",
+  ttl: "10m",
+  memory_mb: 512,
+  vcpus: 1,
+});
+console.log(sandbox.id);
+```
+</CodeGroup>
+
+Save the returned sandbox ID:
+
+```bash
+export SANDBOX_ID="sb_YOUR_SANDBOX_ID"
+```
+
+## 3. Run Code
+
+<CodeGroup>
+```bash cURL
+curl -sS -X POST "http://localhost:7423/api/v1/sandboxes/${SANDBOX_ID}/exec" \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: ${STACYVM_API_KEY}" \
+  -d '{"command":"python3 -c \"print(40 + 2)\"","timeout":"10s"}'
+```
+
+```python Python
+result = sandbox.exec("python3 -c 'print(40 + 2)'", timeout="10s")
+print(result.stdout)
+```
+
+```typescript TypeScript
+const result = await sandbox.exec("python3 -c 'print(40 + 2)'", {
+  timeout: "10s",
+});
+console.log(result.stdout);
+```
+</CodeGroup>
+
+## 4. Move A File Into The Sandbox
+
+<CodeGroup>
+```bash cURL
+curl -sS -X PUT "http://localhost:7423/api/v1/sandboxes/${SANDBOX_ID}/files/app/main.py" \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: ${STACYVM_API_KEY}" \
+  -d '{"content":"name = \"StacyVM\"\\nprint(f\"hello from {name}\")\\n","mode":"644"}'
+```
+
+```python Python
+sandbox.write_file(
+    "/app/main.py",
+    'name = "StacyVM"\nprint(f"hello from {name}")\n',
+)
+print(sandbox.exec("python3 /app/main.py").stdout)
+```
+
+```typescript TypeScript
+await sandbox.writeFile(
+  "/app/main.py",
+  'name = "StacyVM"\nprint(f"hello from {name}")\n',
+);
+console.log((await sandbox.exec("python3 /app/main.py")).stdout);
+```
+</CodeGroup>
+
+## 5. Destroy The Sandbox
+
+Always destroy sandboxes when work is complete. TTL cleanup is a fallback, not the primary lifecycle control.
+
+<CodeGroup>
+```bash cURL
+curl -sS -X DELETE "http://localhost:7423/api/v1/sandboxes/${SANDBOX_ID}" \
+  -H "X-API-Key: ${STACYVM_API_KEY}"
+```
+
+```python Python
+sandbox.destroy()
+```
+
+```typescript TypeScript
+await sandbox.destroy();
+```
+</CodeGroup>
+
+## Next Steps
+
+- Build the [example code runner](/docs/tutorials/code-runner).
+- Learn the [core concepts](/docs/getting-started/core-concepts).
+- Use the [Python SDK](/docs/sdks/python) or [TypeScript SDK](/docs/sdks/typescript).
+- Prepare a host with the [production deployment guide](/docs/deployment).

@@ -1,0 +1,109 @@
+---
+title: "Example App: Code Runner"
+description: "Build a small FastAPI application that runs submitted Python code inside disposable StacyVM sandboxes."
+---
+
+This example shows the complete developer loop: receive code, create a sandbox, write a file, execute it, return output, and always destroy the sandbox.
+
+## Prerequisites
+
+- A running StacyVM server.
+- Docker provider access on the StacyVM host.
+- Python 3.9+.
+- A StacyVM API key if auth is enabled.
+
+The source lives in [`examples/code-runner-python`](https://github.com/StacyOS/stacyvm/tree/phase-14-worker-identity-hardening/examples/code-runner-python).
+
+## Install
+
+```bash
+cd examples/code-runner-python
+python3 -m venv .venv
+. .venv/bin/activate
+pip install -r requirements.txt
+```
+
+## Configure
+
+```bash
+export STACYVM_URL="http://localhost:7423"
+export STACYVM_API_KEY="sk_test_YOUR_API_KEY"
+export STACYVM_IMAGE="python:3.12"
+```
+
+## Run The App
+
+```bash
+uvicorn app:app --reload --port 8080
+```
+
+## Submit Code
+
+<CodeGroup>
+```bash cURL
+curl -sS -X POST http://localhost:8080/run-python \
+  -H "Content-Type: application/json" \
+  -d '{"code":"print(sum([10, 20, 12]))","timeout":"10s"}'
+```
+
+```javascript JavaScript
+const response = await fetch("http://localhost:8080/run-python", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    code: "print(sum([10, 20, 12]))",
+    timeout: "10s",
+  }),
+});
+
+if (!response.ok) {
+  throw new Error(await response.text());
+}
+
+console.log(await response.json());
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    "http://localhost:8080/run-python",
+    json={
+        "code": "print(sum([10, 20, 12]))",
+        "timeout": "10s",
+    },
+    timeout=30,
+)
+response.raise_for_status()
+print(response.json())
+```
+</CodeGroup>
+
+## Response
+
+```json
+{
+  "exit_code": 0,
+  "stdout": "42\n",
+  "stderr": "",
+  "duration": "120ms"
+}
+```
+
+## Why This Pattern Works
+
+- The sandbox gets a short TTL so idle work is cleaned up.
+- The app destroys the sandbox in a `finally` block.
+- User code is written to a file instead of interpolated into a shell command.
+- Runtime failures are returned as normal execution results.
+- Provider failures return a clear API error.
+
+## Production Notes
+
+Before exposing a code runner to users, add authentication to your app, per-user quotas, request size limits, audit logging, and runtime certification for the host you are using.
+
+## Related
+
+- [Quickstart](/docs/getting-started/quickstart)
+- [Python SDK](/docs/sdks/python)
+- [Production deployment](/docs/deployment)

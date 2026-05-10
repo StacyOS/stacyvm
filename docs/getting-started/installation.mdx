@@ -1,0 +1,87 @@
+---
+title: "Installation"
+description: "Install and run StacyVM locally from a release binary, Docker image, or source checkout."
+---
+
+Use this page to get a StacyVM server running before you follow the quickstart.
+
+## Prerequisites
+
+- Linux is recommended for runtime work. macOS is useful for SDK and docs development, but Docker provider behavior should be certified on Linux before public claims.
+- Docker is required for the default local provider path.
+- Go is required only when building from source.
+
+## Option 1: Release Binary
+
+Use a signed GitHub release for production-like installs.
+
+```bash
+curl -L -o stacyvm.tar.gz \
+  https://github.com/StacyOS/stacyvm/releases/latest/download/stacyvm_linux_amd64.tar.gz
+tar -xzf stacyvm.tar.gz
+sudo install -m 0755 stacyvm /usr/local/bin/stacyvm
+```
+
+Validate the release artifacts before you install them in production:
+
+```bash
+scripts/post-release-validate.sh v0.14.4
+```
+
+Replace `v0.14.4` with the release tag you plan to deploy.
+
+## Option 2: Docker Compose
+
+The repository includes a production-oriented Docker Compose starting point.
+
+```bash
+cd deploy
+cp .env.example .env
+docker compose up -d
+docker compose logs -f stacyvm
+```
+
+Edit `.env` before exposing the service. Use strong API keys, exact CORS origins, and a persistent data directory.
+
+## Option 3: Source Checkout
+
+Build from source when you are contributing to StacyVM itself.
+
+```bash
+git clone https://github.com/StacyOS/stacyvm.git
+cd stacyvm
+go test ./...
+go build ./cmd/stacyvm
+./stacyvm serve
+```
+
+## Configure Auth
+
+For local experiments you can run without auth. For any shared host, enable auth and pass `X-API-Key` from clients.
+
+```yaml
+auth:
+  enabled: true
+  api_key: "sk_live_REPLACE_ME"
+server:
+  cors_allowed_origins:
+    - "https://your-app.example.com"
+```
+
+## Verify The Host
+
+Run config validation before a deploy:
+
+```bash
+stacyvm config lint --production --file deploy/stacyvm.production.yaml
+```
+
+Run live host diagnostics after the service is installed:
+
+```bash
+stacyvm doctor --production
+```
+
+## Continue
+
+Once the server responds, follow the [quickstart](/docs/getting-started/quickstart).

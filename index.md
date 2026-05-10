@@ -1,26 +1,88 @@
 ---
-title: "StacyVM Documentation"
-description: "Self-hosted sandbox infrastructure for autonomous software systems."
+title: "StacyVM"
+description: "Self-hosted sandbox infrastructure for running agent code in isolated, disposable environments."
 ---
 
 # StacyVM
 
-StacyVM gives AI agents isolated, disposable execution environments with provider options for Docker, Firecracker, PRoot, and remote workers.
+StacyVM gives your applications isolated, disposable execution environments for AI agents, code runners, browser previews, and automation workflows. You keep control of the runtime, network, credentials, and audit trail while developers get a simple API and SDK.
 
-## Start Here
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/docs/getting-started/quickstart">
+    Start a local server, create a sandbox, run code, and destroy it.
+  </Card>
+  <Card title="Example application" icon="square-terminal" href="/docs/tutorials/code-runner">
+    Build a small API that runs submitted Python code inside StacyVM.
+  </Card>
+  <Card title="Python SDK" icon="package" href="/docs/sdks/python">
+    Use StacyVM from Python services, jobs, and agent frameworks.
+  </Card>
+  <Card title="TypeScript SDK" icon="braces" href="/docs/sdks/typescript">
+    Use StacyVM from Node.js, web backends, and TypeScript agents.
+  </Card>
+</CardGroup>
 
-- [README](README.md) for the product overview and quick start.
-- [Deployment](docs/deployment.md) for production installation and operations.
-- [API Reference](docs/api.md) for REST endpoints and examples.
-- [Public Support Matrix](docs/public-support-matrix.md) for supported runtime claims.
-- [Runtime Certification](docs/runtime-certification.md) for host-level readiness checks.
+## What You Can Build
 
-## Current Public Release
+- Run untrusted or generated code in short-lived sandboxes.
+- Give coding agents a filesystem, shell, and live preview URL without exposing your host.
+- Route sandbox work across Docker, Firecracker, PRoot, local providers, or remote workers.
+- Track quotas, audit events, runtime health, and production readiness evidence.
+- Integrate through REST, Python, or TypeScript.
 
-Use the latest signed GitHub release and verify artifacts before installing in production:
+## First Sandbox
 
-```bash
-scripts/post-release-validate.sh v0.14.4
+<CodeGroup>
+```bash cURL
+curl -sS -X POST http://localhost:7423/api/v1/sandboxes \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: sk_test_YOUR_API_KEY" \
+  -d '{"image":"python:3.12","ttl":"10m"}'
 ```
 
-For Docker-focused public self-serve deployments, keep the support claim tied to the certified Linux Docker path unless you have separate host certification evidence for Firecracker, gVisor/Kata, or PRoot.
+```python Python
+from stacyvm import Client
+
+client = Client(
+    base_url="http://localhost:7423",
+    api_key="sk_test_YOUR_API_KEY",
+)
+
+with client.spawn(image="python:3.12", ttl="10m") as sandbox:
+    result = sandbox.exec("python3 -c 'print(40 + 2)'")
+    print(result.stdout)
+```
+
+```typescript TypeScript
+import { Client } from "stacyvm";
+
+const client = new Client({
+  baseUrl: "http://localhost:7423",
+  apiKey: "sk_test_YOUR_API_KEY",
+});
+
+await client.withSandbox({ image: "node:20", ttl: "10m" }, async (sandbox) => {
+  const result = await sandbox.exec("node -e 'console.log(40 + 2)'");
+  console.log(result.stdout);
+});
+```
+</CodeGroup>
+
+## Recommended Path
+
+<Steps>
+  <Step title="Install StacyVM">
+    Follow the [installation guide](/docs/getting-started/installation) for local Docker, binary, or source builds.
+  </Step>
+  <Step title="Run the quickstart">
+    Use the [quickstart](/docs/getting-started/quickstart) to validate spawn, exec, files, and cleanup.
+  </Step>
+  <Step title="Pick an integration">
+    Choose the [Python SDK](/docs/sdks/python), [TypeScript SDK](/docs/sdks/typescript), or [REST API](/docs/api/sandboxes).
+  </Step>
+  <Step title="Prepare production">
+    Use the [deployment guide](/docs/deployment), [support matrix](/docs/public-support-matrix), and [runtime certification](/docs/runtime-certification) before making public runtime claims.
+  </Step>
+</Steps>
+
+For public deployments, only claim support for runtimes you have certified on the target host.

@@ -1,0 +1,59 @@
+---
+title: "Core Concepts"
+description: "Understand StacyVM sandboxes, providers, templates, files, exec sessions, previews, quotas, and cleanup."
+---
+
+StacyVM is small at the API boundary: you create a sandbox, run work inside it, move files in and out, and destroy it. Production behavior comes from the provider, scheduler, quotas, audit logs, and host configuration behind that boundary.
+
+## Sandbox
+
+A sandbox is an isolated runtime instance. It has an ID, state, image, provider, resource request, TTL, metadata, and optional preview domain.
+
+Typical states include `creating`, `running`, `unhealthy`, `expired`, `destroying`, `destroyed`, and `error`.
+
+## Provider
+
+A provider owns the actual runtime. StacyVM includes support for Docker, Firecracker, PRoot, custom providers, mock providers, and remote workers. Docker is the broadest quickstart path. Firecracker and PRoot require host-specific certification before you claim production support.
+
+## Image
+
+An image describes the filesystem and runtime available inside the sandbox. For Docker, this is a container image such as `python:3.12` or `node:20`.
+
+## Exec
+
+Exec runs a command inside an existing sandbox. Use timeouts for generated or untrusted code so a process cannot run forever.
+
+```json
+{
+  "command": "python3 /app/main.py",
+  "timeout": "30s"
+}
+```
+
+## Files
+
+The file API lets you write source code, read outputs, list directories, move files, change modes, and delete paths inside the sandbox. Use absolute paths such as `/app/main.py`.
+
+## TTL
+
+TTL is automatic cleanup. Set a short TTL for agent tasks and still call destroy when the task completes.
+
+## Templates
+
+Templates define reusable sandbox settings such as image, provider, memory, vCPU, TTL, and metadata. Use templates when many developers or agents need the same environment.
+
+## Live Previews
+
+Live previews expose web applications running inside a sandbox through a preview URL. This is useful for coding agents that need to build and inspect web apps.
+
+## Quotas
+
+Quotas keep one user or workflow from consuming the whole host. StacyVM can track owner identity through `X-User-ID`, API key identity, and configured limits.
+
+## Audit Logs
+
+Production deployments should keep audit logs for sandbox creation, exec, file writes, destroy operations, admin changes, and registry actions.
+
+## Production Claims
+
+Do not claim a runtime is production-ready until you have run certification on the actual host class. Start with the [public support matrix](/docs/public-support-matrix), then run [runtime certification](/docs/runtime-certification).

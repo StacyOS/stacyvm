@@ -1,3 +1,8 @@
+---
+title: "REST API Reference"
+description: "Use StacyVM's HTTP API to create sandboxes, run commands, manage files, inspect providers, and operate clusters."
+---
+
 # StacyVM REST API Reference
 
 This document is the source of truth for the StacyVM HTTP API. The Python and TypeScript SDKs are thin wrappers over these endpoints — anything they do, you can do with `curl`.

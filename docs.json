@@ -15,17 +15,34 @@
         "group": "Get Started",
         "pages": [
           "index",
-          "docs/deployment",
+          "docs/getting-started/quickstart",
+          "docs/getting-started/installation",
+          "docs/getting-started/core-concepts"
+        ]
+      },
+      {
+        "group": "Build With StacyVM",
+        "pages": [
+          "docs/tutorials/code-runner",
+          "docs/sdks/python",
+          "docs/sdks/typescript",
+          "docs/api/sandboxes",
           "docs/api"
+        ]
+      },
+      {
+        "group": "Operate",
+        "pages": [
+          "docs/deployment",
+          "docs/production-readiness",
+          "docs/public-readiness-evidence",
+          "docs/public-support-matrix",
+          "docs/releasing"
         ]
       },
       {
         "group": "Production Readiness",
         "pages": [
-          "docs/production-readiness",
-          "docs/public-readiness-evidence",
-          "docs/public-support-matrix",
-          "docs/releasing",
           "docs/security-governance",
           "docs/threat-model"
         ]
@@ -67,12 +84,6 @@
           "docs/releases/phase-3-quotas-and-scheduling",
           "docs/releases/phase-2-observability-and-ops",
           "docs/releases/phase-1-foundation-hardening"
-        ]
-      },
-      {
-        "group": "Project",
-        "pages": [
-          "docs/releases/phase-14-worker-identity-hardening"
         ]
       }
     ]

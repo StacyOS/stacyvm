@@ -1,3 +1,8 @@
+---
+title: "Production Deployment"
+description: "Deploy StacyVM as a single-node service with Docker, systemd, health checks, metrics, and release validation."
+---
+
 # Production Deployment
 
 This guide covers a single-node StacyVM deployment suitable for an internal service, staging, or a small production installation. The default production path uses the Docker provider because it works on the broadest set of hosts; Firecracker and PRoot require extra host setup and should be validated on the target platform before rollout.

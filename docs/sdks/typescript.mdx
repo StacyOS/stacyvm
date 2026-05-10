@@ -1,0 +1,123 @@
+---
+title: "TypeScript SDK"
+description: "Use the StacyVM TypeScript SDK from Node.js services, agent backends, and developer tools."
+---
+
+The TypeScript SDK works in Node.js 18+ and exposes the same sandbox lifecycle as the REST API.
+
+## Prerequisites
+
+- Node.js 18+.
+- A running StacyVM server.
+- An API key when auth is enabled.
+
+## Install
+
+```bash
+npm install stacyvm
+```
+
+## Connect
+
+```typescript
+import { Client } from "stacyvm";
+
+const client = new Client({
+  baseUrl: process.env.STACYVM_URL ?? "http://localhost:7423",
+  apiKey: process.env.STACYVM_API_KEY,
+  userId: "user_123",
+  timeout: 60_000,
+});
+```
+
+<ParamField body="baseUrl" type="string">
+  StacyVM server URL. Defaults to `http://localhost:7423`.
+</ParamField>
+
+<ParamField body="apiKey" type="string">
+  API key sent as `X-API-Key` when server auth is enabled.
+</ParamField>
+
+<ParamField body="userId" type="string">
+  Tenant or owner identity sent as `X-User-ID` for quota and audit attribution.
+</ParamField>
+
+<ParamField body="timeout" type="number">
+  Per-request HTTP timeout in milliseconds.
+</ParamField>
+
+## Run A Task
+
+```typescript
+import { Client } from "stacyvm";
+
+const client = new Client({
+  baseUrl: "http://localhost:7423",
+  apiKey: "sk_test_YOUR_API_KEY",
+});
+
+await client.withSandbox({ image: "node:20", ttl: "10m" }, async (sandbox) => {
+  await sandbox.writeFile("/app/main.js", "console.log(40 + 2);\n");
+  const result = await sandbox.exec("node /app/main.js", { timeout: "10s" });
+
+  if (result.exit_code !== 0) {
+    throw new Error(result.stderr);
+  }
+
+  console.log(result.stdout);
+});
+```
+
+<ResponseField name="exit_code" type="integer">
+  Process exit code returned by the runtime provider.
+</ResponseField>
+
+<ResponseField name="stdout" type="string">
+  Captured standard output.
+</ResponseField>
+
+<ResponseField name="stderr" type="string">
+  Captured standard error.
+</ResponseField>
+
+<ResponseField name="duration" type="string">
+  Provider-reported execution duration.
+</ResponseField>
+
+## Stream Output
+
+```typescript
+for await (const chunk of sandbox.execStream("npm test")) {
+  if (chunk.stream === "stdout") {
+    process.stdout.write(chunk.data);
+  } else {
+    process.stderr.write(chunk.data);
+  }
+}
+```
+
+## Handle Errors
+
+```typescript
+import { Client, ForgevmError } from "stacyvm";
+
+const client = new Client("http://localhost:7423");
+
+try {
+  await client.withSandbox({ image: "node:20", ttl: "10m" }, async (sandbox) => {
+    await sandbox.exec("node /missing.js", { timeout: "10s" });
+  });
+} catch (error) {
+  if (error instanceof ForgevmError) {
+    console.error(error.message);
+  } else {
+    throw error;
+  }
+}
+```
+
+## Related
+
+- [Quickstart](/docs/getting-started/quickstart)
+- [Example code runner](/docs/tutorials/code-runner)
+- [REST sandboxes](/docs/api/sandboxes)
