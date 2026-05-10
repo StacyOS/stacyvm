@@ -61,7 +61,10 @@ func TestRunUpgradeRehearsalFailsWhenBackupExists(t *testing.T) {
 func writeUpgradeTestConfig(t *testing.T, dir, dbPath string) string {
 	t.Helper()
 	path := filepath.Join(dir, "stacyvm.yaml")
-	body := `auth:
+	body := `server:
+  cors_allowed_origins:
+    - "https://console.example.com"
+auth:
   enabled: true
   api_key: "regular-api-key-with-at-least-32-bytes"
   admin_api_key: "admin-api-key-with-at-least-32-bytesxx"

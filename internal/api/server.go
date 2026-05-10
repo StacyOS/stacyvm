@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -27,6 +28,7 @@ type ServerConfig struct {
 	AdminAPIKey           string
 	AdminFallbackDisabled bool
 	AdminAuditRetention   time.Duration
+	CORSAllowedOrigins    []string
 	WorkerToken           string
 	WorkerTokens          map[string]string
 	WorkerSigningKey      string
@@ -98,19 +100,7 @@ func NewServer(cfg ServerConfig, registry *providers.Registry, manager *orchestr
 			r.Use(middleware.AuthAny(cfg.APIKey, cfg.AdminAPIKey))
 		}
 
-		// CORS
-		r.Use(func(next http.Handler) http.Handler {
-			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				w.Header().Set("Access-Control-Allow-Origin", "*")
-				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-API-Key, X-Admin-API-Key, X-Request-ID, X-User-ID, X-Tenant-ID, Authorization")
-				if r.Method == "OPTIONS" {
-					w.WriteHeader(http.StatusOK)
-					return
-				}
-				next.ServeHTTP(w, r)
-			})
-		})
+		r.Use(corsMiddleware(cfg.CORSAllowedOrigins))
 
 		var rateLimiter *middleware.RateLimiter
 		if cfg.RateLimit.Enabled {
@@ -172,6 +162,46 @@ func NewServer(cfg ServerConfig, registry *providers.Registry, manager *orchestr
 		logger:          logger,
 		workerHeartbeat: workerHeartbeat,
 	}
+}
+
+func corsMiddleware(allowedOrigins []string) func(http.Handler) http.Handler {
+	origins := normalizeCORSAllowedOrigins(allowedOrigins)
+	allowAll := len(origins) == 0 || origins["*"]
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			origin := strings.TrimSpace(r.Header.Get("Origin"))
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-API-Key, X-Admin-API-Key, X-Request-ID, X-User-ID, X-Tenant-ID, Authorization")
+			if allowAll {
+				w.Header().Set("Access-Control-Allow-Origin", "*")
+			} else if origin != "" {
+				w.Header().Add("Vary", "Origin")
+				if origins[origin] {
+					w.Header().Set("Access-Control-Allow-Origin", origin)
+				} else if r.Method == http.MethodOptions {
+					http.Error(w, "CORS origin is not allowed", http.StatusForbidden)
+					return
+				}
+			}
+			if r.Method == http.MethodOptions {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func normalizeCORSAllowedOrigins(origins []string) map[string]bool {
+	out := make(map[string]bool, len(origins))
+	for _, origin := range origins {
+		origin = strings.TrimSpace(origin)
+		if origin == "" {
+			continue
+		}
+		out[origin] = true
+	}
+	return out
 }
 
 type localWorkerHeartbeat struct {

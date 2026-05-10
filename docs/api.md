@@ -43,7 +43,15 @@ curl -H 'X-API-Key: sk-xyz123' \
      http://localhost:7423/api/v1/sandboxes
 ```
 
-CORS is permissive by default (`*`). Lock it down via reverse proxy if you expose StacyVM to the open internet.
+CORS is permissive by default for local development (`server.cors_allowed_origins: ["*"]`). Public deployments should set exact origins, for example:
+
+```yaml
+server:
+  cors_allowed_origins:
+    - "https://console.example.com"
+```
+
+`stacyvm config lint --production` fails when CORS is left wildcard or empty.
 
 `X-User-ID` is trimmed when present. It must be 128 characters or fewer and cannot contain whitespace, control characters, or path separators.
 

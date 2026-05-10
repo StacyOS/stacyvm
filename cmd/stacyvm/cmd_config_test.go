@@ -24,6 +24,7 @@ func TestLintConfigProductionCatchesUnsafeSettings(t *testing.T) {
 	cfg.Auth.AdminAPIKey = cfg.Auth.APIKey
 	cfg.Auth.AdminFallbackEnabled = true
 	cfg.Auth.AdminAuditRetention = "0s"
+	cfg.Server.CORSAllowedOrigins = []string{"*"}
 	cfg.RateLimit.Enabled = false
 	cfg.Database.Path = "stacyvm.db"
 	cfg.Defaults.MaxSandboxes = 0
@@ -47,6 +48,7 @@ func TestLintConfigProductionCatchesUnsafeSettings(t *testing.T) {
 		"auth.key_separation",
 		"auth.admin_fallback_enabled",
 		"auth.admin_audit_retention",
+		"server.cors_allowed_origins",
 		"rate_limit.enabled",
 		"database.path",
 		"defaults.sandbox_caps",
@@ -76,6 +78,31 @@ func TestLintDatabaseConfigPassesForPostgresWithDSN(t *testing.T) {
 		t.Fatalf("checks = %+v, want one check", checks)
 	}
 	if checks[0].Name != "database.driver" || checks[0].Status != doctorPass {
+		t.Fatalf("unexpected check: %+v", checks[0])
+	}
+}
+
+func TestLintServerConfigRequiresExplicitCORSInProduction(t *testing.T) {
+	cfg := validProductionConfig()
+	cfg.Server.CORSAllowedOrigins = []string{"*"}
+
+	checks := lintServerConfig(cfg, true)
+	if len(checks) != 1 {
+		t.Fatalf("checks = %+v, want one check", checks)
+	}
+	if checks[0].Name != "server.cors_allowed_origins" || checks[0].Status != doctorFail {
+		t.Fatalf("unexpected check: %+v", checks[0])
+	}
+}
+
+func TestLintServerConfigAcceptsExplicitCORSOrigins(t *testing.T) {
+	cfg := validProductionConfig()
+
+	checks := lintServerConfig(cfg, true)
+	if len(checks) != 1 {
+		t.Fatalf("checks = %+v, want one check", checks)
+	}
+	if checks[0].Name != "server.cors_allowed_origins" || checks[0].Status != doctorPass {
 		t.Fatalf("unexpected check: %+v", checks[0])
 	}
 }
@@ -237,6 +264,9 @@ func TestLintWorkerRPCConfigPassesCompleteMTLSInputs(t *testing.T) {
 
 func validProductionConfig() *config.Config {
 	return &config.Config{
+		Server: config.ServerConfig{
+			CORSAllowedOrigins: []string{"https://console.example.com"},
+		},
 		Auth: config.AuthConfig{
 			Enabled:              true,
 			APIKey:               "regular-api-key-with-at-least-32-bytes",

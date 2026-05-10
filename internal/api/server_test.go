@@ -79,6 +79,63 @@ func setupTestServerWithStore(t *testing.T, cfg ServerConfig) (*Server, *store.S
 	return NewServer(cfg, registry, manager, events, templates, pool, st, noopBuildStarter{}, zerolog.Nop()), st
 }
 
+func TestCORSDefaultsToWildcardForLocalDevelopment(t *testing.T) {
+	srv := setupTestServer(t, ServerConfig{Version: "test"})
+
+	req := httptest.NewRequest(http.MethodOptions, "/api/v1/ready", nil)
+	req.Header.Set("Origin", "https://app.example.com")
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if got := w.Header().Get("Access-Control-Allow-Origin"); got != "*" {
+		t.Fatalf("Access-Control-Allow-Origin = %q, want *", got)
+	}
+}
+
+func TestCORSAllowsConfiguredOrigin(t *testing.T) {
+	srv := setupTestServer(t, ServerConfig{
+		Version:            "test",
+		CORSAllowedOrigins: []string{"https://console.example.com"},
+	})
+
+	req := httptest.NewRequest(http.MethodOptions, "/api/v1/ready", nil)
+	req.Header.Set("Origin", "https://console.example.com")
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d: %s", w.Code, http.StatusOK, w.Body.String())
+	}
+	if got := w.Header().Get("Access-Control-Allow-Origin"); got != "https://console.example.com" {
+		t.Fatalf("Access-Control-Allow-Origin = %q, want configured origin", got)
+	}
+	if got := w.Header().Get("Vary"); got != "Origin" {
+		t.Fatalf("Vary = %q, want Origin", got)
+	}
+}
+
+func TestCORSRejectsDisallowedPreflightOrigin(t *testing.T) {
+	srv := setupTestServer(t, ServerConfig{
+		Version:            "test",
+		CORSAllowedOrigins: []string{"https://console.example.com"},
+	})
+
+	req := httptest.NewRequest(http.MethodOptions, "/api/v1/ready", nil)
+	req.Header.Set("Origin", "https://evil.example.com")
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, want %d: %s", w.Code, http.StatusForbidden, w.Body.String())
+	}
+	if got := w.Header().Get("Access-Control-Allow-Origin"); got != "" {
+		t.Fatalf("Access-Control-Allow-Origin = %q, want empty", got)
+	}
+}
+
 func TestWorkerHeartbeatUsesWorkerTokenNotAPIKey(t *testing.T) {
 	srv, st := setupTestServerWithStore(t, ServerConfig{
 		APIKey:      "client-key",

@@ -84,6 +84,45 @@ database:
 	}
 }
 
+func TestLoadRejectsInvalidCORSOrigin(t *testing.T) {
+	t.Chdir(t.TempDir())
+	if err := os.WriteFile("stacyvm.yaml", []byte(`
+server:
+  cors_allowed_origins:
+    - "https://console.example.com/path"
+`), 0644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	_, err := Load()
+	if err == nil {
+		t.Fatal("expected invalid CORS origin error")
+	}
+	if !strings.Contains(err.Error(), "server.cors_allowed_origins") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestLoadAcceptsExplicitCORSOrigins(t *testing.T) {
+	t.Chdir(t.TempDir())
+	if err := os.WriteFile("stacyvm.yaml", []byte(`
+server:
+  cors_allowed_origins:
+    - "https://console.example.com"
+    - "http://localhost:5173"
+`), 0644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if len(cfg.Server.CORSAllowedOrigins) != 2 {
+		t.Fatalf("CORS origins = %#v, want two", cfg.Server.CORSAllowedOrigins)
+	}
+}
+
 func TestLoadRequiresPostgresDSN(t *testing.T) {
 	t.Chdir(t.TempDir())
 	if err := os.WriteFile("stacyvm.yaml", []byte(`

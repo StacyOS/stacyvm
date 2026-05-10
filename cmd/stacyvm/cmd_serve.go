@@ -246,6 +246,7 @@ func runServe() error {
 		AdminAPIKey:           cfg.Auth.AdminAPIKey,
 		AdminFallbackDisabled: !cfg.Auth.AdminFallbackEnabled,
 		AdminAuditRetention:   adminAuditRetention,
+		CORSAllowedOrigins:    cfg.Server.CORSAllowedOrigins,
 		WorkerToken:           cfg.Auth.WorkerToken,
 		WorkerTokens:          cfg.Auth.WorkerTokens,
 		WorkerSigningKey:      cfg.Auth.WorkerSigningKey,

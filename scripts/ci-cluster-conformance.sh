@@ -32,6 +32,8 @@ server:
   host: "0.0.0.0"
   port: 7423
   preview_domain: "localhost"
+  cors_allowed_origins:
+    - "https://console.example.com"
 
 worker:
   id: "worker-a"
@@ -184,6 +186,8 @@ cat >"$oidc_config" <<YAML
 server:
   host: "0.0.0.0"
   port: 7423
+  cors_allowed_origins:
+    - "https://console.example.com"
 providers:
   default: "mock"
   mock:

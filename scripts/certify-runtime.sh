@@ -265,6 +265,8 @@ start_local_server() {
 server:
   host: "127.0.0.1"
   port: $port
+  cors_allowed_origins:
+    - "http://127.0.0.1:$port"
 providers:
   default: "$provider"
   mock:

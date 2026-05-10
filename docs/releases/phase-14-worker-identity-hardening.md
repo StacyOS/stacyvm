@@ -143,6 +143,15 @@ The new signed-token path is additive:
 ### Admin UI
 - Added Tenants page with tenant lifecycle, member RBAC, policy management, and per-tenant audit export.
 
+## Public Self-Serve Hardening Follow-Up
+
+- Added configurable `server.cors_allowed_origins` so public browser/API deployments can restrict CORS to exact trusted origins instead of relying on reverse-proxy-only guidance.
+- Updated API server CORS handling to preserve the local wildcard default while rejecting disallowed browser preflights when explicit origins are configured.
+- Updated `stacyvm config lint --production` so wildcard or empty CORS fails the public production gate.
+- Updated `deploy/stacyvm.production.yaml`, deployment docs, API docs, public support matrix, and production readiness checklist with explicit CORS origin requirements.
+- Extended public release sanity CI to run production config lint with environment-provided secrets before building release artifacts.
+- Hardened the remote worker smoke harness so missing binaries, occupied ports, and failed spawns report actionable diagnostics instead of producing misleading release-gate failures.
+
 ## Remaining Phase 14 Direction
 
 - Run worker RPC mTLS smoke tests with deployment-issued certificates in the target enterprise network.

@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -34,9 +35,10 @@ type PoolConfig struct {
 }
 
 type ServerConfig struct {
-	Host          string `mapstructure:"host"`
-	Port          int    `mapstructure:"port"`
-	PreviewDomain string `mapstructure:"preview_domain"`
+	Host               string   `mapstructure:"host"`
+	Port               int      `mapstructure:"port"`
+	PreviewDomain      string   `mapstructure:"preview_domain"`
+	CORSAllowedOrigins []string `mapstructure:"cors_allowed_origins"`
 }
 
 func (s ServerConfig) Addr() string {
@@ -172,17 +174,17 @@ type AuthConfig struct {
 	AdminAuditRetention   string            `mapstructure:"admin_audit_retention"`
 
 	// OIDC/JWT configuration for enterprise SSO
-	OIDCEnabled      bool     `mapstructure:"oidc_enabled"`
-	OIDCIssuer       string   `mapstructure:"oidc_issuer"`
-	OIDCAudience     string   `mapstructure:"oidc_audience"`
-	OIDCJWKSUrl      string   `mapstructure:"oidc_jwks_url"`
-	OIDCPublicKey    string   `mapstructure:"oidc_public_key"`
-	OIDCPublicKeyFile string  `mapstructure:"oidc_public_key_file"`
-	OIDCGroupsClaim  string   `mapstructure:"oidc_groups_claim"`
-	OIDCTenantClaim  string   `mapstructure:"oidc_tenant_claim"`
-	OIDCAdminGroups  []string `mapstructure:"oidc_admin_groups"`
+	OIDCEnabled        bool     `mapstructure:"oidc_enabled"`
+	OIDCIssuer         string   `mapstructure:"oidc_issuer"`
+	OIDCAudience       string   `mapstructure:"oidc_audience"`
+	OIDCJWKSUrl        string   `mapstructure:"oidc_jwks_url"`
+	OIDCPublicKey      string   `mapstructure:"oidc_public_key"`
+	OIDCPublicKeyFile  string   `mapstructure:"oidc_public_key_file"`
+	OIDCGroupsClaim    string   `mapstructure:"oidc_groups_claim"`
+	OIDCTenantClaim    string   `mapstructure:"oidc_tenant_claim"`
+	OIDCAdminGroups    []string `mapstructure:"oidc_admin_groups"`
 	OIDCOperatorGroups []string `mapstructure:"oidc_operator_groups"`
-	OIDCViewerGroups []string `mapstructure:"oidc_viewer_groups"`
+	OIDCViewerGroups   []string `mapstructure:"oidc_viewer_groups"`
 }
 
 type RateLimitConfig struct {
@@ -209,6 +211,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("server.host", "0.0.0.0")
 	v.SetDefault("server.port", 7423)
 	v.SetDefault("server.preview_domain", "localhost")
+	v.SetDefault("server.cors_allowed_origins", []string{"*"})
 	v.SetDefault("worker.id", "")
 	v.SetDefault("worker.control_plane_url", "http://localhost:7423")
 	v.SetDefault("worker.listen_addr", "")
@@ -509,6 +512,29 @@ func (c *Config) Validate() error {
 	}
 	if !isOneOf(c.Pool.Overflow, "", "reject", "queue") {
 		return fmt.Errorf("pool.overflow must be reject or queue")
+	}
+	if err := validateCORSAllowedOrigins(c.Server.CORSAllowedOrigins); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateCORSAllowedOrigins(origins []string) error {
+	for _, origin := range origins {
+		origin = strings.TrimSpace(origin)
+		if origin == "" || origin == "*" {
+			continue
+		}
+		u, err := url.Parse(origin)
+		if err != nil || u.Scheme == "" || u.Host == "" {
+			return fmt.Errorf("server.cors_allowed_origins contains invalid origin %q", origin)
+		}
+		if u.Scheme != "http" && u.Scheme != "https" {
+			return fmt.Errorf("server.cors_allowed_origins origin %q must use http or https", origin)
+		}
+		if u.Path != "" || u.RawQuery != "" || u.Fragment != "" {
+			return fmt.Errorf("server.cors_allowed_origins origin %q must not include path, query, or fragment", origin)
+		}
 	}
 	return nil
 }

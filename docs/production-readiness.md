@@ -68,10 +68,12 @@ This checklist tracks the Phase 7 release-candidate hardening work needed before
 | Release automation | Passing | Release workflow signs binaries, checksums, and GHCR image digests; public verifier and installer verification exist. |
 | Worker registry | Near-complete | Durable worker registration, heartbeat, diagnostics, metrics, placement, ownership, leases, per-worker token auth, signed worker identity, centralized token issuance, worker RPC routing, and worker RPC mTLS wiring exist. Remaining: target-network mTLS smoke with deployment-issued certificates. |
 | Enterprise/OIDC | Passing | OIDC/JWT RS256 verification, RBAC roles (viewer/operator/admin/tenant_admin), OIDC group→role mapping, tenant model, per-tenant audit, and policy enforcement are implemented. |
+| Public API exposure | Passing | CORS origins are configurable through `server.cors_allowed_origins`; production config lint fails wildcard or empty CORS before public exposure. |
 
 ## Required Before Single-Node Production
 
 - Production config uses distinct API and admin keys.
+- `server.cors_allowed_origins` contains only exact trusted `https://` origins for public browser clients.
 - `auth.admin_fallback_enabled` is `false`.
 - `auth.admin_audit_retention` is set to a production window.
 - Docker provider runs with explicit runtime, network mode, dropped caps, pid limit, memory, CPU, and seccomp settings.
@@ -94,6 +96,7 @@ This checklist tracks the Phase 7 release-candidate hardening work needed before
 - Public support expectations are documented in [public-support-matrix.md](public-support-matrix.md).
 - Bug and production support issue templates ask for the same evidence required by the public support matrix.
 - Public release sanity CI builds release binaries and validates checksums; real GitHub release asset verification must be repeated after each version tag is published.
+- Public browser clients use explicit CORS origins; wildcard CORS must fail `stacyvm config lint --production`.
 
 ## Required Before Enterprise/Multi-Worker
 

@@ -56,6 +56,7 @@ func lintConfig(cfg *config.Config, production bool) []doctorCheck {
 	}
 	checks = append(checks, lintAuthConfig(cfg, production)...)
 	checks = append(checks, lintOIDCConfig(cfg, production)...)
+	checks = append(checks, lintServerConfig(cfg, production)...)
 	checks = append(checks, lintRateLimitConfig(cfg, production)...)
 	checks = append(checks, lintDatabaseConfig(cfg, production)...)
 	checks = append(checks, lintRuntimeLimits(cfg, production)...)
@@ -63,6 +64,37 @@ func lintConfig(cfg *config.Config, production bool) []doctorCheck {
 	checks = append(checks, lintWorkerRPCConfig(cfg, production)...)
 	checks = append(checks, lintProviderConfig(cfg, production)...)
 	return checks
+}
+
+func lintServerConfig(cfg *config.Config, production bool) []doctorCheck {
+	origins := cleanCORSOrigins(cfg.Server.CORSAllowedOrigins)
+	if len(origins) == 0 {
+		return []doctorCheck{{Name: "server.cors_allowed_origins", Status: severityForProduction(production), Message: "no CORS origins configured", Remediation: "Set server.cors_allowed_origins to the exact web console or API client origins that may call StacyVM."}}
+	}
+	if containsCORSWildcard(origins) {
+		return []doctorCheck{{Name: "server.cors_allowed_origins", Status: severityForProduction(production), Message: "CORS allows every origin", Remediation: "Set server.cors_allowed_origins to explicit https:// origins before exposing StacyVM publicly."}}
+	}
+	return []doctorCheck{{Name: "server.cors_allowed_origins", Status: doctorPass, Message: fmt.Sprintf("%d explicit origin(s)", len(origins))}}
+}
+
+func cleanCORSOrigins(origins []string) []string {
+	cleaned := make([]string, 0, len(origins))
+	for _, origin := range origins {
+		origin = strings.TrimSpace(origin)
+		if origin != "" {
+			cleaned = append(cleaned, origin)
+		}
+	}
+	return cleaned
+}
+
+func containsCORSWildcard(origins []string) bool {
+	for _, origin := range origins {
+		if strings.TrimSpace(origin) == "*" {
+			return true
+		}
+	}
+	return false
 }
 
 func lintAuthConfig(cfg *config.Config, production bool) []doctorCheck {

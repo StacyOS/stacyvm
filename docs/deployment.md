@@ -8,6 +8,7 @@ This guide covers a single-node StacyVM deployment suitable for an internal serv
 - A persistent data directory, normally `/var/lib/stacyvm`.
 - A generated API key with at least 32 bytes of entropy.
 - TLS and public ingress handled by a reverse proxy or load balancer in front of StacyVM.
+- Explicit `server.cors_allowed_origins` for every browser origin that may call the API.
 - Health checks wired to the API endpoints listed below.
 
 StacyVM reads config from `./stacyvm.yaml`, then `~/.stacyvm/config.yaml`, then `STACYVM_` environment variables. In production, prefer a checked-in baseline config plus environment variables or secret files for secrets and environment-specific values. Worker credentials can be mounted through `auth.worker_token_file` and `auth.worker_signing_key_file`; the loader rejects configs that set both the inline secret and its file reference.
@@ -20,7 +21,7 @@ STACYVM_AUTH_ADMIN_API_KEY=sk-admin \
 stacyvm config lint --production --file deploy/stacyvm.production.yaml
 ```
 
-The lint command is deterministic and does not require Docker or KVM access. Use `stacyvm doctor --production` after linting when you also want live host checks for Docker, Firecracker, PRoot, database directories, and installed binaries.
+The lint command is deterministic and does not require Docker or KVM access. In production mode it fails wildcard CORS, missing auth, weak rate limits, relative database paths, missing sandbox caps, unsafe Docker settings, and other public-exposure risks. Use `stacyvm doctor --production` after linting when you also want live host checks for Docker, Firecracker, PRoot, database directories, and installed binaries.
 
 ## Health and Metrics
 
@@ -46,11 +47,11 @@ STACYVM_SMOKE_URL=https://stacyvm.example.com STACYVM_API_KEY=sk-live scripts/sm
 The files in `deploy/` provide a production-oriented Compose starting point:
 
 - `deploy/docker-compose.yml` starts StacyVM and Traefik for live previews.
-- `deploy/stacyvm.production.yaml` enables auth, rate limiting, sandbox caps, queueing, JSON logs, and persistent SQLite state.
+- `deploy/stacyvm.production.yaml` enables auth, explicit CORS origins, rate limiting, sandbox caps, queueing, JSON logs, and persistent SQLite state.
 - `deploy/.env.example` lists the environment variables expected by the Compose file.
 - `deploy/stacyvm.env.example` is the systemd environment file template.
 
-Use separate values for `STACYVM_API_KEY` and `STACYVM_ADMIN_API_KEY` in production. Admin routes live under `/api/v1/admin/*` and should be restricted to operator networks where possible.
+Use separate values for `STACYVM_API_KEY` and `STACYVM_ADMIN_API_KEY` in production. Admin routes live under `/api/v1/admin/*` and should be restricted to operator networks where possible. Replace the example `server.cors_allowed_origins` value with the exact public console/API origins for your deployment; do not expose browser clients with wildcard CORS.
 
 See [admin-control-plane.md](admin-control-plane.md) for admin dashboard setup, quota operations, diagnostics, audit export, and audit retention notes. See [security-governance.md](security-governance.md) for the production admin hardening checklist and OIDC/SSO integration plan. The production config keeps 90 days of admin audit history with `auth.admin_audit_retention: "2160h"` and disables admin fallback with `auth.admin_fallback_enabled: false`.
 

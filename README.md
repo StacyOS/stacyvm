@@ -483,6 +483,7 @@ server:
   host: "0.0.0.0"
   port: 7423
   preview_domain: "localhost"   # used to build live-preview URLs
+  cors_allowed_origins: ["*"]    # set explicit https:// origins in production
 
 worker:
   id: ""                         # defaults to hostname
@@ -715,7 +716,7 @@ Key rotation, token revocation, mTLS cert management, and the full enterprise si
 
 ## Production deployment
 
-Use [docs/deployment.md](docs/deployment.md) for production setup guidance, including Docker Compose and systemd templates, auth and rate-limit defaults, health/readiness probes, Prometheus scraping, backup steps, and provider-specific rollout notes. Remote worker staging guidance lives in [docs/remote-worker-staging.md](docs/remote-worker-staging.md). Runtime signoff expectations live in [docs/runtime-conformance.md](docs/runtime-conformance.md), public self-serve support expectations live in [docs/public-support-matrix.md](docs/public-support-matrix.md), and release-candidate gates live in [docs/production-readiness.md](docs/production-readiness.md). The reusable templates live under [`deploy/`](deploy/).
+Use [docs/deployment.md](docs/deployment.md) for production setup guidance, including Docker Compose and systemd templates, auth, explicit CORS origins, rate-limit defaults, health/readiness probes, Prometheus scraping, backup steps, and provider-specific rollout notes. Remote worker staging guidance lives in [docs/remote-worker-staging.md](docs/remote-worker-staging.md). Runtime signoff expectations live in [docs/runtime-conformance.md](docs/runtime-conformance.md), public self-serve support expectations live in [docs/public-support-matrix.md](docs/public-support-matrix.md), and release-candidate gates live in [docs/production-readiness.md](docs/production-readiness.md). The reusable templates live under [`deploy/`](deploy/).
 
 For enterprise multi-worker deployments, follow [docs/enterprise-signoff-runbook.md](docs/enterprise-signoff-runbook.md) — it covers mTLS smoke with deployment-issued certificates, per-host runtime certification, Postgres migration rehearsal, OIDC token validation, and the full pre-go-live checklist.
 

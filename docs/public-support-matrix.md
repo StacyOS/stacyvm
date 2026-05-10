@@ -31,6 +31,7 @@ Before treating a self-serve install as supported, operators should capture:
 
 - Release verification output from `scripts/verify-release.sh <version> <arch>` or installer output with Sigstore verification.
 - `stacyvm config lint --production --file <config>` output with production environment variables loaded.
+- Confirmation that `server.cors_allowed_origins` contains exact trusted origins, not `*`.
 - `stacyvm upgrade rehearse --config <config> --database <db>` output before binary or image replacement.
 - `stacyvm doctor --production` output from the target host.
 - `stacyvm support bundle --output support.json` when opening a support issue.
@@ -48,6 +49,7 @@ GitHub bug and production support issue templates ask for this same evidence. Re
 - Firecracker production readiness is host-gated because KVM, kernel, rootfs, agent, and networking setup vary by host.
 - PRoot is useful where Docker/KVM are unavailable, but it should not be presented as a production isolation boundary.
 - Release signatures prove artifact provenance from the StacyVM GitHub Actions release workflow; they do not certify a host runtime.
+- CORS is intentionally wildcard by default for local development, but public browser/API deployments must configure explicit trusted origins and pass production config lint.
 
 ## Support Triage Links
 
