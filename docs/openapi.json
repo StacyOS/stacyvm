@@ -1,0 +1,3034 @@
+{
+    "openapi": "3.0.0",
+    "info": {
+        "description": "StacyVM microVM sandbox orchestrator API",
+        "title": "StacyVM API",
+        "contact": {},
+        "version": "1.0"
+    },
+    "paths": {
+        "/admin/audit": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Return recent redacted admin route access records",
+                "tags": [
+                    "admin"
+                ],
+                "summary": "List admin audit logs",
+                "parameters": [
+                    {
+                        "description": "Maximum number of records, capped at 500",
+                        "name": "limit",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "description": "Actor exact match",
+                        "name": "actor",
+                        "in": "query",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "description": "HTTP method exact match",
+                        "name": "method",
+                        "in": "query",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "description": "HTTP status exact match",
+                        "name": "status",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    },
+                    {
+                        "description": "Path substring match",
+                        "name": "path",
+                        "in": "query",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "description": "Response format: json or csv",
+                        "name": "format",
+                        "in": "query",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/internal_api_routes.AdminAuditResponse"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/diagnostics": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Return redacted build, store, provider, sandbox, event, and operation diagnostics",
+                "tags": [
+                    "system"
+                ],
+                "summary": "Get diagnostics",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/internal_api_routes.DiagnosticsResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/events": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Open an SSE stream for real-time sandbox and system events",
+                "tags": [
+                    "system"
+                ],
+                "summary": "Subscribe to events",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "text/event-stream": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_orchestrator.Event"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/health": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Return the health status, version, and uptime",
+                "tags": [
+                    "system"
+                ],
+                "summary": "Health check",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/internal_api_routes.HealthResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/live": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Return whether the StacyVM API process is alive",
+                "tags": [
+                    "system"
+                ],
+                "summary": "Liveness check",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/internal_api_routes.HealthResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/metrics": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Return runtime metrics including sandbox count, goroutines, and memory usage",
+                "tags": [
+                    "system"
+                ],
+                "summary": "Get metrics",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/internal_api_routes.MetricsResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/metrics/prometheus": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Return runtime, provider, sandbox, event, and operation metrics in Prometheus text format",
+                "tags": [
+                    "system"
+                ],
+                "summary": "Get Prometheus metrics",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "text/plain": {
+                                "schema": {
+                                    "type": "string"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/providers": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Return all registered providers with health status",
+                "tags": [
+                    "providers"
+                ],
+                "summary": "List providers",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/internal_api_routes.ProviderInfo"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/providers/test": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Run health checks on all registered providers",
+                "tags": [
+                    "providers"
+                ],
+                "summary": "Test providers",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "object",
+                                    "additionalProperties": {
+                                        "type": "boolean"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/providers/{providerName}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Return detailed information about a specific provider",
+                "tags": [
+                    "providers"
+                ],
+                "summary": "Get provider details",
+                "parameters": [
+                    {
+                        "description": "Provider name",
+                        "name": "providerName",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/internal_api_routes.ProviderDetail"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/quotas": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Return all persisted owner quota overrides",
+                "tags": [
+                    "quotas"
+                ],
+                "summary": "List owner quotas",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_orchestrator.OwnerQuota"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/quotas/summary": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Return non-identifying counts for persisted owner quota overrides",
+                "tags": [
+                    "quotas"
+                ],
+                "summary": "Get quota summary",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_orchestrator.QuotaSummary"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/quotas/{ownerID}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Return the persisted quota override for an owner",
+                "tags": [
+                    "quotas"
+                ],
+                "summary": "Get owner quota",
+                "parameters": [
+                    {
+                        "description": "Owner ID",
+                        "name": "ownerID",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_orchestrator.OwnerQuota"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Create or update quota overrides for an owner",
+                "tags": [
+                    "quotas"
+                ],
+                "summary": "Save owner quota",
+                "parameters": [
+                    {
+                        "description": "Owner ID",
+                        "name": "ownerID",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_orchestrator.OwnerQuota"
+                            }
+                        }
+                    },
+                    "description": "Quota request",
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_orchestrator.OwnerQuota"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Delete the quota override for an owner",
+                "tags": [
+                    "quotas"
+                ],
+                "summary": "Delete owner quota",
+                "parameters": [
+                    {
+                        "description": "Owner ID",
+                        "name": "ownerID",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/internal_api_routes.StatusResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/quotas/{ownerID}/usage": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Return active sandbox usage and effective quota for an owner",
+                "tags": [
+                    "quotas"
+                ],
+                "summary": "Get owner quota usage",
+                "parameters": [
+                    {
+                        "description": "Owner ID",
+                        "name": "ownerID",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_orchestrator.OwnerUsage"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/ready": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Return whether the API is ready to serve sandbox traffic",
+                "tags": [
+                    "system"
+                ],
+                "summary": "Readiness check",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/internal_api_routes.ReadinessResponse"
+                                }
+                            }
+                        }
+                    },
+                    "503": {
+                        "description": "Service Unavailable",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/internal_api_routes.ReadinessResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/sandboxes": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Return all active sandboxes",
+                "tags": [
+                    "sandboxes"
+                ],
+                "summary": "List sandboxes",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_orchestrator.Sandbox"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Spawn a new sandbox with the given configuration",
+                "tags": [
+                    "sandboxes"
+                ],
+                "summary": "Create a sandbox",
+                "requestBody": {
+                    "$ref": "#/components/requestBodies/github_com_StacyOs_stacyvm_internal_orchestrator.SpawnRequest"
+                },
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_orchestrator.Sandbox"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                                }
+                            }
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Destroy all expired sandboxes and return the count",
+                "tags": [
+                    "sandboxes"
+                ],
+                "summary": "Prune sandboxes",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/internal_api_routes.PruneResponse"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/sandboxes/admission": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Return whether a spawn request would be allowed, queued, or denied by quota and scheduler limits",
+                "tags": [
+                    "sandboxes"
+                ],
+                "summary": "Evaluate spawn admission",
+                "requestBody": {
+                    "$ref": "#/components/requestBodies/github_com_StacyOs_stacyvm_internal_orchestrator.SpawnRequest"
+                },
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_orchestrator.SpawnAdmissionDecision"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/sandboxes/{sandboxID}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Return a sandbox by its ID",
+                "tags": [
+                    "sandboxes"
+                ],
+                "summary": "Get a sandbox",
+                "parameters": [
+                    {
+                        "description": "Sandbox ID",
+                        "name": "sandboxID",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_orchestrator.Sandbox"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Destroy a sandbox and release its resources",
+                "tags": [
+                    "sandboxes"
+                ],
+                "summary": "Destroy a sandbox",
+                "parameters": [
+                    {
+                        "description": "Sandbox ID",
+                        "name": "sandboxID",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/internal_api_routes.StatusResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/sandboxes/{sandboxID}/exec": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Run a command inside a sandbox. Set stream=true for streaming output.",
+                "tags": [
+                    "sandboxes"
+                ],
+                "summary": "Execute a command",
+                "parameters": [
+                    {
+                        "description": "Sandbox ID",
+                        "name": "sandboxID",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_orchestrator.ExecRequest"
+                            }
+                        }
+                    },
+                    "description": "Exec request",
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_orchestrator.ExecResult"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/sandboxes/{sandboxID}/exec/ws": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Open a WebSocket connection to execute a command with streaming output",
+                "tags": [
+                    "sandboxes"
+                ],
+                "summary": "Execute via WebSocket",
+                "parameters": [
+                    {
+                        "description": "Sandbox ID",
+                        "name": "sandboxID",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "101": {
+                        "description": "WebSocket upgrade"
+                    },
+                    "400": {
+                        "description": "Bad request"
+                    }
+                }
+            }
+        },
+        "/sandboxes/{sandboxID}/extend": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Add additional time to a sandbox's expiration",
+                "tags": [
+                    "sandboxes"
+                ],
+                "summary": "Extend sandbox TTL",
+                "parameters": [
+                    {
+                        "description": "Sandbox ID",
+                        "name": "sandboxID",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "ttl": {
+                                        "type": "string"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "description": "TTL extension",
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_orchestrator.Sandbox"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/sandboxes/{sandboxID}/files": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Read file content from a sandbox",
+                "tags": [
+                    "sandboxes"
+                ],
+                "summary": "Read a file",
+                "parameters": [
+                    {
+                        "description": "Sandbox ID",
+                        "name": "sandboxID",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "description": "File path inside the sandbox",
+                        "name": "path",
+                        "in": "query",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/octet-stream": {
+                                "schema": {
+                                    "type": "string",
+                                    "format": "binary"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "content": {
+                            "application/octet-stream": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "content": {
+                            "application/octet-stream": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "content": {
+                            "application/octet-stream": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Write content to a file inside a sandbox",
+                "tags": [
+                    "sandboxes"
+                ],
+                "summary": "Write a file",
+                "parameters": [
+                    {
+                        "description": "Sandbox ID",
+                        "name": "sandboxID",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_orchestrator.FileWriteRequest"
+                            }
+                        }
+                    },
+                    "description": "File write request",
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/internal_api_routes.StatusResponse"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/sandboxes/{sandboxID}/files/list": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "List files in a directory inside a sandbox",
+                "tags": [
+                    "sandboxes"
+                ],
+                "summary": "List files",
+                "parameters": [
+                    {
+                        "description": "Sandbox ID",
+                        "name": "sandboxID",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "description": "Directory path (default: /)",
+                        "name": "path",
+                        "in": "query",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_orchestrator.FileInfo"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/sandboxes/{sandboxID}/logs": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Retrieve console log lines from a sandbox",
+                "tags": [
+                    "sandboxes"
+                ],
+                "summary": "Get console logs",
+                "parameters": [
+                    {
+                        "description": "Sandbox ID",
+                        "name": "sandboxID",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    {
+                        "description": "Number of lines to retrieve (default: 100)",
+                        "name": "lines",
+                        "in": "query",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "string"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/snapshots": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Return all pre-built VM snapshots available for fast restore",
+                "tags": [
+                    "snapshots"
+                ],
+                "summary": "List snapshots",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_providers.SnapshotSummary"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/templates": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Return all registered templates",
+                "tags": [
+                    "templates"
+                ],
+                "summary": "List templates",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_orchestrator.Template"
+                                    }
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Register a new sandbox template",
+                "tags": [
+                    "templates"
+                ],
+                "summary": "Create a template",
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_orchestrator.Template"
+                            }
+                        }
+                    },
+                    "description": "Template definition",
+                    "required": true
+                },
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_orchestrator.Template"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                                }
+                            }
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/templates/{name}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Return a template by its name",
+                "tags": [
+                    "templates"
+                ],
+                "summary": "Get a template",
+                "parameters": [
+                    {
+                        "description": "Template name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_orchestrator.Template"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Update an existing template by name",
+                "tags": [
+                    "templates"
+                ],
+                "summary": "Update a template",
+                "parameters": [
+                    {
+                        "description": "Template name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_orchestrator.Template"
+                            }
+                        }
+                    },
+                    "description": "Updated template",
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_orchestrator.Template"
+                                }
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Delete a template by name",
+                "tags": [
+                    "templates"
+                ],
+                "summary": "Delete a template",
+                "parameters": [
+                    {
+                        "description": "Template name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/internal_api_routes.StatusResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/templates/{name}/spawn": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Create a new sandbox using a template's configuration, with optional overrides",
+                "tags": [
+                    "templates"
+                ],
+                "summary": "Spawn from template",
+                "parameters": [
+                    {
+                        "description": "Template name",
+                        "name": "name",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/internal_api_routes.TemplateSpawnOverrides"
+                            }
+                        }
+                    },
+                    "description": "Optional overrides"
+                },
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_orchestrator.Sandbox"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                                }
+                            }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/workers": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Return worker registry records and heartbeat state",
+                "tags": [
+                    "workers"
+                ],
+                "summary": "List workers",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "type": "array",
+                                    "items": {
+                                        "$ref": "#/components/schemas/internal_api_routes.WorkerResponse"
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/workers/{workerID}": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Return one worker registry record",
+                "tags": [
+                    "workers"
+                ],
+                "summary": "Get worker",
+                "parameters": [
+                    {
+                        "description": "Worker ID",
+                        "name": "workerID",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/internal_api_routes.WorkerResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Remove a worker registry record",
+                "tags": [
+                    "workers"
+                ],
+                "summary": "Delete worker",
+                "parameters": [
+                    {
+                        "description": "Worker ID",
+                        "name": "workerID",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/internal_api_routes.StatusResponse"
+                                }
+                            }
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "content": {
+                            "*/*": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/workers/{workerID}/heartbeat": {
+            "post": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Create or update worker registry state for a worker",
+                "tags": [
+                    "workers"
+                ],
+                "summary": "Heartbeat worker",
+                "parameters": [
+                    {
+                        "description": "Worker ID",
+                        "name": "workerID",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "$ref": "#/components/schemas/internal_api_routes.WorkerHeartbeatRequest"
+                            }
+                        }
+                    },
+                    "description": "Worker heartbeat",
+                    "required": true
+                },
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/internal_api_routes.WorkerResponse"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    },
+    "servers": [
+        {
+            "url": "//localhost:7423/api/v1"
+        }
+    ],
+    "components": {
+        "requestBodies": {
+            "github_com_StacyOs_stacyvm_internal_orchestrator.SpawnRequest": {
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_orchestrator.SpawnRequest"
+                        }
+                    }
+                },
+                "description": "Spawn request",
+                "required": true
+            }
+        },
+        "securitySchemes": {
+            "ApiKeyAuth": {
+                "type": "apiKey",
+                "name": "X-API-Key",
+                "in": "header"
+            }
+        },
+        "schemas": {
+            "github_com_StacyOs_stacyvm_internal_api_middleware.RateLimitStats": {
+                "type": "object",
+                "properties": {
+                    "active_buckets": {
+                        "type": "integer"
+                    },
+                    "allowed_total": {
+                        "type": "integer"
+                    },
+                    "bucket_ttl": {
+                        "type": "string"
+                    },
+                    "burst": {
+                        "type": "integer"
+                    },
+                    "cleanup_interval": {
+                        "type": "string"
+                    },
+                    "enabled": {
+                        "type": "boolean"
+                    },
+                    "evicted_total": {
+                        "type": "integer"
+                    },
+                    "key_by": {
+                        "type": "string"
+                    },
+                    "limited_total": {
+                        "type": "integer"
+                    },
+                    "requests_per_minute": {
+                        "type": "integer"
+                    }
+                }
+            },
+            "github_com_StacyOs_stacyvm_internal_httputil.APIError": {
+                "type": "object",
+                "properties": {
+                    "code": {
+                        "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_httputil.ErrorCode"
+                    },
+                    "message": {
+                        "type": "string"
+                    }
+                }
+            },
+            "github_com_StacyOs_stacyvm_internal_httputil.ErrorCode": {
+                "type": "string",
+                "enum": [
+                    "NOT_FOUND",
+                    "BAD_REQUEST",
+                    "INTERNAL_ERROR",
+                    "UNAUTHORIZED",
+                    "CONFLICT",
+                    "UNAVAILABLE",
+                    "TIMEOUT",
+                    "RESOURCE_LIMIT"
+                ],
+                "x-enum-varnames": [
+                    "CodeNotFound",
+                    "CodeBadRequest",
+                    "CodeInternal",
+                    "CodeUnauth",
+                    "CodeConflict",
+                    "CodeUnavailable",
+                    "CodeTimeout",
+                    "CodeResourceLimit"
+                ]
+            },
+            "github_com_StacyOs_stacyvm_internal_orchestrator.Event": {
+                "type": "object",
+                "properties": {
+                    "data": {
+                        "type": "array",
+                        "items": {
+                            "type": "integer"
+                        }
+                    },
+                    "id": {
+                        "type": "string"
+                    },
+                    "sandbox_id": {
+                        "type": "string"
+                    },
+                    "timestamp": {
+                        "type": "string"
+                    },
+                    "type": {
+                        "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_orchestrator.EventType"
+                    }
+                }
+            },
+            "github_com_StacyOs_stacyvm_internal_orchestrator.EventBusStats": {
+                "type": "object",
+                "properties": {
+                    "events_total": {
+                        "type": "integer"
+                    },
+                    "history_size": {
+                        "type": "integer"
+                    },
+                    "subscribers": {
+                        "type": "integer"
+                    }
+                }
+            },
+            "github_com_StacyOs_stacyvm_internal_orchestrator.EventType": {
+                "type": "string",
+                "enum": [
+                    "sandbox.created",
+                    "sandbox.running",
+                    "sandbox.destroyed",
+                    "sandbox.error",
+                    "exec.started",
+                    "exec.completed",
+                    "exec.failed",
+                    "exec.timeout",
+                    "file.written",
+                    "file.read",
+                    "operation.failed",
+                    "resource.limit",
+                    "provider.failed",
+                    "reconcile.action",
+                    "spawn.queued",
+                    "spawn.dequeued",
+                    "spawn.queue_timeout",
+                    "quota.saved",
+                    "quota.deleted"
+                ],
+                "x-enum-varnames": [
+                    "EventSandboxCreated",
+                    "EventSandboxRunning",
+                    "EventSandboxDestroyed",
+                    "EventSandboxError",
+                    "EventExecStarted",
+                    "EventExecCompleted",
+                    "EventExecFailed",
+                    "EventExecTimeout",
+                    "EventFileWritten",
+                    "EventFileRead",
+                    "EventOperationFailed",
+                    "EventResourceLimit",
+                    "EventProviderFailed",
+                    "EventReconcileAction",
+                    "EventSpawnQueued",
+                    "EventSpawnDequeued",
+                    "EventSpawnQueueTimeout",
+                    "EventQuotaSaved",
+                    "EventQuotaDeleted"
+                ]
+            },
+            "github_com_StacyOs_stacyvm_internal_orchestrator.ExecRequest": {
+                "type": "object",
+                "properties": {
+                    "args": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "command": {
+                        "type": "string"
+                    },
+                    "env": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "string"
+                        }
+                    },
+                    "mode": {
+                        "type": "string"
+                    },
+                    "stream": {
+                        "type": "boolean"
+                    },
+                    "timeout": {
+                        "type": "string"
+                    },
+                    "workdir": {
+                        "type": "string"
+                    }
+                }
+            },
+            "github_com_StacyOs_stacyvm_internal_orchestrator.ExecResult": {
+                "type": "object",
+                "properties": {
+                    "duration": {
+                        "type": "string"
+                    },
+                    "exit_code": {
+                        "type": "integer"
+                    },
+                    "stderr": {
+                        "type": "string"
+                    },
+                    "stdout": {
+                        "type": "string"
+                    }
+                }
+            },
+            "github_com_StacyOs_stacyvm_internal_orchestrator.FileInfo": {
+                "type": "object",
+                "properties": {
+                    "is_dir": {
+                        "type": "boolean"
+                    },
+                    "mod_time": {
+                        "type": "string"
+                    },
+                    "mode": {
+                        "type": "string"
+                    },
+                    "path": {
+                        "type": "string"
+                    },
+                    "size": {
+                        "type": "integer"
+                    }
+                }
+            },
+            "github_com_StacyOs_stacyvm_internal_orchestrator.FileWriteRequest": {
+                "type": "object",
+                "properties": {
+                    "content": {
+                        "type": "string"
+                    },
+                    "mode": {
+                        "type": "string"
+                    },
+                    "path": {
+                        "type": "string"
+                    }
+                }
+            },
+            "github_com_StacyOs_stacyvm_internal_orchestrator.OperationMetrics": {
+                "type": "object",
+                "properties": {
+                    "failure_total": {
+                        "type": "integer"
+                    },
+                    "last_error": {
+                        "type": "string"
+                    },
+                    "last_observed_unix": {
+                        "type": "integer"
+                    },
+                    "latency_avg_ms": {
+                        "type": "integer"
+                    },
+                    "latency_count": {
+                        "type": "integer"
+                    },
+                    "latency_max_ms": {
+                        "type": "integer"
+                    },
+                    "latency_min_ms": {
+                        "type": "integer"
+                    },
+                    "latency_total_ms": {
+                        "type": "integer"
+                    },
+                    "operation": {
+                        "type": "string"
+                    },
+                    "provider": {
+                        "type": "string"
+                    },
+                    "success_total": {
+                        "type": "integer"
+                    }
+                }
+            },
+            "github_com_StacyOs_stacyvm_internal_orchestrator.OperationalLimitsInfo": {
+                "type": "object",
+                "properties": {
+                    "default_exec_timeout": {
+                        "type": "string"
+                    },
+                    "max_exec_timeout": {
+                        "type": "string"
+                    },
+                    "max_sandboxes": {
+                        "type": "integer"
+                    },
+                    "max_sandboxes_per_owner": {
+                        "type": "integer"
+                    },
+                    "max_spawn_queue": {
+                        "type": "integer"
+                    },
+                    "max_ttl": {
+                        "type": "string"
+                    },
+                    "spawn_overflow": {
+                        "type": "string"
+                    },
+                    "spawn_queue_timeout": {
+                        "type": "string"
+                    }
+                }
+            },
+            "github_com_StacyOs_stacyvm_internal_orchestrator.OwnerQuota": {
+                "type": "object",
+                "properties": {
+                    "created_at": {
+                        "type": "string"
+                    },
+                    "max_exec_timeout": {
+                        "type": "string"
+                    },
+                    "max_sandboxes": {
+                        "type": "integer"
+                    },
+                    "max_ttl": {
+                        "type": "string"
+                    },
+                    "owner_id": {
+                        "type": "string"
+                    },
+                    "updated_at": {
+                        "type": "string"
+                    }
+                }
+            },
+            "github_com_StacyOs_stacyvm_internal_orchestrator.OwnerUsage": {
+                "type": "object",
+                "properties": {
+                    "active_sandboxes": {
+                        "type": "integer"
+                    },
+                    "max_exec_timeout": {
+                        "type": "string"
+                    },
+                    "max_sandboxes": {
+                        "type": "integer"
+                    },
+                    "max_ttl": {
+                        "type": "string"
+                    },
+                    "owner_id": {
+                        "type": "string"
+                    },
+                    "quota_configured": {
+                        "type": "boolean"
+                    }
+                }
+            },
+            "github_com_StacyOs_stacyvm_internal_orchestrator.QuotaSummary": {
+                "type": "object",
+                "properties": {
+                    "total": {
+                        "type": "integer"
+                    },
+                    "with_max_exec_timeout": {
+                        "type": "integer"
+                    },
+                    "with_max_sandboxes": {
+                        "type": "integer"
+                    },
+                    "with_max_ttl": {
+                        "type": "integer"
+                    }
+                }
+            },
+            "github_com_StacyOs_stacyvm_internal_orchestrator.Sandbox": {
+                "type": "object",
+                "properties": {
+                    "created_at": {
+                        "type": "string"
+                    },
+                    "expires_at": {
+                        "type": "string"
+                    },
+                    "id": {
+                        "type": "string"
+                    },
+                    "image": {
+                        "type": "string"
+                    },
+                    "memory_mb": {
+                        "type": "integer"
+                    },
+                    "metadata": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "string"
+                        }
+                    },
+                    "owner_id": {
+                        "type": "string"
+                    },
+                    "preview_domain": {
+                        "type": "string"
+                    },
+                    "provider": {
+                        "type": "string"
+                    },
+                    "state": {
+                        "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_orchestrator.SandboxState"
+                    },
+                    "tenant_id": {
+                        "type": "string"
+                    },
+                    "vcpus": {
+                        "type": "integer"
+                    },
+                    "vm_id": {
+                        "type": "string"
+                    },
+                    "worker_id": {
+                        "type": "string"
+                    }
+                }
+            },
+            "github_com_StacyOs_stacyvm_internal_orchestrator.SandboxState": {
+                "type": "string",
+                "enum": [
+                    "creating",
+                    "running",
+                    "idle",
+                    "unhealthy",
+                    "expired",
+                    "destroyed",
+                    "error"
+                ],
+                "x-enum-varnames": [
+                    "StateCreating",
+                    "StateRunning",
+                    "StateIdle",
+                    "StateUnhealthy",
+                    "StateExpired",
+                    "StateDestroyed",
+                    "StateError"
+                ]
+            },
+            "github_com_StacyOs_stacyvm_internal_orchestrator.SchedulerStatus": {
+                "type": "object",
+                "properties": {
+                    "admission_control": {
+                        "type": "string"
+                    },
+                    "eligible_workers": {
+                        "type": "integer"
+                    },
+                    "max_spawn_queue": {
+                        "type": "integer"
+                    },
+                    "selected_worker_id": {
+                        "type": "string"
+                    },
+                    "spawn_dequeued_total": {
+                        "type": "integer"
+                    },
+                    "spawn_overflow": {
+                        "type": "string"
+                    },
+                    "spawn_queue_depth": {
+                        "type": "integer"
+                    },
+                    "spawn_queue_timeout": {
+                        "type": "string"
+                    },
+                    "spawn_queue_timeouts": {
+                        "type": "integer"
+                    },
+                    "spawn_queue_wait_avg": {
+                        "type": "string"
+                    },
+                    "spawn_queue_wait_avg_ms": {
+                        "type": "integer"
+                    },
+                    "spawn_queue_wait_count": {
+                        "type": "integer"
+                    },
+                    "spawn_queue_wait_max": {
+                        "type": "string"
+                    },
+                    "spawn_queue_wait_max_ms": {
+                        "type": "integer"
+                    },
+                    "spawn_queue_wait_total": {
+                        "type": "string"
+                    },
+                    "spawn_queue_wait_total_ms": {
+                        "type": "integer"
+                    },
+                    "spawn_queued_total": {
+                        "type": "integer"
+                    },
+                    "worker_id": {
+                        "type": "string"
+                    }
+                }
+            },
+            "github_com_StacyOs_stacyvm_internal_orchestrator.SecretConfig": {
+                "type": "object",
+                "properties": {
+                    "inject_at": {
+                        "type": "string"
+                    },
+                    "name": {
+                        "type": "string"
+                    }
+                }
+            },
+            "github_com_StacyOs_stacyvm_internal_orchestrator.SpawnAdmissionDecision": {
+                "type": "object",
+                "properties": {
+                    "active_owner_sandboxes": {
+                        "type": "integer"
+                    },
+                    "active_sandboxes": {
+                        "type": "integer"
+                    },
+                    "allowed": {
+                        "type": "boolean"
+                    },
+                    "eligible_workers": {
+                        "type": "integer"
+                    },
+                    "max_owner_sandboxes": {
+                        "type": "integer"
+                    },
+                    "max_sandboxes": {
+                        "type": "integer"
+                    },
+                    "max_ttl": {
+                        "type": "string"
+                    },
+                    "queueable": {
+                        "type": "boolean"
+                    },
+                    "reason": {
+                        "type": "string"
+                    },
+                    "selected_worker_id": {
+                        "type": "string"
+                    },
+                    "worker_reason": {
+                        "type": "string"
+                    }
+                }
+            },
+            "github_com_StacyOs_stacyvm_internal_orchestrator.SpawnRequest": {
+                "type": "object",
+                "properties": {
+                    "image": {
+                        "type": "string"
+                    },
+                    "memory_mb": {
+                        "type": "integer"
+                    },
+                    "metadata": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "string"
+                        }
+                    },
+                    "owner_id": {
+                        "type": "string"
+                    },
+                    "provider": {
+                        "type": "string"
+                    },
+                    "template": {
+                        "type": "string"
+                    },
+                    "tenant_id": {
+                        "type": "string"
+                    },
+                    "ttl": {
+                        "type": "string"
+                    },
+                    "vcpus": {
+                        "type": "integer"
+                    }
+                }
+            },
+            "github_com_StacyOs_stacyvm_internal_orchestrator.Template": {
+                "type": "object",
+                "properties": {
+                    "allowed_hosts": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "cpu_cores": {
+                        "type": "integer"
+                    },
+                    "created_at": {
+                        "type": "string"
+                    },
+                    "description": {
+                        "type": "string"
+                    },
+                    "env": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "string"
+                        }
+                    },
+                    "image": {
+                        "type": "string"
+                    },
+                    "memory_mb": {
+                        "type": "integer"
+                    },
+                    "name": {
+                        "type": "string"
+                    },
+                    "pool_size": {
+                        "type": "integer"
+                    },
+                    "secrets": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_orchestrator.SecretConfig"
+                        }
+                    },
+                    "setup": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "ttl_seconds": {
+                        "type": "integer"
+                    },
+                    "updated_at": {
+                        "type": "string"
+                    },
+                    "version": {
+                        "type": "integer"
+                    }
+                }
+            },
+            "github_com_StacyOs_stacyvm_internal_providers.SnapshotSummary": {
+                "type": "object",
+                "properties": {
+                    "created_at": {
+                        "type": "string"
+                    },
+                    "image": {
+                        "type": "string"
+                    },
+                    "provider": {
+                        "type": "string"
+                    }
+                }
+            },
+            "internal_api_routes.AdminAuditResponse": {
+                "type": "object",
+                "properties": {
+                    "actor": {
+                        "type": "string",
+                        "example": "admin"
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "example": "2026-05-08T10:30:00Z"
+                    },
+                    "duration_ms": {
+                        "type": "integer",
+                        "example": 4
+                    },
+                    "id": {
+                        "type": "integer",
+                        "example": 42
+                    },
+                    "method": {
+                        "type": "string",
+                        "example": "PUT"
+                    },
+                    "path": {
+                        "type": "string",
+                        "example": "/api/v1/admin/quotas/owner-a"
+                    },
+                    "remote_addr": {
+                        "type": "string",
+                        "example": "127.0.0.1"
+                    },
+                    "request_id": {
+                        "type": "string",
+                        "example": "req-abc123"
+                    },
+                    "status": {
+                        "type": "integer",
+                        "example": 200
+                    },
+                    "tenant_id": {
+                        "type": "string",
+                        "example": "tenant-acme"
+                    },
+                    "user_agent": {
+                        "type": "string",
+                        "example": "stacyvm-web"
+                    }
+                }
+            },
+            "internal_api_routes.DiagnosticsResponse": {
+                "type": "object",
+                "properties": {
+                    "build": {
+                        "type": "object",
+                        "additionalProperties": true
+                    },
+                    "events": {
+                        "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_orchestrator.EventBusStats"
+                    },
+                    "generated_at": {
+                        "type": "string",
+                        "example": "2026-05-08T10:30:00Z"
+                    },
+                    "leases": {
+                        "type": "object",
+                        "additionalProperties": true
+                    },
+                    "limits": {
+                        "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_orchestrator.OperationalLimitsInfo"
+                    },
+                    "operations": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_orchestrator.OperationMetrics"
+                        }
+                    },
+                    "process": {
+                        "type": "object",
+                        "additionalProperties": true
+                    },
+                    "providers": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/internal_api_routes.ProviderHealth"
+                        }
+                    },
+                    "quotas": {
+                        "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_orchestrator.QuotaSummary"
+                    },
+                    "rate_limit": {
+                        "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_api_middleware.RateLimitStats"
+                    },
+                    "redactions": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "remediation": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "string"
+                        }
+                    },
+                    "sandboxes": {
+                        "type": "object",
+                        "additionalProperties": true
+                    },
+                    "scheduler": {
+                        "$ref": "#/components/schemas/github_com_StacyOs_stacyvm_internal_orchestrator.SchedulerStatus"
+                    },
+                    "store": {
+                        "type": "object",
+                        "additionalProperties": true
+                    },
+                    "workers": {
+                        "type": "object",
+                        "additionalProperties": true
+                    }
+                }
+            },
+            "internal_api_routes.HealthResponse": {
+                "type": "object",
+                "properties": {
+                    "status": {
+                        "type": "string",
+                        "example": "ok"
+                    },
+                    "uptime": {
+                        "type": "string",
+                        "example": "2h30m15s"
+                    },
+                    "version": {
+                        "type": "string",
+                        "example": "1.0.0"
+                    }
+                }
+            },
+            "internal_api_routes.MetricsResponse": {
+                "type": "object",
+                "properties": {
+                    "goroutines": {
+                        "type": "integer",
+                        "example": 12
+                    },
+                    "memory_alloc_mb": {
+                        "type": "integer",
+                        "example": 64
+                    },
+                    "providers": {
+                        "type": "integer",
+                        "example": 2
+                    },
+                    "sandboxes_active": {
+                        "type": "integer",
+                        "example": 5
+                    },
+                    "uptime": {
+                        "type": "string",
+                        "example": "2h30m15s"
+                    }
+                }
+            },
+            "internal_api_routes.ProviderDetail": {
+                "type": "object",
+                "properties": {
+                    "config": {
+                        "type": "object",
+                        "additionalProperties": {
+                            "type": "string"
+                        }
+                    },
+                    "default": {
+                        "type": "boolean",
+                        "example": true
+                    },
+                    "health": {
+                        "$ref": "#/components/schemas/internal_api_routes.ProviderHealth"
+                    },
+                    "healthy": {
+                        "type": "boolean",
+                        "example": true
+                    },
+                    "name": {
+                        "type": "string",
+                        "example": "firecracker"
+                    },
+                    "sandbox_count": {
+                        "type": "integer",
+                        "example": 3
+                    }
+                }
+            },
+            "internal_api_routes.ProviderHealth": {
+                "type": "object",
+                "properties": {
+                    "capabilities": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "example": [
+                            "spawn",
+                            "exec",
+                            "files"
+                        ]
+                    },
+                    "default": {
+                        "type": "boolean",
+                        "example": true
+                    },
+                    "error": {
+                        "type": "string",
+                        "example": "health check returned false"
+                    },
+                    "healthy": {
+                        "type": "boolean",
+                        "example": true
+                    },
+                    "last_checked": {
+                        "type": "string",
+                        "example": "2026-05-08T10:30:00Z"
+                    },
+                    "latency_ms": {
+                        "type": "integer",
+                        "example": 3
+                    },
+                    "name": {
+                        "type": "string",
+                        "example": "docker"
+                    },
+                    "runtime_count": {
+                        "type": "integer",
+                        "example": 2
+                    }
+                }
+            },
+            "internal_api_routes.ProviderInfo": {
+                "type": "object",
+                "properties": {
+                    "capabilities": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "default": {
+                        "type": "boolean",
+                        "example": true
+                    },
+                    "error": {
+                        "type": "string",
+                        "example": "health check returned false"
+                    },
+                    "healthy": {
+                        "type": "boolean",
+                        "example": true
+                    },
+                    "last_checked": {
+                        "type": "string",
+                        "example": "2026-05-08T10:30:00Z"
+                    },
+                    "latency_ms": {
+                        "type": "integer",
+                        "example": 3
+                    },
+                    "name": {
+                        "type": "string",
+                        "example": "firecracker"
+                    },
+                    "runtime_count": {
+                        "type": "integer",
+                        "example": 2
+                    }
+                }
+            },
+            "internal_api_routes.PruneResponse": {
+                "type": "object",
+                "properties": {
+                    "pruned": {
+                        "type": "integer",
+                        "example": 3
+                    }
+                }
+            },
+            "internal_api_routes.ReadinessResponse": {
+                "type": "object",
+                "properties": {
+                    "providers": {
+                        "type": "array",
+                        "items": {
+                            "$ref": "#/components/schemas/internal_api_routes.ProviderHealth"
+                        }
+                    },
+                    "ready_providers": {
+                        "type": "integer",
+                        "example": 1
+                    },
+                    "status": {
+                        "type": "string",
+                        "example": "ready"
+                    },
+                    "total_providers": {
+                        "type": "integer",
+                        "example": 2
+                    },
+                    "uptime": {
+                        "type": "string",
+                        "example": "2h30m15s"
+                    },
+                    "version": {
+                        "type": "string",
+                        "example": "1.0.0"
+                    }
+                }
+            },
+            "internal_api_routes.StatusResponse": {
+                "type": "object",
+                "properties": {
+                    "status": {
+                        "type": "string",
+                        "example": "destroyed"
+                    }
+                }
+            },
+            "internal_api_routes.TemplateSpawnOverrides": {
+                "type": "object",
+                "properties": {
+                    "provider": {
+                        "type": "string",
+                        "example": "firecracker"
+                    },
+                    "ttl": {
+                        "type": "string",
+                        "example": "30m"
+                    }
+                }
+            },
+            "internal_api_routes.WorkerHeartbeatRequest": {
+                "type": "object",
+                "properties": {
+                    "capabilities": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "capacity": {
+                        "type": "object",
+                        "additionalProperties": true
+                    },
+                    "hostname": {
+                        "type": "string",
+                        "example": "stacyvm-host-1"
+                    },
+                    "providers": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "status": {
+                        "type": "string",
+                        "example": "online"
+                    }
+                }
+            },
+            "internal_api_routes.WorkerResponse": {
+                "type": "object",
+                "properties": {
+                    "capabilities": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "capacity": {
+                        "type": "object",
+                        "additionalProperties": true
+                    },
+                    "created_at": {
+                        "type": "string",
+                        "example": "2026-05-09T10:00:00Z"
+                    },
+                    "hostname": {
+                        "type": "string",
+                        "example": "stacyvm-host-1"
+                    },
+                    "id": {
+                        "type": "string",
+                        "example": "worker-local"
+                    },
+                    "last_heartbeat": {
+                        "type": "string",
+                        "example": "2026-05-09T10:30:00Z"
+                    },
+                    "providers": {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        }
+                    },
+                    "stale": {
+                        "type": "boolean",
+                        "example": false
+                    },
+                    "status": {
+                        "type": "string",
+                        "example": "online"
+                    },
+                    "updated_at": {
+                        "type": "string",
+                        "example": "2026-05-09T10:30:00Z"
+                    }
+                }
+            }
+        }
+    }
+}

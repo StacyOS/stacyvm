@@ -78,7 +78,7 @@
     ]
   },
   "api": {
-    "openapi": "docs/swagger.json",
+    "openapi": "docs/openapi.json",
     "playground": {
       "display": "simple"
     }
