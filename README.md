@@ -34,7 +34,7 @@ Self-hosted. Single binary. Python &amp; TypeScript SDKs. Apache 2.0 licensed. N
   <a href="#live-preview">Live Preview</a> •
   <a href="#pool-mode">Pool Mode</a> •
   <a href="docs/deployment.md">Deployment</a> •
-  <a href="docs/api.md">API Reference</a> •
+  <a href="docs/rest-api.md">API Reference</a> •
   <a href="CONTRIBUTING.md">Contributing</a>
 </p>
 
@@ -444,7 +444,7 @@ Exec requests default to backwards-compatible shell mode. Set `mode: "argv"` wit
 Admin aliases for providers, quotas, workers, diagnostics, and metrics are available under `/admin/*` and can be protected with `auth.admin_api_key`. Worker registry deletion remains admin-only under `/admin/workers/*`; remote worker heartbeat and lease renewal use worker-only `/worker/*` endpoints.
 For the operator dashboard, quota workflows, diagnostics, and persisted admin audit history, see [docs/admin-control-plane.md](docs/admin-control-plane.md).
 
-Full schemas, request/response examples, and error codes: **[docs/api.md](docs/api.md)**.
+Full schemas, request/response examples, and error codes: **[docs/rest-api.md](docs/rest-api.md)**.
 OpenAPI spec: [docs/swagger.yaml](docs/swagger.yaml).
 
 ---

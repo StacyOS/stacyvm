@@ -8,11 +8,17 @@ description: "Self-hosted sandbox infrastructure for running agent code in isola
 StacyVM gives your applications isolated, disposable execution environments for AI agents, code runners, browser previews, and automation workflows. You keep control of the runtime, network, credentials, and audit trail while developers get a simple API and SDK.
 
 <CardGroup cols={2}>
+  <Card title="What is StacyVM?" icon="blocks" href="/docs/getting-started/what-is-stacyvm">
+    Understand the product, use cases, advantages, and where it fits.
+  </Card>
   <Card title="Quickstart" icon="rocket" href="/docs/getting-started/quickstart">
     Start a local server, create a sandbox, run code, and destroy it.
   </Card>
-  <Card title="Example application" icon="square-terminal" href="/docs/tutorials/code-runner">
-    Build a small API that runs submitted Python code inside StacyVM.
+  <Card title="Architecture" icon="network" href="/docs/architecture/system-overview">
+    See the control plane, scheduler, workers, providers, store, and sandbox lifecycle.
+  </Card>
+  <Card title="Example applications" icon="square-terminal" href="/docs/tutorials/code-runner">
+    Build Python and TypeScript services that run code inside StacyVM.
   </Card>
   <Card title="Python SDK" icon="package" href="/docs/sdks/python">
     Use StacyVM from Python services, jobs, and agent frameworks.
@@ -78,7 +84,7 @@ await client.withSandbox({ image: "node:20", ttl: "10m" }, async (sandbox) => {
     Use the [quickstart](/docs/getting-started/quickstart) to validate spawn, exec, files, and cleanup.
   </Step>
   <Step title="Pick an integration">
-    Choose the [Python SDK](/docs/sdks/python), [TypeScript SDK](/docs/sdks/typescript), or [REST API](/docs/api/sandboxes).
+    Choose the [Python SDK](/docs/sdks/python), [TypeScript SDK](/docs/sdks/typescript), or [REST API](/docs/rest/sandboxes).
   </Step>
   <Step title="Prepare production">
     Use the [deployment guide](/docs/deployment), [support matrix](/docs/public-support-matrix), and [runtime certification](/docs/runtime-certification) before making public runtime claims.

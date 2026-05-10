@@ -4,7 +4,39 @@
   "name": "StacyVM",
   "description": "Deterministic execution infrastructure for autonomous software systems.",
   "colors": {
-    "primary": "#0EA5E9"
+    "primary": "#FF7038",
+    "light": "#D1C2A5",
+    "dark": "#FF7038"
+  },
+  "logo": {
+    "light": "/assets/stacyvm-logo-light.svg",
+    "dark": "/assets/stacyvm-logo-dark.svg",
+    "href": "https://github.com/StacyOS/stacyvm"
+  },
+  "favicon": "/assets/stacyvm-favicon.svg",
+  "appearance": {
+    "default": "system"
+  },
+  "fonts": {
+    "family": "IBM Plex Sans",
+    "heading": {
+      "family": "Libre Baskerville",
+      "weight": 400
+    }
+  },
+  "background": {
+    "color": {
+      "light": "#F0E7DA",
+      "dark": "#262626"
+    }
+  },
+  "styling": {
+    "codeblocks": {
+      "theme": {
+        "light": "github-light",
+        "dark": "github-dark"
+      }
+    }
   },
   "icons": {
     "library": "lucide"
@@ -15,6 +47,7 @@
         "group": "Get Started",
         "pages": [
           "index",
+          "docs/getting-started/what-is-stacyvm",
           "docs/getting-started/quickstart",
           "docs/getting-started/installation",
           "docs/getting-started/core-concepts"
@@ -24,10 +57,11 @@
         "group": "Build With StacyVM",
         "pages": [
           "docs/tutorials/code-runner",
+          "docs/tutorials/typescript-code-runner",
           "docs/sdks/python",
           "docs/sdks/typescript",
-          "docs/api/sandboxes",
-          "docs/api"
+          "docs/rest/sandboxes",
+          "docs/rest-api"
         ]
       },
       {
@@ -61,6 +95,7 @@
       {
         "group": "Architecture",
         "pages": [
+          "docs/architecture/system-overview",
           "docs/admin-control-plane",
           "docs/live-preview-architecture",
           "docs/snapshot-restore",

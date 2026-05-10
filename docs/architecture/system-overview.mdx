@@ -1,0 +1,213 @@
+---
+title: "System Architecture"
+description: "Understand StacyVM's control plane, scheduler, workers, providers, persistence model, and sandbox lifecycle with diagrams."
+---
+
+This page explains StacyVM from top to bottom. Use it when you need to understand how a request moves from an SDK call to an isolated runtime and back.
+
+## High-Level Architecture
+
+```mermaid
+flowchart TB
+  subgraph Clients["Clients"]
+    REST["REST API users"]
+    Py["Python SDK"]
+    TS["TypeScript SDK"]
+    Agents["AI agents and tools"]
+  end
+
+  subgraph Control["StacyVM control plane"]
+    API["HTTP API server"]
+    Auth["Auth and tenant identity"]
+    Quota["Quota and admission checks"]
+    Scheduler["Scheduler"]
+    Audit["Audit events"]
+    Store["Store: SQLite or Postgres"]
+    Events["Events and metrics"]
+  end
+
+  subgraph Runtime["Execution plane"]
+    LocalWorker["Local worker"]
+    RemoteWorker["Remote worker"]
+    Provider["Provider contract"]
+    Docker["Docker"]
+    Firecracker["Firecracker"]
+    PRoot["PRoot"]
+    Custom["Custom provider"]
+  end
+
+  REST --> API
+  Py --> API
+  TS --> API
+  Agents --> API
+  API --> Auth
+  Auth --> Quota
+  Quota --> Scheduler
+  Scheduler --> Store
+  Scheduler --> LocalWorker
+  Scheduler --> RemoteWorker
+  LocalWorker --> Provider
+  RemoteWorker --> Provider
+  Provider --> Docker
+  Provider --> Firecracker
+  Provider --> PRoot
+  Provider --> Custom
+  API --> Audit
+  API --> Events
+  Audit --> Store
+  Events --> Store
+```
+
+## Request Flow
+
+When a client creates a sandbox, StacyVM validates identity and policy before touching a runtime provider.
+
+```mermaid
+sequenceDiagram
+  participant Client
+  participant API as StacyVM API
+  participant Policy as Auth/Quota
+  participant Scheduler
+  participant Worker
+  participant Provider
+  participant Store
+
+  Client->>API: POST /sandboxes
+  API->>Policy: authenticate and admit
+  Policy-->>API: allowed
+  API->>Scheduler: choose worker/provider
+  Scheduler->>Store: reserve sandbox record
+  Scheduler->>Worker: spawn request
+  Worker->>Provider: provider.Spawn
+  Provider-->>Worker: runtime id
+  Worker-->>Scheduler: sandbox running
+  Scheduler->>Store: persist state
+  API-->>Client: sandbox info
+```
+
+## Sandbox Lifecycle
+
+```mermaid
+stateDiagram-v2
+  [*] --> creating
+  creating --> running: provider spawn succeeds
+  creating --> error: spawn fails
+  running --> unhealthy: health check fails
+  unhealthy --> running: recovers
+  running --> expired: TTL reached
+  running --> destroying: client destroy
+  expired --> destroying: cleanup loop
+  destroying --> destroyed: provider destroy succeeds
+  destroying --> error: provider destroy fails
+  destroyed --> [*]
+  error --> destroying: cleanup retry
+```
+
+## Provider Contract
+
+Providers implement the runtime-specific work behind a stable product API.
+
+| Capability | Purpose |
+| --- | --- |
+| Spawn | Create an isolated runtime from an image or template. |
+| Exec | Run a command and return exit code, stdout, stderr, and duration. |
+| Stream | Send stdout/stderr chunks while a command is running. |
+| Files | Write, read, list, stat, move, chmod, delete, and glob files. |
+| Destroy | Tear down a sandbox safely and idempotently. |
+| Health | Report provider availability and runtime readiness. |
+| Logs | Expose provider and sandbox diagnostics. |
+
+## Persistence Model
+
+StacyVM uses a store abstraction so single-node installs can use SQLite while cluster deployments can use Postgres.
+
+```mermaid
+erDiagram
+  OWNER ||--o{ SANDBOX : owns
+  WORKER ||--o{ SANDBOX : runs
+  PROVIDER ||--o{ SANDBOX : backs
+  TEMPLATE ||--o{ SANDBOX : spawns
+  SANDBOX ||--o{ EXECUTION : records
+  SANDBOX ||--o{ AUDIT_EVENT : emits
+  WORKER ||--o{ LEASE : holds
+
+  OWNER {
+    string id
+    string api_key_hash
+    string quota_policy
+  }
+
+  WORKER {
+    string id
+    string endpoint
+    string status
+    datetime last_heartbeat
+  }
+
+  SANDBOX {
+    string id
+    string owner_id
+    string worker_id
+    string provider
+    string image
+    string state
+    datetime created_at
+    datetime expires_at
+  }
+
+  EXECUTION {
+    string id
+    string sandbox_id
+    int exit_code
+    string duration
+    datetime created_at
+  }
+
+  AUDIT_EVENT {
+    string id
+    string actor
+    string action
+    string target
+    datetime created_at
+  }
+```
+
+## Single-Node Mode
+
+Single-node mode runs the API, scheduler, local worker, provider, and store in one process on one host. This is the right starting point for internal staging and technical users.
+
+```mermaid
+flowchart LR
+  Client["Client"] --> Server["stacyvm serve"]
+  Server --> SQLite["SQLite"]
+  Server --> Docker["Docker provider"]
+  Docker --> Sandbox["Sandbox"]
+```
+
+## Multi-Worker Mode
+
+Multi-worker mode keeps the API/control plane separate from worker nodes. The scheduler assigns sandboxes to workers, and worker RPC plus leases prevent two workers from managing the same runtime.
+
+```mermaid
+flowchart LR
+  Client["Client"] --> Control["Control plane"]
+  Control --> Postgres["Postgres"]
+  Control --> W1["Worker A"]
+  Control --> W2["Worker B"]
+  W1 --> P1["Docker/Firecracker"]
+  W2 --> P2["Docker/PRoot"]
+```
+
+## Operational Boundaries
+
+- Use Docker for the broadest quickstart path.
+- Use Firecracker only on hosts where KVM, kernel, rootfs, agent, networking, and snapshot behavior have passed certification.
+- Use PRoot only after validating the real rootfs/bin setup on the target host.
+- Use remote workers when you need horizontal capacity, runtime isolation by node class, or enterprise deployment boundaries.
+
+## Related
+
+- [Provider contract](/docs/provider-contract)
+- [Runtime certification](/docs/runtime-certification)
+- [Remote worker staging](/docs/remote-worker-staging)
+- [Production readiness](/docs/production-readiness)

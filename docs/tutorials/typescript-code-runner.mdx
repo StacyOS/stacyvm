@@ -1,0 +1,99 @@
+---
+title: "Example App: TypeScript Code Runner"
+description: "Build an Express application that runs JavaScript code inside disposable StacyVM sandboxes with the TypeScript SDK."
+---
+
+This example uses the TypeScript SDK to build a small HTTP API. Each request gets a fresh sandbox, writes submitted code to `/app/main.js`, runs it with Node.js, returns the result, and destroys the sandbox.
+
+## Prerequisites
+
+- Node.js 18+.
+- A running StacyVM server.
+- Docker provider access on the StacyVM host.
+- A StacyVM API key if auth is enabled.
+
+The source lives in [`examples/code-runner-typescript`](https://github.com/StacyOS/stacyvm/tree/phase-14-worker-identity-hardening/examples/code-runner-typescript).
+
+## Install
+
+```bash
+cd examples/code-runner-typescript
+npm install
+```
+
+## Configure
+
+```bash
+export STACYVM_URL="http://localhost:7423"
+export STACYVM_API_KEY="sk_test_YOUR_API_KEY"
+export STACYVM_IMAGE="node:20"
+```
+
+## Run The App
+
+```bash
+npm run dev
+```
+
+## Submit Code
+
+<CodeGroup>
+```bash cURL
+curl -sS -X POST http://localhost:8081/run-javascript \
+  -H "Content-Type: application/json" \
+  -d '{"code":"console.log([10, 20, 12].reduce((a, b) => a + b, 0));","timeout":"10s"}'
+```
+
+```javascript JavaScript
+const response = await fetch("http://localhost:8081/run-javascript", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({
+    code: "console.log([10, 20, 12].reduce((a, b) => a + b, 0));",
+    timeout: "10s",
+  }),
+});
+
+if (!response.ok) {
+  throw new Error(await response.text());
+}
+
+console.log(await response.json());
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    "http://localhost:8081/run-javascript",
+    json={
+        "code": "console.log([10, 20, 12].reduce((a, b) => a + b, 0));",
+        "timeout": "10s",
+    },
+    timeout=30,
+)
+response.raise_for_status()
+print(response.json())
+```
+</CodeGroup>
+
+## Response
+
+```json
+{
+  "exit_code": 0,
+  "stdout": "42\n",
+  "stderr": "",
+  "duration": "120ms"
+}
+```
+
+## Production Notes
+
+Before exposing this service, add authentication, request size limits, per-user quota attribution, audit logging, and host runtime certification.
+
+## Related
+
+- [TypeScript SDK](/docs/sdks/typescript)
+- [REST sandboxes](/docs/rest/sandboxes)
+- [System architecture](/docs/architecture/system-overview)
