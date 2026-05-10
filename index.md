@@ -5,28 +5,7 @@ description: "Self-hosted sandbox infrastructure for running agent code in isola
 
 # StacyVM
 
-<div className="stacy-hero">
-  <div className="stacy-hero-copy">
-    <span className="stacy-kicker">Self-hosted execution infrastructure</span>
-    <h2>Resolve agent work faster with isolated sandboxes.</h2>
-    <p>
-      StacyVM gives your applications disposable execution environments for AI agents, code runners,
-      browser previews, and automation workflows. You keep control of the runtime, network,
-      credentials, and audit trail while developers get a simple API and SDK.
-    </p>
-    <div className="stacy-hero-actions">
-      <a href="/docs/getting-started/quickstart">Start the quickstart</a>
-      <a href="/docs/architecture/system-overview">View architecture</a>
-    </div>
-  </div>
-  <div className="stacy-stack" aria-label="StacyVM execution layers">
-    <img src="/assets/stacy-mark-dark.png" alt="Stacy mark" />
-    <div className="stacy-layer">SDK / REST</div>
-    <div className="stacy-layer">Control plane</div>
-    <div className="stacy-layer">Workers</div>
-    <div className="stacy-layer">Runtime providers</div>
-  </div>
-</div>
+StacyVM gives your applications disposable execution environments for AI agents, code runners, browser previews, and automation workflows. You keep control of the runtime, network, credentials, and audit trail while developers get a simple API and SDK.
 
 <CardGroup cols={2}>
   <Card title="What is StacyVM?" icon="blocks" href="/docs/getting-started/what-is-stacyvm">
