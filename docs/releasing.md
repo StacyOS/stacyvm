@@ -139,6 +139,13 @@ asset exists on the GitHub release, runs signature and checksum verification for
 both architectures, and can exercise `scripts/install.sh` in verify-only mode on
 Linux.
 
+For a GitHub-hosted Linux evidence bundle, run the manual **Public Readiness
+Certification** workflow against the published tag. It validates the release,
+runs installer verify-only, certifies the selected runtime on the runner, and
+uploads the generated Markdown reports. Treat this as CI-host evidence only;
+production-host runtime claims still require `scripts/certify-runtime.sh` on
+the actual host.
+
 ## Notes
 
 - Do not store release secrets in `stacyvm.production.yaml`; pass them through environment variables.

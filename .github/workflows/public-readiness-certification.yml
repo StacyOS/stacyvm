@@ -1,0 +1,86 @@
+name: Public Readiness Certification
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Published release tag to certify, for example v0.14.3'
+        required: true
+        type: string
+      runtime:
+        description: 'Runtime to certify on the GitHub-hosted Linux runner'
+        required: true
+        default: docker
+        type: choice
+        options:
+          - docker
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+permissions:
+  contents: read
+
+jobs:
+  public-readiness-certification:
+    name: Certify published release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Validate published release assets and Linux installer
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STACYVM_VALIDATE_INSTALLER: "true"
+        run: scripts/post-release-validate.sh "${{ inputs.version }}"
+
+      - name: Download published StacyVM binary
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          curl -fsSL -o stacyvm-linux-amd64 \
+            "https://github.com/StacyOS/stacyvm/releases/download/${VERSION}/stacyvm-linux-amd64"
+          chmod +x stacyvm-linux-amd64
+
+      - name: Certify runtime with StacyVM integration smoke
+        env:
+          STACYVM_RUNTIME: ${{ inputs.runtime }}
+        run: |
+          mkdir -p public-readiness-evidence
+          scripts/certify-runtime.sh "$STACYVM_RUNTIME" \
+            --format markdown \
+            --output "public-readiness-evidence/${STACYVM_RUNTIME}-certification.md" \
+            --stacyvm-bin "./stacyvm-linux-amd64"
+
+      - name: Write certification summary
+        env:
+          VERSION: ${{ inputs.version }}
+          STACYVM_RUNTIME: ${{ inputs.runtime }}
+        run: |
+          {
+            echo "# Public Readiness Certification"
+            echo
+            echo "- Version: \`${VERSION}\`"
+            echo "- Runtime: \`${STACYVM_RUNTIME}\`"
+            echo "- Release validation: \`PASS\`"
+            echo "- Installer verify-only: \`PASS\`"
+            echo "- Runtime certification: \`PASS\`"
+            echo "- Evidence generated at: \`$(date -u '+%Y-%m-%dT%H:%M:%SZ')\`"
+            echo
+            echo "## Runtime Report"
+            echo
+            cat "public-readiness-evidence/${STACYVM_RUNTIME}-certification.md"
+          } > public-readiness-evidence/public-readiness-certification.md
+
+          cat public-readiness-evidence/public-readiness-certification.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload public readiness evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-readiness-evidence-${{ inputs.version }}-${{ inputs.runtime }}
+          path: public-readiness-evidence/*
+          if-no-files-found: error

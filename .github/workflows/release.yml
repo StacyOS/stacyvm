@@ -148,3 +148,68 @@ jobs:
 
       - name: Sign published image digest
         run: cosign sign --yes "${{ env.IMAGE_NAME }}@${{ steps.build.outputs.digest }}"
+
+  public-readiness-certification:
+    name: Public readiness certification
+    needs:
+      - release-artifacts
+      - container-image
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Resolve release version
+        id: version
+        shell: bash
+        run: echo "value=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Validate published release assets and Linux installer
+        env:
+          GH_TOKEN: ${{ github.token }}
+          STACYVM_VALIDATE_INSTALLER: "true"
+        run: scripts/post-release-validate.sh "${{ steps.version.outputs.value }}"
+
+      - name: Download published StacyVM binary
+        run: |
+          curl -fsSL -o stacyvm-linux-amd64 \
+            "https://github.com/StacyOS/stacyvm/releases/download/${{ steps.version.outputs.value }}/stacyvm-linux-amd64"
+          chmod +x stacyvm-linux-amd64
+
+      - name: Certify Docker runtime with StacyVM integration smoke
+        run: |
+          mkdir -p public-readiness-evidence
+          scripts/certify-runtime.sh docker \
+            --format markdown \
+            --output public-readiness-evidence/docker-certification.md \
+            --stacyvm-bin ./stacyvm-linux-amd64
+
+      - name: Write certification summary
+        run: |
+          {
+            echo "# Public Readiness Certification"
+            echo
+            echo "- Version: \`${{ steps.version.outputs.value }}\`"
+            echo "- Runtime: \`docker\`"
+            echo "- Release validation: \`PASS\`"
+            echo "- Installer verify-only: \`PASS\`"
+            echo "- Runtime certification: \`PASS\`"
+            echo "- Evidence generated at: \`$(date -u '+%Y-%m-%dT%H:%M:%SZ')\`"
+            echo
+            echo "## Runtime Report"
+            echo
+            cat public-readiness-evidence/docker-certification.md
+          } > public-readiness-evidence/public-readiness-certification.md
+
+          cat public-readiness-evidence/public-readiness-certification.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload public readiness evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: public-readiness-evidence-${{ steps.version.outputs.value }}-docker
+          path: public-readiness-evidence/*
+          if-no-files-found: error

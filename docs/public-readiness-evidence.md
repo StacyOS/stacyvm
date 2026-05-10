@@ -49,6 +49,19 @@ Do not claim Firecracker production readiness from a non-Linux or non-KVM host. 
 
 The report verdict is **PUBLIC SELF-SERVE READY** only when all required local, tag, runtime, and cluster gates pass without skips.
 
+## GitHub-Hosted Certification Gate
+
+After a tag is published, maintainers can run the manual **Public Readiness Certification** workflow from GitHub Actions. Use the published tag, for example `v0.14.3`, and the runtime claim to validate on the GitHub-hosted Linux runner.
+
+The workflow performs:
+
+- `scripts/post-release-validate.sh <version>`
+- `STACYVM_VALIDATE_INSTALLER=true` installer verify-only on Linux
+- `scripts/certify-runtime.sh docker --stacyvm-bin ./stacyvm-linux-amd64`
+- evidence upload as a workflow artifact
+
+This is acceptable proof for the GitHub-hosted Docker runtime claim. It does not replace certification on the actual production host, because Docker daemon settings, seccomp/AppArmor, image cache behavior, KVM, gVisor/Kata, and network policy are host-specific.
+
 ## Required Attachments
 
 Keep these artifacts with the release:
