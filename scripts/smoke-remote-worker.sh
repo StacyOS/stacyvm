@@ -42,6 +42,11 @@ done
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 if [[ "$BIN" != /* ]]; then BIN="$ROOT_DIR/${BIN#./}"; fi
+if [[ ! -x "$BIN" ]]; then
+  echo "stacyvm binary is not executable: $BIN" >&2
+  echo "build it first, or pass the path to a built stacyvm binary" >&2
+  exit 1
+fi
 
 WORK_DIR="$(mktemp -d)"
 CONTROL_DIR="$WORK_DIR/control-plane"
@@ -227,11 +232,16 @@ if $MTLS; then MODE="mTLS"; fi
 wait_port_free() {
   local port="$1"
   for _ in {1..25}; do
-    if ! curl -fsS --max-time 0.3 "http://127.0.0.1:$port/" >/dev/null 2>&1; then return 0; fi
+    if command -v nc >/dev/null 2>&1; then
+      if ! nc -z 127.0.0.1 "$port" >/dev/null 2>&1; then return 0; fi
+    elif ! curl -fsS --max-time 0.3 "http://127.0.0.1:$port/" >/dev/null 2>&1 \
+      && ! curl -kfsS --max-time 0.3 "https://127.0.0.1:$port/" >/dev/null 2>&1; then
+      return 0
+    fi
     sleep 0.3
   done
-  # Port appears busy but proceed anyway; the server bind will fail loudly if so.
-  return 0
+  echo "port $port is still in use; stop the existing process or override the smoke port" >&2
+  exit 1
 }
 wait_port_free "$CONTROL_PORT"
 wait_port_free "$WORKER_PORT"
@@ -280,11 +290,21 @@ curl -fsS -X DELETE -H "X-Admin-API-Key: $ADMIN_KEY" \
   "http://127.0.0.1:$CONTROL_PORT/api/v1/admin/workers/local" >/dev/null || true
 
 echo "==> Spawning remote mock sandbox"
-SPAWN_RESPONSE="$(curl -fsS -X POST \
+SPAWN_RESPONSE_FILE="$WORK_DIR/spawn-response.json"
+SPAWN_STATUS="$(curl -sS -o "$SPAWN_RESPONSE_FILE" -w '%{http_code}' -X POST \
   -H "Content-Type: application/json" \
   -H "X-API-Key: $API_KEY" \
   -d '{"image":"alpine:latest","provider":"mock","ttl":"5m"}' \
   "http://127.0.0.1:$CONTROL_PORT/api/v1/sandboxes")"
+SPAWN_RESPONSE="$(cat "$SPAWN_RESPONSE_FILE")"
+if [[ "$SPAWN_STATUS" -lt 200 || "$SPAWN_STATUS" -ge 300 ]]; then
+  echo "spawn failed with HTTP $SPAWN_STATUS: $SPAWN_RESPONSE" >&2
+  echo "control plane log:" >&2
+  cat "$SERVER_LOG" >&2
+  echo "worker log:" >&2
+  cat "$WORKER_LOG" >&2
+  exit 1
+fi
 SANDBOX_ID="$(printf '%s' "$SPAWN_RESPONSE" | sed -n 's/.*"id":"\([^"]*\)".*/\1/p')"
 if [[ -z "$SANDBOX_ID" ]]; then
   echo "spawn response had no sandbox id: $SPAWN_RESPONSE" >&2; exit 1
