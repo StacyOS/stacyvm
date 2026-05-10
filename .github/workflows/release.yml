@@ -26,6 +26,7 @@ env:
   IMAGE_NAME: ghcr.io/stacyos/stacyvm
 
 permissions:
+  actions: read
   contents: write
   packages: write
   id-token: write
