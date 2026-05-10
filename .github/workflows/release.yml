@@ -80,32 +80,12 @@ jobs:
           path: dist/*
           if-no-files-found: error
 
-  github-release:
-    name: Create GitHub release
-    needs: release-artifacts
-    runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/') || inputs.create_release == true
-    steps:
-      - name: Download release artifacts
-        uses: actions/download-artifact@v4
-        with:
-          path: release-assets
-
-      - name: Resolve release version
-        id: version
-        shell: bash
-        run: |
-          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
-            echo "value=${{ inputs.version }}" >> "$GITHUB_OUTPUT"
-          else
-            echo "value=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Create release
+      - name: Create GitHub release
+        if: startsWith(github.ref, 'refs/tags/') || inputs.create_release == true
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${{ steps.version.outputs.value }}" release-assets/**/* \
+          gh release create "${{ steps.version.outputs.value }}" dist/* \
             --title "${{ steps.version.outputs.value }}" \
             --generate-notes
 
