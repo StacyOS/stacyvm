@@ -1,5 +1,24 @@
 # Changelog
 
+## Phase 14 Public-Readiness Repair - 2026-05-10
+
+Security fixes required before public launch. No new features.
+
+### Fixed (security)
+
+- **RS256 JWT verification used `hash=0` instead of `crypto.SHA256`** — tokens from real OIDC providers (Google Workspace, Okta, Azure AD, Cloudflare Access) were rejected because they sign with SHA256, but verification was using `rsa.VerifyPKCS1v15(key, 0, ...)`. Fixed to `rsa.VerifyPKCS1v15(key, crypto.SHA256, ...)`. Tests updated to sign with `crypto.SHA256` and a new regression test `TestVerifyJWT_RS256UsesSHA256` proves hash=0 signatures are rejected.
+- **Admin routes unprotected in OIDC-only mode** — when no `auth.admin_api_key` was configured and only OIDC was set, `AdminAuth` passed anonymous requests through silently (the `adminAPIKey == ""` branch fell through) and `RequireScope(ScopeAdmin)` was not applied. Fixed: `RequireScope(ScopeAdmin)` now fires whenever any auth is configured (`authConfigured`), not just when API keys are set. `AdminAuth` now correctly passes through only OIDC-established identities (Bearer token header) so API-key role promotion still works.
+- **`AuthAny` rejected valid OIDC tokens in mixed mode** — when both OIDC and API keys were configured, a valid Bearer token was accepted by `OIDCAuth` but then rejected by `AuthAny` (which always looked for an API key header). Fixed: `AuthAny` now skips its check when OIDC already set an identity via `Authorization` header.
+- **`PolicyEnforcer` was never mounted** — policy CRUD routes existed and policies could be created, but they were never evaluated on sandbox creation. Fixed: `PolicyEnforcer(st)` is now applied around `POST /api/v1/sandboxes` when a policy store is wired in.
+- **Worker token issuer accepted non-worker scopes** — a caller could request `admin:*` in a worker token. The scope was silently filtered at verification, but the issuer should reject it outright. Fixed: `POST /api/v1/admin/worker-tokens` now explicitly validates that all requested scopes begin with `worker:` and returns 400 if any non-worker scope is present.
+
+### Added
+
+- **Auth matrix regression tests** (`internal/api/auth_matrix_test.go`) — 7 tests covering API-key only, OIDC only (normal route, viewer-cannot-spawn, admin route blocked for anonymous/non-admin/admin), mixed OIDC+API-key, worker token not treated as Bearer, and token issuer scope rejection.
+- `TestVerifyJWT_RS256UsesSHA256` — explicitly proves the verifier uses `crypto.SHA256` and rejects hash=0 signatures.
+
+---
+
 ## Phase 14 Enterprise Governance - 2026-05-10
 
 This release closes the enterprise production readiness gates: OIDC/SSO, RBAC, multi-tenancy, policy controls, and HA event durability.

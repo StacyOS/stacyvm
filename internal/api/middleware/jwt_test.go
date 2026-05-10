@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"crypto"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/sha256"
@@ -31,7 +32,7 @@ func mintTestJWT(t *testing.T, key *rsa.PrivateKey, claims map[string]any) strin
 	payload := base64.RawURLEncoding.EncodeToString(mustJSON(t, claims))
 	signed := header + "." + payload
 	h := sha256.Sum256([]byte(signed))
-	sig, err := rsa.SignPKCS1v15(rand.Reader, key, 0, h[:])
+	sig, err := rsa.SignPKCS1v15(rand.Reader, key, crypto.SHA256, h[:])
 	if err != nil {
 		t.Fatalf("sign JWT: %v", err)
 	}
@@ -347,6 +348,45 @@ func TestOIDCRole_Priority(t *testing.T) {
 		if got != tc.want {
 			t.Errorf("oidcRole(%v) = %q, want %q", tc.groups, got, tc.want)
 		}
+	}
+}
+
+// TestVerifyJWT_RS256UsesSHA256 proves the verifier uses crypto.SHA256, not hash=0.
+// A token signed with hash=0 must be rejected; only SHA256-signed tokens pass.
+func TestVerifyJWT_RS256UsesSHA256(t *testing.T) {
+	key := generateTestRSAKey(t)
+	now := time.Now()
+
+	// Build a JWT header+payload, then sign with hash=0 (wrong).
+	header := base64.RawURLEncoding.EncodeToString(mustJSON(t, map[string]string{"alg": "RS256", "kid": "test-kid", "typ": "JWT"}))
+	payload := base64.RawURLEncoding.EncodeToString(mustJSON(t, map[string]any{
+		"sub": "user", "exp": now.Add(5 * time.Minute).Unix(), "iat": now.Unix(),
+	}))
+	signed := header + "." + payload
+	h := sha256.Sum256([]byte(signed))
+
+	// Sign with hash=0 — this is NOT real RS256.
+	sigWrong, err := rsa.SignPKCS1v15(rand.Reader, key, 0, h[:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	wrongToken := signed + "." + base64.RawURLEncoding.EncodeToString(sigWrong)
+
+	cache := testJWKSCache(key)
+	_, errWrong := verifyJWT(wrongToken, "", "", publicKey{}, cache, now)
+	if errWrong == nil {
+		t.Error("expected verification failure for token signed with hash=0; got nil error — RS256 is not using crypto.SHA256")
+	}
+
+	// Sign correctly with crypto.SHA256 — must be accepted.
+	sigRight, err := rsa.SignPKCS1v15(rand.Reader, key, crypto.SHA256, h[:])
+	if err != nil {
+		t.Fatal(err)
+	}
+	rightToken := signed + "." + base64.RawURLEncoding.EncodeToString(sigRight)
+	_, errRight := verifyJWT(rightToken, "", "", publicKey{}, cache, now)
+	if errRight != nil {
+		t.Errorf("expected valid RS256 token to pass, got: %v", errRight)
 	}
 }
 

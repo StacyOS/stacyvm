@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"context"
+	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rsa"
@@ -376,7 +377,7 @@ func verifyJWT(token, issuer, audience string, staticKey publicKey, cache *jwksC
 			return nil, fmt.Errorf("algorithm RS256 requires an RSA key, got EC")
 		}
 		h := sha256.Sum256([]byte(signed))
-		if err := rsa.VerifyPKCS1v15(key.rsa, 0, h[:], sigBytes); err != nil {
+		if err := rsa.VerifyPKCS1v15(key.rsa, crypto.SHA256, h[:], sigBytes); err != nil {
 			return nil, errors.New("JWT signature verification failed")
 		}
 	case "ES256":

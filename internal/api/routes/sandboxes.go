@@ -1,6 +1,7 @@
 package routes
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strconv"
@@ -9,17 +10,27 @@ import (
 	"github.com/StacyOs/stacyvm/internal/api/middleware"
 	"github.com/StacyOs/stacyvm/internal/httputil"
 	"github.com/StacyOs/stacyvm/internal/orchestrator"
+	"github.com/StacyOs/stacyvm/internal/store"
 	"github.com/go-chi/chi/v5"
 	"nhooyr.io/websocket"
 	"nhooyr.io/websocket/wsjson"
 )
 
+type sandboxPolicyStore interface {
+	ListPolicies(ctx context.Context, query store.PolicyQuery) ([]*store.PolicyRecord, error)
+}
+
 type SandboxRoutes struct {
-	manager *orchestrator.Manager
+	manager     *orchestrator.Manager
+	policyStore sandboxPolicyStore
 }
 
 func NewSandboxRoutes(manager *orchestrator.Manager) *SandboxRoutes {
 	return &SandboxRoutes{manager: manager}
+}
+
+func NewSandboxRoutesWithPolicy(manager *orchestrator.Manager, ps sandboxPolicyStore) *SandboxRoutes {
+	return &SandboxRoutes{manager: manager, policyStore: ps}
 }
 
 func (s *SandboxRoutes) Routes() chi.Router {
@@ -39,7 +50,12 @@ func (s *SandboxRoutes) RoutesWithScopeEnforcement(enforce bool) chi.Router {
 	r.With(readScope).Post("/admission", s.Admission)
 
 	// Mutating operations: api, operator, admin (not viewer).
-	r.With(apiScope).Post("/", s.Create)
+	// PolicyEnforcer runs before Create to enforce tenant image/provider/network rules.
+	spawnChain := []func(http.Handler) http.Handler{apiScope}
+	if s.policyStore != nil {
+		spawnChain = append(spawnChain, middleware.PolicyEnforcer(s.policyStore))
+	}
+	r.With(spawnChain...).Post("/", s.Create)
 	r.With(apiScope).Delete("/", s.Prune)
 
 	r.Route("/{sandboxID}", func(r chi.Router) {

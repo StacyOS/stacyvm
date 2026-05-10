@@ -119,7 +119,7 @@ func NewServer(cfg ServerConfig, registry *providers.Registry, manager *orchestr
 		}
 
 		// Routes
-		sandboxRoutes := routes.NewSandboxRoutes(manager)
+		sandboxRoutes := routes.NewSandboxRoutesWithPolicy(manager, st)
 		providerRoutes := routes.NewProviderRoutes(registry, manager)
 		templateRoutes := routes.NewTemplateRoutes(templates, manager)
 		snapshotRoutes := routes.NewSnapshotRoutes(registry)
@@ -141,7 +141,9 @@ func NewServer(cfg ServerConfig, registry *providers.Registry, manager *orchestr
 			r.Get("/pool/status", sandboxRoutes.VMPoolStatus)
 			r.Route("/admin", func(r chi.Router) {
 				r.Use(middleware.AdminAuth(cfg.AdminAPIKey, cfg.APIKey, !cfg.AdminFallbackDisabled))
-				if cfg.APIKey != "" || cfg.AdminAPIKey != "" {
+				// Require admin scope whenever any auth mode is configured — including
+				// OIDC-only deployments where no API keys are set.
+				if authConfigured {
 					r.Use(middleware.RequireScope(middleware.ScopeAdmin))
 				}
 				r.Use(middleware.AdminAudit(st, logger, cfg.AdminAuditRetention))

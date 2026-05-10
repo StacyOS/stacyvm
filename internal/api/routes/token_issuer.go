@@ -3,6 +3,7 @@ package routes
 import (
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -79,6 +80,18 @@ func (r *WorkerTokenIssuerRoutes) IssueToken(w http.ResponseWriter, req *http.Re
 		httputil.WriteError(w, http.StatusBadRequest, httputil.CodeBadRequest,
 			"audience must be worker:control-plane or worker:rpc")
 		return
+	}
+
+	// Validate requested scopes up-front: only worker:* scopes may be issued.
+	// This prevents escalation through the issuer even if the caller holds admin credentials.
+	if len(body.Scopes) > 0 {
+		for _, s := range body.Scopes {
+			if !strings.HasPrefix(strings.TrimSpace(s), "worker:") {
+				httputil.WriteError(w, http.StatusBadRequest, httputil.CodeBadRequest,
+					"only worker:* scopes may be issued; scope "+strconv.Quote(s)+" is not permitted")
+				return
+			}
+		}
 	}
 
 	tokenID, err := middleware.NewWorkerTokenID()

@@ -105,6 +105,13 @@ func AuthAny(apiKeys ...string) func(http.Handler) http.Handler {
 				return
 			}
 
+			// If OIDC already established identity via Bearer token, honour it
+			// and skip the API-key check so mixed OIDC+API-key deployments work.
+			if existing := AuthIdentityFromContext(r.Context()); existing.Header == "Authorization" {
+				next.ServeHTTP(w, r)
+				return
+			}
+
 			identity, ok := authenticateRequest(r, candidates...)
 			if !ok {
 				w.Header().Set("Content-Type", "application/json")
@@ -130,6 +137,17 @@ func AdminAuth(adminAPIKey, fallbackAPIKey string, fallbackEnabled bool) func(ht
 	}
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// If OIDC already established identity via Bearer token, skip the
+			// API-key admin check — RequireScope(ScopeAdmin) handles authorisation.
+			// We specifically check Header == "Authorization" so API-key identities
+			// (Header "X-API-Key") still go through AdminAuth for role promotion.
+			if existing := AuthIdentityFromContext(r.Context()); existing.Header == "Authorization" {
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			// No admin API key configured (OIDC-only deployment): do not grant
+			// anonymous access — fall through to RequireScope which will reject.
 			if adminAPIKey == "" {
 				next.ServeHTTP(w, r)
 				return
