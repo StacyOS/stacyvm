@@ -2092,6 +2092,9 @@ const docTemplate = `{
                 "state": {
                     "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.SandboxState"
                 },
+                "tenant_id": {
+                    "type": "string"
+                },
                 "vcpus": {
                     "type": "integer"
                 },
@@ -2256,6 +2259,9 @@ const docTemplate = `{
                 "template": {
                     "type": "string"
                 },
+                "tenant_id": {
+                    "type": "string"
+                },
                 "ttl": {
                     "type": "string"
                 },
@@ -2375,6 +2381,10 @@ const docTemplate = `{
                 "status": {
                     "type": "integer",
                     "example": 200
+                },
+                "tenant_id": {
+                    "type": "string",
+                    "example": "tenant-acme"
                 },
                 "user_agent": {
                     "type": "string",

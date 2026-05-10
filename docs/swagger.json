@@ -2086,6 +2086,9 @@
                 "state": {
                     "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.SandboxState"
                 },
+                "tenant_id": {
+                    "type": "string"
+                },
                 "vcpus": {
                     "type": "integer"
                 },
@@ -2250,6 +2253,9 @@
                 "template": {
                     "type": "string"
                 },
+                "tenant_id": {
+                    "type": "string"
+                },
                 "ttl": {
                     "type": "string"
                 },
@@ -2369,6 +2375,10 @@
                 "status": {
                     "type": "integer",
                     "example": 200
+                },
+                "tenant_id": {
+                    "type": "string",
+                    "example": "tenant-acme"
                 },
                 "user_agent": {
                     "type": "string",
