@@ -97,6 +97,7 @@ This checklist tracks the Phase 7 release-candidate hardening work needed before
 - Bug and production support issue templates ask for the same evidence required by the public support matrix.
 - Public release sanity CI builds release binaries and validates checksums; real GitHub release asset verification must be repeated after each version tag is published.
 - Public browser clients use explicit CORS origins; wildcard CORS must fail `stacyvm config lint --production`.
+- Final public evidence is generated with `scripts/public-readiness-evidence.sh`; announcement requires a **PUBLIC SELF-SERVE READY** verdict for the release tag, target host runtime, and deployment network.
 
 ## Required Before Enterprise/Multi-Worker
 

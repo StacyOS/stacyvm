@@ -151,6 +151,7 @@ The new signed-token path is additive:
 - Updated `deploy/stacyvm.production.yaml`, deployment docs, API docs, public support matrix, and production readiness checklist with explicit CORS origin requirements.
 - Extended public release sanity CI to run production config lint with environment-provided secrets before building release artifacts.
 - Hardened the remote worker smoke harness so missing binaries, occupied ports, and failed spawns report actionable diagnostics instead of producing misleading release-gate failures.
+- Added `scripts/public-readiness-evidence.sh` and `docs/public-readiness-evidence.md` to generate a single public announcement evidence report that distinguishes branch-ready, tag-ready, runtime-certified, and target-network-certified states.
 
 ## Remaining Phase 14 Direction
 

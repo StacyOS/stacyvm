@@ -11,6 +11,7 @@ echo "==> Checking public install and verification scripts"
 bash -n scripts/install.sh
 bash -n scripts/verify-release.sh
 bash -n scripts/post-release-validate.sh
+bash -n scripts/public-readiness-evidence.sh
 
 echo "==> Checking public production config posture"
 STACYVM_AUTH_API_KEY=public-ci-api-key-with-at-least-32-bytes \
