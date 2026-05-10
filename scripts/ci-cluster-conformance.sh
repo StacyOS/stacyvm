@@ -178,4 +178,71 @@ else
   echo "==> Skipping live Postgres store contract; STACYVM_POSTGRES_TEST_DSN is not set"
 fi
 
+echo "==> Linting OIDC-enabled cluster config"
+oidc_config="$tmpdir/stacyvm.oidc.yaml"
+cat >"$oidc_config" <<YAML
+server:
+  host: "0.0.0.0"
+  port: 7423
+providers:
+  default: "mock"
+  mock:
+    enabled: true
+  docker:
+    enabled: false
+  firecracker:
+    enabled: false
+auth:
+  enabled: true
+  api_key: "api-key-with-at-least-32-bytes-longxx"
+  admin_api_key: "admin-api-key-with-at-least-32-bytesxx"
+  admin_fallback_enabled: false
+  admin_audit_retention: "2160h"
+  worker_signing_key: "worker-signing-key-with-at-least-32-bytes"
+  oidc_enabled: true
+  oidc_issuer: "https://accounts.example.com"
+  oidc_audience: "stacyvm"
+  oidc_jwks_url: "https://accounts.example.com/.well-known/jwks.json"
+  oidc_admin_groups: ["stacyvm-admins"]
+  oidc_operator_groups: ["stacyvm-operators"]
+rate_limit:
+  enabled: true
+  requests_per_minute: 120
+  burst: 60
+  key_by: "api_key"
+  bucket_ttl: "15m"
+  cleanup_interval: "1m"
+database:
+  driver: "sqlite"
+  path: "$tmpdir/stacyvm-oidc.db"
+logging:
+  level: "info"
+  format: "json"
+YAML
+oidc_lint_output="$(go run ./cmd/stacyvm config lint --file "$oidc_config" 2>&1)"
+if [[ "$oidc_lint_output" != *"auth.oidc_enabled: enabled"* ]]; then
+  echo "$oidc_lint_output"
+  echo "expected OIDC enabled lint pass" >&2
+  exit 1
+fi
+if [[ "$oidc_lint_output" != *"auth.oidc_issuer"* ]]; then
+  echo "$oidc_lint_output"
+  echo "expected OIDC issuer lint check" >&2
+  exit 1
+fi
+if [[ "$oidc_lint_output" != *"auth.oidc_groups"* ]]; then
+  echo "$oidc_lint_output"
+  echo "expected OIDC group mapping lint check" >&2
+  exit 1
+fi
+echo "    OIDC config lint: OK"
+
+echo "==> Running remote worker mTLS smoke with ephemeral certificates"
+# Build the binary into the tmpdir if not already built.
+SMOKE_BIN="$tmpdir/stacyvm"
+if [[ ! -x "$SMOKE_BIN" ]]; then
+  go build -o "$SMOKE_BIN" ./cmd/stacyvm
+fi
+scripts/smoke-remote-worker.sh "$SMOKE_BIN" --mtls
+
 echo "==> Cluster conformance CI checks passed"

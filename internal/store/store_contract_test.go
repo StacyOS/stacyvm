@@ -61,7 +61,10 @@ TRUNCATE
 	admin_audit_logs,
 	operation_audit_logs,
 	workers,
-	leases
+	leases,
+	tenants,
+	tenant_members,
+	policies
 RESTART IDENTITY CASCADE`)
 	if err != nil {
 		t.Fatalf("reset postgres contract store: %v", err)
@@ -91,6 +94,9 @@ func runStoreContract(t *testing.T, name string, open storeContractOpenFunc) {
 	})
 	t.Run(name+"/environments_and_registry", func(t *testing.T) {
 		contractEnvironmentsAndRegistry(t, open(t))
+	})
+	t.Run(name+"/tenants_and_policies", func(t *testing.T) {
+		contractTenantsAndPolicies(t, open(t))
 	})
 }
 
@@ -660,4 +666,165 @@ func contractEnvironmentsAndRegistry(t *testing.T, st Store) {
 		t.Fatalf("get deleted registry connection error = %v, want ErrNotFound", err)
 	}
 
+}
+
+func contractTenantsAndPolicies(t *testing.T, st Store) {
+	t.Helper()
+	ctx := context.Background()
+
+	// --- Tenants ---
+	tenant := &TenantRecord{
+		ID:      "tenant-contract-a",
+		Name:    "Contract Tenant A",
+		OwnerID: "owner-contract",
+	}
+	if err := st.CreateTenant(ctx, tenant); err != nil {
+		t.Fatalf("create tenant: %v", err)
+	}
+
+	got, err := st.GetTenant(ctx, tenant.ID)
+	if err != nil {
+		t.Fatalf("get tenant: %v", err)
+	}
+	if got.Name != "Contract Tenant A" {
+		t.Errorf("unexpected tenant name: %q", got.Name)
+	}
+
+	got.Name = "Updated Name"
+	if err := st.UpdateTenant(ctx, got); err != nil {
+		t.Fatalf("update tenant: %v", err)
+	}
+	got2, _ := st.GetTenant(ctx, tenant.ID)
+	if got2.Name != "Updated Name" {
+		t.Errorf("tenant name not updated, got %q", got2.Name)
+	}
+
+	tenants, err := st.ListTenants(ctx)
+	if err != nil {
+		t.Fatalf("list tenants: %v", err)
+	}
+	found := false
+	for _, te := range tenants {
+		if te.ID == tenant.ID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("tenant not found in list")
+	}
+
+	// --- Tenant Members ---
+	member := &TenantMemberRecord{
+		TenantID: tenant.ID,
+		UserID:   "user-contract-1",
+		Role:     "operator",
+	}
+	if err := st.SaveTenantMember(ctx, member); err != nil {
+		t.Fatalf("save tenant member: %v", err)
+	}
+
+	gotMember, err := st.GetTenantMember(ctx, tenant.ID, member.UserID)
+	if err != nil {
+		t.Fatalf("get tenant member: %v", err)
+	}
+	if gotMember.Role != "operator" {
+		t.Errorf("unexpected member role: %q", gotMember.Role)
+	}
+
+	// Upsert role change.
+	member.Role = "admin"
+	if err := st.SaveTenantMember(ctx, member); err != nil {
+		t.Fatalf("upsert tenant member: %v", err)
+	}
+	gotMember2, _ := st.GetTenantMember(ctx, tenant.ID, member.UserID)
+	if gotMember2.Role != "admin" {
+		t.Errorf("member role not updated after upsert, got %q", gotMember2.Role)
+	}
+
+	members, err := st.ListTenantMembers(ctx, tenant.ID)
+	if err != nil {
+		t.Fatalf("list tenant members: %v", err)
+	}
+	if len(members) != 1 || members[0].UserID != member.UserID {
+		t.Errorf("unexpected member list: %+v", members)
+	}
+
+	if err := st.DeleteTenantMember(ctx, tenant.ID, member.UserID); err != nil {
+		t.Fatalf("delete tenant member: %v", err)
+	}
+	if _, err := st.GetTenantMember(ctx, tenant.ID, member.UserID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("get deleted member error = %v, want ErrNotFound", err)
+	}
+
+	// --- Policies ---
+	pol := &PolicyRecord{
+		ID:           "pol-contract-1",
+		TenantID:     tenant.ID,
+		ResourceType: "image",
+		Effect:       "allow",
+		Pattern:      "alpine:*",
+		Priority:     5,
+	}
+	if err := st.CreatePolicy(ctx, pol); err != nil {
+		t.Fatalf("create policy: %v", err)
+	}
+
+	gotPol, err := st.GetPolicy(ctx, pol.ID)
+	if err != nil {
+		t.Fatalf("get policy: %v", err)
+	}
+	if gotPol.Pattern != "alpine:*" || gotPol.Effect != "allow" {
+		t.Errorf("unexpected policy: %+v", gotPol)
+	}
+
+	// Global policy (no tenant).
+	globalPol := &PolicyRecord{
+		ID:           "pol-contract-global",
+		TenantID:     "",
+		ResourceType: "image",
+		Effect:       "deny",
+		Pattern:      "evil:*",
+		Priority:     1,
+	}
+	if err := st.CreatePolicy(ctx, globalPol); err != nil {
+		t.Fatalf("create global policy: %v", err)
+	}
+
+	// ListPolicies with tenant should include both tenant and global policies.
+	pols, err := st.ListPolicies(ctx, PolicyQuery{TenantID: tenant.ID, ResourceType: "image"})
+	if err != nil {
+		t.Fatalf("list policies: %v", err)
+	}
+	if len(pols) < 2 {
+		t.Errorf("expected at least 2 policies (tenant + global), got %d", len(pols))
+	}
+
+	// ListPolicies without tenant should return only global policies.
+	globalPols, err := st.ListPolicies(ctx, PolicyQuery{ResourceType: "image"})
+	if err != nil {
+		t.Fatalf("list global policies: %v", err)
+	}
+	for _, p := range globalPols {
+		if p.TenantID != "" {
+			t.Errorf("expected only global policies, got tenant-scoped: %+v", p)
+		}
+	}
+
+	// Delete policy.
+	if err := st.DeletePolicy(ctx, pol.ID); err != nil {
+		t.Fatalf("delete policy: %v", err)
+	}
+	if _, err := st.GetPolicy(ctx, pol.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("get deleted policy error = %v, want ErrNotFound", err)
+	}
+	_ = st.DeletePolicy(ctx, globalPol.ID) // cleanup
+
+	// --- Tenant deletion ---
+	if err := st.DeleteTenant(ctx, tenant.ID); err != nil {
+		t.Fatalf("delete tenant: %v", err)
+	}
+	if _, err := st.GetTenant(ctx, tenant.ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("get deleted tenant error = %v, want ErrNotFound", err)
+	}
 }

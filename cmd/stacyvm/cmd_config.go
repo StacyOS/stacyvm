@@ -55,6 +55,7 @@ func lintConfig(cfg *config.Config, production bool) []doctorCheck {
 		{Name: "config", Status: doctorPass, Message: "syntax and schema validation passed"},
 	}
 	checks = append(checks, lintAuthConfig(cfg, production)...)
+	checks = append(checks, lintOIDCConfig(cfg, production)...)
 	checks = append(checks, lintRateLimitConfig(cfg, production)...)
 	checks = append(checks, lintDatabaseConfig(cfg, production)...)
 	checks = append(checks, lintRuntimeLimits(cfg, production)...)
@@ -174,6 +175,87 @@ func lintSecret(name, value string, production bool, remediation string) doctorC
 		return doctorCheck{Name: name, Status: severityForProduction(production), Message: "secret is shorter than 32 bytes", Remediation: remediation}
 	}
 	return doctorCheck{Name: name, Status: doctorPass, Message: "configured"}
+}
+
+func lintOIDCConfig(cfg *config.Config, production bool) []doctorCheck {
+	if !cfg.Auth.OIDCEnabled {
+		return []doctorCheck{{Name: "auth.oidc_enabled", Status: doctorPass, Message: "disabled (API key auth only)"}}
+	}
+	var checks []doctorCheck
+	checks = append(checks, doctorCheck{Name: "auth.oidc_enabled", Status: doctorPass, Message: "enabled"})
+
+	// Issuer is required for audience and signature validation.
+	if strings.TrimSpace(cfg.Auth.OIDCIssuer) == "" {
+		checks = append(checks, doctorCheck{
+			Name:        "auth.oidc_issuer",
+			Status:      severityForProduction(production),
+			Message:     "OIDC issuer is not set",
+			Remediation: "Set auth.oidc_issuer to your identity provider's issuer URL (e.g. https://accounts.google.com).",
+		})
+	} else {
+		checks = append(checks, doctorCheck{Name: "auth.oidc_issuer", Status: doctorPass, Message: cfg.Auth.OIDCIssuer})
+	}
+
+	// At least one of JWKS URL or static public key must be set.
+	hasKey := strings.TrimSpace(cfg.Auth.OIDCJWKSUrl) != "" || strings.TrimSpace(cfg.Auth.OIDCPublicKey) != ""
+	if !hasKey {
+		checks = append(checks, doctorCheck{
+			Name:        "auth.oidc_jwks_url",
+			Status:      severityForProduction(production),
+			Message:     "no OIDC verification key configured",
+			Remediation: "Set auth.oidc_jwks_url to your identity provider's JWKS endpoint, or set auth.oidc_public_key_file to a PEM public key.",
+		})
+	} else {
+		if strings.TrimSpace(cfg.Auth.OIDCJWKSUrl) != "" {
+			checks = append(checks, doctorCheck{Name: "auth.oidc_jwks_url", Status: doctorPass, Message: cfg.Auth.OIDCJWKSUrl})
+		}
+		if strings.TrimSpace(cfg.Auth.OIDCPublicKey) != "" {
+			src := "inline"
+			if strings.TrimSpace(cfg.Auth.OIDCPublicKeyFile) != "" {
+				src = "file-backed"
+			}
+			checks = append(checks, doctorCheck{Name: "auth.oidc_public_key", Status: doctorPass, Message: src})
+			if src == "inline" {
+				checks = append(checks, doctorCheck{
+					Name:        "auth.oidc_public_key_file",
+					Status:      doctorWarn,
+					Message:     "OIDC public key is configured inline",
+					Remediation: "Mount the OIDC public key via auth.oidc_public_key_file in production deployments.",
+				})
+			}
+		}
+	}
+
+	// Audience is strongly recommended for production.
+	if strings.TrimSpace(cfg.Auth.OIDCAudience) == "" {
+		checks = append(checks, doctorCheck{
+			Name:        "auth.oidc_audience",
+			Status:      doctorWarn,
+			Message:     "OIDC audience not set; any token issued by this provider will be accepted",
+			Remediation: "Set auth.oidc_audience to restrict token acceptance to your specific application.",
+		})
+	} else {
+		checks = append(checks, doctorCheck{Name: "auth.oidc_audience", Status: doctorPass, Message: cfg.Auth.OIDCAudience})
+	}
+
+	// At least one group mapping should exist, otherwise all OIDC users get the default API role.
+	hasGroupMapping := len(cfg.Auth.OIDCAdminGroups) > 0 || len(cfg.Auth.OIDCOperatorGroups) > 0 || len(cfg.Auth.OIDCViewerGroups) > 0
+	if !hasGroupMapping {
+		checks = append(checks, doctorCheck{
+			Name:        "auth.oidc_groups",
+			Status:      doctorWarn,
+			Message:     "no OIDC group-to-role mappings configured; all authenticated users get the default api role",
+			Remediation: "Set auth.oidc_admin_groups, auth.oidc_operator_groups, or auth.oidc_viewer_groups to restrict access by group membership.",
+		})
+	} else {
+		checks = append(checks, doctorCheck{
+			Name:    "auth.oidc_groups",
+			Status:  doctorPass,
+			Message: fmt.Sprintf("admin=%d operator=%d viewer=%d groups configured", len(cfg.Auth.OIDCAdminGroups), len(cfg.Auth.OIDCOperatorGroups), len(cfg.Auth.OIDCViewerGroups)),
+		})
+	}
+
+	return checks
 }
 
 func lintRateLimitConfig(cfg *config.Config, production bool) []doctorCheck {

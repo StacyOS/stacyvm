@@ -22,6 +22,7 @@ type Sandbox struct {
 	MemoryMB      int               `json:"memory_mb"`
 	VCPUs         int               `json:"vcpus"`
 	OwnerID       string            `json:"owner_id,omitempty"`
+	TenantID      string            `json:"tenant_id,omitempty"`
 	VMID          string            `json:"vm_id,omitempty"`
 	WorkerID      string            `json:"worker_id,omitempty"`
 	CreatedAt     time.Time         `json:"created_at"`
@@ -38,6 +39,7 @@ type SpawnRequest struct {
 	TTL      string            `json:"ttl,omitempty"`
 	Template string            `json:"template,omitempty"`
 	OwnerID  string            `json:"owner_id,omitempty"`
+	TenantID string            `json:"tenant_id,omitempty"`
 	Metadata map[string]string `json:"metadata,omitempty"`
 }
 

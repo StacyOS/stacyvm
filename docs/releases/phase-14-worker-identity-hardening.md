@@ -114,6 +114,35 @@ The new signed-token path is additive:
 - Key rotation can be introduced gradually by adding old keys to `auth.worker_signing_keys`.
 - Worker RPC mTLS is opt-in; local HTTP worker RPC remains available for local development and internal staging.
 
+## Phase 14 Enterprise Governance (implemented)
+
+### OIDC/SSO and RBAC
+- Added RS256 JWT Bearer token validation with configurable OIDC issuer, JWKS URL, and static public key.
+- Added RBAC roles: `viewer` (read-only), `operator` (sandbox lifecycle), `tenant_admin` (per-tenant admin) beyond existing `api`/`admin`.
+- Added OIDC group-to-role mapping via `auth.oidc_admin_groups`, `auth.oidc_operator_groups`, `auth.oidc_viewer_groups`.
+- Added scopes: `read:*`, `operator:*`, `tenant:admin`.
+- API key auth and OIDC Bearer auth coexist; existing API key deployments are unaffected.
+
+### Tenant/project model
+- Added `tenants`, `tenant_members`, and `policies` tables (migration 11).
+- Added `tenant_id` to sandboxes, admin audit logs, and operation audit logs.
+- Admin routes: tenant CRUD, member RBAC (viewer/operator/admin per tenant), per-tenant audit export, per-tenant policy management.
+
+### Policy controls
+- Added `policies` store with resource_type (image/provider/network), effect (allow/deny), glob pattern, and priority.
+- Added `PolicyEnforcer` middleware that checks spawn request fields against tenant and global policies.
+
+### Centralized worker token issuer
+- Added `POST /api/v1/admin/worker-tokens` to mint signed worker tokens with configurable TTL, audience, and scopes.
+- Workers no longer need direct access to `auth.worker_signing_key` in hardened deployments.
+
+### Postgres operations
+- Added `stacyvm db pg-backup <output>` wrapping `pg_dump` for production cluster snapshots.
+- Added `stacyvm db pg-rehearse` for pre-upgrade schema state verification.
+
+### Admin UI
+- Added Tenants page with tenant lifecycle, member RBAC, policy management, and per-tenant audit export.
+
 ## Remaining Phase 14 Direction
 
-- Run worker RPC mTLS smoke tests with real certificates in the target enterprise network.
+- Run worker RPC mTLS smoke tests with deployment-issued certificates in the target enterprise network.

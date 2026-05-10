@@ -244,4 +244,49 @@ CREATE INDEX IF NOT EXISTS idx_leases_holder ON leases(holder_id);
 CREATE INDEX IF NOT EXISTS idx_leases_expires_at ON leases(expires_at);
 `,
 	},
+	{
+		version: 11,
+		sql: `
+CREATE TABLE IF NOT EXISTS tenants (
+    id         TEXT PRIMARY KEY,
+    name       TEXT NOT NULL,
+    owner_id   TEXT NOT NULL DEFAULT '',
+    settings   TEXT NOT NULL DEFAULT '{}',
+    created_at DATETIME NOT NULL DEFAULT (datetime('now')),
+    updated_at DATETIME NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_tenants_owner ON tenants(owner_id);
+
+CREATE TABLE IF NOT EXISTS tenant_members (
+    tenant_id  TEXT NOT NULL,
+    user_id    TEXT NOT NULL,
+    role       TEXT NOT NULL DEFAULT 'viewer',
+    created_at DATETIME NOT NULL DEFAULT (datetime('now')),
+    updated_at DATETIME NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (tenant_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tenant_members_user ON tenant_members(user_id);
+
+CREATE TABLE IF NOT EXISTS policies (
+    id            TEXT PRIMARY KEY,
+    tenant_id     TEXT NOT NULL DEFAULT '',
+    resource_type TEXT NOT NULL,
+    effect        TEXT NOT NULL DEFAULT 'allow',
+    pattern       TEXT NOT NULL,
+    priority      INTEGER NOT NULL DEFAULT 10,
+    created_at    DATETIME NOT NULL DEFAULT (datetime('now')),
+    updated_at    DATETIME NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_policies_tenant ON policies(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_policies_resource ON policies(resource_type);
+
+ALTER TABLE admin_audit_logs ADD COLUMN tenant_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE operation_audit_logs ADD COLUMN tenant_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE sandboxes ADD COLUMN tenant_id TEXT NOT NULL DEFAULT '';
+CREATE INDEX IF NOT EXISTS idx_sandboxes_tenant ON sandboxes(tenant_id);
+`,
+	},
 }

@@ -187,7 +187,7 @@ func redactMap(value interface{}) interface{} {
 
 func isSecretKey(key string) bool {
 	normalized := strings.ToLower(strings.ReplaceAll(key, "-", "_"))
-	for _, marker := range []string{"api_key", "apikey", "token", "secret", "password", "credential", "authorization", "auth_header"} {
+	for _, marker := range []string{"api_key", "apikey", "signing_key", "private_key", "key_file", "token", "secret", "password", "credential", "authorization", "auth_header"} {
 		if strings.Contains(normalized, marker) {
 			return true
 		}
@@ -196,9 +196,10 @@ func isSecretKey(key string) bool {
 }
 
 var redactionPatterns = []*regexp.Regexp{
+	regexp.MustCompile(`stacyvm-worker-v1\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+`),
 	regexp.MustCompile(`(?i)bearer\s+[a-z0-9._~+/=-]{8,}`),
 	regexp.MustCompile(`(?i)(x-api-key|x-admin-api-key|api[_-]?key)\s*[:=]\s*["']?[^"',\s}]+`),
-	regexp.MustCompile(`(?i)(password|token|secret)\s*[:=]\s*["']?[^"',\s}]+`),
+	regexp.MustCompile(`(?i)(password|token|secret|signing[_-]?key|private[_-]?key)\s*[:=]\s*["']?[^"',\s}]+`),
 	regexp.MustCompile(`([a-z][a-z0-9+.-]*://)[^:/@\s]+:[^/@\s]+@`),
 	regexp.MustCompile(`(?i)sk-[a-z0-9][a-z0-9_-]{8,}`),
 }

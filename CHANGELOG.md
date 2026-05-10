@@ -1,5 +1,40 @@
 # Changelog
 
+## Phase 14 Enterprise Governance - 2026-05-10
+
+This release closes the enterprise production readiness gates: OIDC/SSO, RBAC, multi-tenancy, policy controls, and HA event durability.
+
+### Added
+
+- **OIDC/JWT authentication** — RS256 and ES256/ES384/ES512 Bearer token validation with configurable JWKS URL, static PEM public key (RSA or EC), issuer, audience, and clock-skew tolerance. Config keys: `auth.oidc_enabled`, `auth.oidc_issuer`, `auth.oidc_jwks_url`, `auth.oidc_public_key_file`.
+- **RBAC roles** — `viewer` (read-only), `operator` (spawn/exec/files), `tenant_admin` (per-tenant admin) beyond existing `api` and `admin`. OIDC group-to-role mapping via `auth.oidc_admin_groups`, `auth.oidc_operator_groups`, `auth.oidc_viewer_groups`.
+- **RBAC scope enforcement on sandbox routes** — read operations require `read:*`, mutating operations require `api:*`. Viewer-role users cannot spawn, exec, or destroy sandboxes.
+- **Tenant/project model** — `tenants`, `tenant_members`, `policies` tables (migration 11). `tenant_id` on sandboxes, admin audit logs, and operation audit logs. Tenant CRUD, per-tenant member RBAC, per-tenant audit export, and per-tenant policy management via `/api/v1/admin/tenants`.
+- **Policy controls** — per-tenant allow/deny rules for `image`, `provider`, and `network` resources with glob pattern matching and priority ordering. Policy enforcement runs at spawn time without consuming the request body.
+- **Sandbox tenant scoping** — List, Get, Destroy, Exec, file, and log operations enforce tenant boundaries for OIDC-authenticated callers.
+- **Centralized worker token issuer** — `POST /api/v1/admin/worker-tokens` mints short-lived signed worker tokens so workers do not need direct access to `auth.worker_signing_key`. Workers can call the issuer via `--bootstrap-admin-key`.
+- **Durable EventBus (HA)** — When `database.driver` is `postgres`, a Postgres LISTEN/NOTIFY bridge propagates lifecycle events across control-plane replicas. Each bridge stamps events with an instance UUID to prevent double-delivery on the originating replica.
+- **Postgres backup and rehearsal** — `stacyvm db pg-backup <output>` wraps `pg_dump`. `stacyvm db pg-rehearse` verifies schema state and checks all expected tables exist before upgrades.
+- **Admin UI tenant management** — Tenants page in the web dashboard with tenant lifecycle, member RBAC, policy management, and one-click per-tenant audit export.
+- **Config lint for OIDC** — `stacyvm config lint --production` validates OIDC issuer, JWKS URL, audience, and group-to-role mappings.
+- **Worker RPC mTLS smoke** — `scripts/smoke-remote-worker.sh --mtls` generates an ephemeral CA + TLS certs and runs the full remote-worker smoke over HTTPS with mutual TLS auth.
+- **Runtime certification integration smoke** — `scripts/certify-runtime.sh --stacyvm-bin` auto-starts a local StacyVM server, spawns a sandbox with the target runtime, execs a command, and destroys it to prove end-to-end functionality.
+
+### Fixed
+
+- Worker heartbeat now advertises `https://` RPC URL when `worker.rpc_tls.enabled = true`.
+- Policy enforcement middleware buffers request body before inspection so downstream handlers can still decode it.
+- Durable bridge no longer delivers events twice to local subscribers on the publishing instance.
+- `stacyvm config lint` markdown output `printf` usage fixed for portability.
+
+### Security
+
+- RBAC scopes enforced: viewer tokens cannot reach any mutating sandbox route.
+- Tenant isolation enforced across all sandbox operations: List, Get, Destroy, Exec, file reads/writes/deletes, and console logs.
+- ES256 JWT support added — required for Google Workspace, Cloudflare Access, and Azure AD OIDC integrations.
+
+---
+
 ## Phase 14 Worker Identity Hardening - 2026-05-09
 
 This checkpoint starts hardening remote worker identity for public and enterprise multi-worker deployments.

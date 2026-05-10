@@ -14,6 +14,7 @@ type SandboxRecord struct {
 	VCPUs     int
 	Metadata  string // JSON
 	OwnerID   string
+	TenantID  string
 	VMID      string
 	WorkerID  string
 	CreatedAt time.Time
@@ -124,6 +125,7 @@ type AdminAuditRecord struct {
 	RequestID  string    `json:"request_id" example:"req-abc123"`
 	RemoteAddr string    `json:"remote_addr" example:"127.0.0.1"`
 	UserAgent  string    `json:"user_agent" example:"stacyvm-web"`
+	TenantID   string    `json:"tenant_id" example:"tenant-acme"`
 	CreatedAt  time.Time `json:"created_at" example:"2026-05-08T10:30:00Z"`
 }
 
@@ -133,6 +135,7 @@ type AdminAuditQuery struct {
 	Method   string
 	Status   int
 	PathLike string
+	TenantID string
 }
 
 type OperationAuditRecord struct {
@@ -144,6 +147,7 @@ type OperationAuditRecord struct {
 	Provider  string    `json:"provider"`
 	Status    string    `json:"status"`
 	Detail    string    `json:"detail"`
+	TenantID  string    `json:"tenant_id"`
 	CreatedAt time.Time `json:"created_at"`
 }
 
@@ -154,6 +158,7 @@ type OperationAuditQuery struct {
 	SandboxID string
 	Resource  string
 	Status    string
+	TenantID  string
 }
 
 type WorkerRecord struct {
@@ -176,6 +181,43 @@ type LeaseRecord struct {
 	ExpiresAt    time.Time `json:"expires_at" example:"2026-05-09T10:31:00Z"`
 	CreatedAt    time.Time `json:"created_at" example:"2026-05-09T10:30:00Z"`
 	UpdatedAt    time.Time `json:"updated_at" example:"2026-05-09T10:30:30Z"`
+}
+
+// TenantRecord represents a tenant (project/organization) in the multi-tenant model.
+type TenantRecord struct {
+	ID        string    `json:"id" example:"tenant-acme"`
+	Name      string    `json:"name" example:"Acme Corp"`
+	OwnerID   string    `json:"owner_id" example:"user-alice"`
+	Settings  string    `json:"settings"` // JSON object
+	CreatedAt time.Time `json:"created_at" example:"2026-05-10T10:00:00Z"`
+	UpdatedAt time.Time `json:"updated_at" example:"2026-05-10T10:00:00Z"`
+}
+
+// TenantMemberRecord maps a user/subject to a role within a tenant.
+type TenantMemberRecord struct {
+	TenantID  string    `json:"tenant_id" example:"tenant-acme"`
+	UserID    string    `json:"user_id" example:"user-alice"`
+	Role      string    `json:"role" example:"admin"` // viewer, operator, admin
+	CreatedAt time.Time `json:"created_at" example:"2026-05-10T10:00:00Z"`
+	UpdatedAt time.Time `json:"updated_at" example:"2026-05-10T10:00:00Z"`
+}
+
+// PolicyRecord is a provider/image/network allow-deny rule scoped to a tenant or globally.
+type PolicyRecord struct {
+	ID           string    `json:"id" example:"pol-abc123"`
+	TenantID     string    `json:"tenant_id" example:"tenant-acme"` // empty = global
+	ResourceType string    `json:"resource_type" example:"image"`   // image, provider, network
+	Effect       string    `json:"effect" example:"allow"`          // allow, deny
+	Pattern      string    `json:"pattern" example:"alpine:*"`
+	Priority     int       `json:"priority" example:"10"`
+	CreatedAt    time.Time `json:"created_at" example:"2026-05-10T10:00:00Z"`
+	UpdatedAt    time.Time `json:"updated_at" example:"2026-05-10T10:00:00Z"`
+}
+
+// PolicyQuery filters for listing policies.
+type PolicyQuery struct {
+	TenantID     string
+	ResourceType string
 }
 
 // Store defines the persistence interface.
@@ -257,6 +299,25 @@ type Store interface {
 	GetRegistryConnection(ctx context.Context, id string) (*RegistryConnectionRecord, error)
 	ListRegistryConnections(ctx context.Context, ownerID string) ([]*RegistryConnectionRecord, error)
 	DeleteRegistryConnection(ctx context.Context, id string) error
+
+	// Tenants
+	CreateTenant(ctx context.Context, t *TenantRecord) error
+	GetTenant(ctx context.Context, id string) (*TenantRecord, error)
+	ListTenants(ctx context.Context) ([]*TenantRecord, error)
+	UpdateTenant(ctx context.Context, t *TenantRecord) error
+	DeleteTenant(ctx context.Context, id string) error
+
+	// Tenant members (RBAC)
+	SaveTenantMember(ctx context.Context, m *TenantMemberRecord) error
+	GetTenantMember(ctx context.Context, tenantID, userID string) (*TenantMemberRecord, error)
+	ListTenantMembers(ctx context.Context, tenantID string) ([]*TenantMemberRecord, error)
+	DeleteTenantMember(ctx context.Context, tenantID, userID string) error
+
+	// Policies
+	CreatePolicy(ctx context.Context, p *PolicyRecord) error
+	GetPolicy(ctx context.Context, id string) (*PolicyRecord, error)
+	ListPolicies(ctx context.Context, query PolicyQuery) ([]*PolicyRecord, error)
+	DeletePolicy(ctx context.Context, id string) error
 
 	// Lifecycle
 	Close() error

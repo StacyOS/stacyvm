@@ -153,6 +153,56 @@ jobs:
           STACYVM_REMOTE_SMOKE_DATABASE_DSN: postgres://stacyvm:stacyvm@127.0.0.1:5432/stacyvm?sslmode=disable
         run: scripts/smoke-remote-worker.sh ./stacyvm
 
+  remote-worker-mtls-smoke:
+    name: Remote worker mTLS smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build CLI
+        run: make build
+
+      - name: Run remote worker mTLS smoke with ephemeral certs
+        run: scripts/smoke-remote-worker.sh ./stacyvm --mtls
+
+  runtime-certification:
+    name: Runtime certification (Docker)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build CLI
+        run: make build
+
+      - name: Run Docker runtime certification with StacyVM integration smoke
+        run: |
+          scripts/certify-runtime.sh docker \
+            --stacyvm-bin ./stacyvm \
+            --format markdown \
+            --output /tmp/docker-certification.md
+          cat /tmp/docker-certification.md
+
+      - name: Upload certification report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-runtime-certification
+          path: /tmp/docker-certification.md
+
   public-release-sanity:
     name: Public release sanity
     runs-on: ubuntu-latest

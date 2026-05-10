@@ -110,10 +110,10 @@ func (s *PostgresStore) CreateSandbox(ctx context.Context, sb *SandboxRecord) er
 		sb.WorkerID = "local"
 	}
 	_, err := s.execContext(ctx, `
-		INSERT INTO sandboxes (id, state, provider, image, memory_mb, vcpus, metadata, owner_id, vm_id, worker_id, created_at, expires_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		INSERT INTO sandboxes (id, state, provider, image, memory_mb, vcpus, metadata, owner_id, tenant_id, vm_id, worker_id, created_at, expires_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		sb.ID, sb.State, sb.Provider, sb.Image, sb.MemoryMB, sb.VCPUs, sb.Metadata,
-		sb.OwnerID, sb.VMID, sb.WorkerID,
+		sb.OwnerID, sb.TenantID, sb.VMID, sb.WorkerID,
 		sb.CreatedAt.UTC(), sb.ExpiresAt.UTC(), sb.UpdatedAt.UTC(),
 	)
 	return err
@@ -122,10 +122,10 @@ func (s *PostgresStore) CreateSandbox(ctx context.Context, sb *SandboxRecord) er
 func (s *PostgresStore) GetSandbox(ctx context.Context, id string) (*SandboxRecord, error) {
 	sb := &SandboxRecord{}
 	err := s.queryRowContext(ctx, `
-		SELECT id, state, provider, image, memory_mb, vcpus, metadata, owner_id, vm_id, worker_id, created_at, expires_at, updated_at
+		SELECT id, state, provider, image, memory_mb, vcpus, metadata, owner_id, tenant_id, vm_id, worker_id, created_at, expires_at, updated_at
 		FROM sandboxes WHERE id = ?`, id,
 	).Scan(&sb.ID, &sb.State, &sb.Provider, &sb.Image, &sb.MemoryMB, &sb.VCPUs,
-		&sb.Metadata, &sb.OwnerID, &sb.VMID, &sb.WorkerID, &sb.CreatedAt, &sb.ExpiresAt, &sb.UpdatedAt)
+		&sb.Metadata, &sb.OwnerID, &sb.TenantID, &sb.VMID, &sb.WorkerID, &sb.CreatedAt, &sb.ExpiresAt, &sb.UpdatedAt)
 	if err == sql.ErrNoRows {
 		return nil, NotFoundError("sandbox", id)
 	}
@@ -134,7 +134,7 @@ func (s *PostgresStore) GetSandbox(ctx context.Context, id string) (*SandboxReco
 
 func (s *PostgresStore) ListSandboxes(ctx context.Context) ([]*SandboxRecord, error) {
 	rows, err := s.queryContext(ctx, `
-		SELECT id, state, provider, image, memory_mb, vcpus, metadata, owner_id, vm_id, worker_id, created_at, expires_at, updated_at
+		SELECT id, state, provider, image, memory_mb, vcpus, metadata, owner_id, tenant_id, vm_id, worker_id, created_at, expires_at, updated_at
 		FROM sandboxes WHERE state != 'destroyed' ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
@@ -145,7 +145,7 @@ func (s *PostgresStore) ListSandboxes(ctx context.Context) ([]*SandboxRecord, er
 	for rows.Next() {
 		sb := &SandboxRecord{}
 		if err := rows.Scan(&sb.ID, &sb.State, &sb.Provider, &sb.Image, &sb.MemoryMB, &sb.VCPUs,
-			&sb.Metadata, &sb.OwnerID, &sb.VMID, &sb.WorkerID, &sb.CreatedAt, &sb.ExpiresAt, &sb.UpdatedAt); err != nil {
+			&sb.Metadata, &sb.OwnerID, &sb.TenantID, &sb.VMID, &sb.WorkerID, &sb.CreatedAt, &sb.ExpiresAt, &sb.UpdatedAt); err != nil {
 			return nil, err
 		}
 		sandboxes = append(sandboxes, sb)
@@ -189,7 +189,7 @@ func (s *PostgresStore) DeleteSandbox(ctx context.Context, id string) error {
 
 func (s *PostgresStore) ListExpiredSandboxes(ctx context.Context, before time.Time) ([]*SandboxRecord, error) {
 	rows, err := s.queryContext(ctx, `
-		SELECT id, state, provider, image, memory_mb, vcpus, metadata, owner_id, vm_id, worker_id, created_at, expires_at, updated_at
+		SELECT id, state, provider, image, memory_mb, vcpus, metadata, owner_id, tenant_id, vm_id, worker_id, created_at, expires_at, updated_at
 		FROM sandboxes WHERE state NOT IN ('destroyed') AND expires_at < ?`,
 		before.UTC(),
 	)
@@ -202,7 +202,7 @@ func (s *PostgresStore) ListExpiredSandboxes(ctx context.Context, before time.Ti
 	for rows.Next() {
 		sb := &SandboxRecord{}
 		if err := rows.Scan(&sb.ID, &sb.State, &sb.Provider, &sb.Image, &sb.MemoryMB, &sb.VCPUs,
-			&sb.Metadata, &sb.OwnerID, &sb.VMID, &sb.WorkerID, &sb.CreatedAt, &sb.ExpiresAt, &sb.UpdatedAt); err != nil {
+			&sb.Metadata, &sb.OwnerID, &sb.TenantID, &sb.VMID, &sb.WorkerID, &sb.CreatedAt, &sb.ExpiresAt, &sb.UpdatedAt); err != nil {
 			return nil, err
 		}
 		sandboxes = append(sandboxes, sb)
@@ -212,7 +212,7 @@ func (s *PostgresStore) ListExpiredSandboxes(ctx context.Context, before time.Ti
 
 func (s *PostgresStore) ListSandboxesByOwner(ctx context.Context, ownerID string) ([]*SandboxRecord, error) {
 	rows, err := s.queryContext(ctx, `
-		SELECT id, state, provider, image, memory_mb, vcpus, metadata, owner_id, vm_id, worker_id, created_at, expires_at, updated_at
+		SELECT id, state, provider, image, memory_mb, vcpus, metadata, owner_id, tenant_id, vm_id, worker_id, created_at, expires_at, updated_at
 		FROM sandboxes WHERE state != 'destroyed' AND owner_id = ? ORDER BY created_at DESC`, ownerID)
 	if err != nil {
 		return nil, err
@@ -223,7 +223,7 @@ func (s *PostgresStore) ListSandboxesByOwner(ctx context.Context, ownerID string
 	for rows.Next() {
 		sb := &SandboxRecord{}
 		if err := rows.Scan(&sb.ID, &sb.State, &sb.Provider, &sb.Image, &sb.MemoryMB, &sb.VCPUs,
-			&sb.Metadata, &sb.OwnerID, &sb.VMID, &sb.WorkerID, &sb.CreatedAt, &sb.ExpiresAt, &sb.UpdatedAt); err != nil {
+			&sb.Metadata, &sb.OwnerID, &sb.TenantID, &sb.VMID, &sb.WorkerID, &sb.CreatedAt, &sb.ExpiresAt, &sb.UpdatedAt); err != nil {
 			return nil, err
 		}
 		sandboxes = append(sandboxes, sb)
@@ -308,10 +308,10 @@ func (s *PostgresStore) CreateAdminAudit(ctx context.Context, rec *AdminAuditRec
 		rec.CreatedAt = time.Now().UTC()
 	}
 	res, err := s.execContext(ctx, `
-		INSERT INTO admin_audit_logs (actor, method, path, status, duration_ms, request_id, remote_addr, user_agent, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		INSERT INTO admin_audit_logs (actor, method, path, status, duration_ms, request_id, remote_addr, user_agent, tenant_id, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		rec.Actor, rec.Method, rec.Path, rec.Status, rec.DurationMS, rec.RequestID,
-		rec.RemoteAddr, rec.UserAgent, rec.CreatedAt.UTC(),
+		rec.RemoteAddr, rec.UserAgent, rec.TenantID, rec.CreatedAt.UTC(),
 	)
 	if err != nil {
 		return err
@@ -329,7 +329,7 @@ func (s *PostgresStore) ListAdminAudit(ctx context.Context, query AdminAuditQuer
 	}
 
 	clauses := []string{"1=1"}
-	args := make([]interface{}, 0, 5)
+	args := make([]interface{}, 0, 6)
 	if query.Actor != "" {
 		clauses = append(clauses, "actor = ?")
 		args = append(args, query.Actor)
@@ -346,10 +346,14 @@ func (s *PostgresStore) ListAdminAudit(ctx context.Context, query AdminAuditQuer
 		clauses = append(clauses, "path LIKE ?")
 		args = append(args, "%"+query.PathLike+"%")
 	}
+	if query.TenantID != "" {
+		clauses = append(clauses, "tenant_id = ?")
+		args = append(args, query.TenantID)
+	}
 	args = append(args, query.Limit)
 
 	rows, err := s.queryContext(ctx, `
-		SELECT id, actor, method, path, status, duration_ms, request_id, remote_addr, user_agent, created_at
+		SELECT id, actor, method, path, status, duration_ms, request_id, remote_addr, user_agent, tenant_id, created_at
 		FROM admin_audit_logs WHERE `+strings.Join(clauses, " AND ")+`
 		ORDER BY created_at DESC, id DESC LIMIT ?`, args...)
 	if err != nil {
@@ -361,7 +365,7 @@ func (s *PostgresStore) ListAdminAudit(ctx context.Context, query AdminAuditQuer
 	for rows.Next() {
 		rec := &AdminAuditRecord{}
 		if err := rows.Scan(&rec.ID, &rec.Actor, &rec.Method, &rec.Path, &rec.Status,
-			&rec.DurationMS, &rec.RequestID, &rec.RemoteAddr, &rec.UserAgent, &rec.CreatedAt); err != nil {
+			&rec.DurationMS, &rec.RequestID, &rec.RemoteAddr, &rec.UserAgent, &rec.TenantID, &rec.CreatedAt); err != nil {
 			return nil, err
 		}
 		records = append(records, rec)
@@ -382,9 +386,9 @@ func (s *PostgresStore) CreateOperationAudit(ctx context.Context, rec *Operation
 		rec.CreatedAt = time.Now().UTC()
 	}
 	res, err := s.execContext(ctx, `
-		INSERT INTO operation_audit_logs (actor, action, sandbox_id, resource, provider, status, detail, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-		rec.Actor, rec.Action, rec.SandboxID, rec.Resource, rec.Provider, rec.Status, rec.Detail, rec.CreatedAt.UTC(),
+		INSERT INTO operation_audit_logs (actor, action, sandbox_id, resource, provider, status, detail, tenant_id, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		rec.Actor, rec.Action, rec.SandboxID, rec.Resource, rec.Provider, rec.Status, rec.Detail, rec.TenantID, rec.CreatedAt.UTC(),
 	)
 	if err != nil {
 		return err
@@ -402,7 +406,7 @@ func (s *PostgresStore) ListOperationAudit(ctx context.Context, query OperationA
 	}
 
 	clauses := []string{"1=1"}
-	args := make([]interface{}, 0, 7)
+	args := make([]interface{}, 0, 8)
 	if query.Actor != "" {
 		clauses = append(clauses, "actor = ?")
 		args = append(args, query.Actor)
@@ -423,10 +427,14 @@ func (s *PostgresStore) ListOperationAudit(ctx context.Context, query OperationA
 		clauses = append(clauses, "status = ?")
 		args = append(args, query.Status)
 	}
+	if query.TenantID != "" {
+		clauses = append(clauses, "tenant_id = ?")
+		args = append(args, query.TenantID)
+	}
 	args = append(args, query.Limit)
 
 	rows, err := s.queryContext(ctx, `
-		SELECT id, actor, action, sandbox_id, resource, provider, status, detail, created_at
+		SELECT id, actor, action, sandbox_id, resource, provider, status, detail, tenant_id, created_at
 		FROM operation_audit_logs WHERE `+strings.Join(clauses, " AND ")+`
 		ORDER BY created_at DESC, id DESC LIMIT ?`, args...)
 	if err != nil {
@@ -438,7 +446,7 @@ func (s *PostgresStore) ListOperationAudit(ctx context.Context, query OperationA
 	for rows.Next() {
 		rec := &OperationAuditRecord{}
 		if err := rows.Scan(&rec.ID, &rec.Actor, &rec.Action, &rec.SandboxID, &rec.Resource,
-			&rec.Provider, &rec.Status, &rec.Detail, &rec.CreatedAt); err != nil {
+			&rec.Provider, &rec.Status, &rec.Detail, &rec.TenantID, &rec.CreatedAt); err != nil {
 			return nil, err
 		}
 		records = append(records, rec)
@@ -1065,6 +1073,211 @@ func postgresNullableTime(t *time.Time) any {
 		return nil
 	}
 	return t.UTC()
+}
+
+// --- Tenants ---
+
+func (s *PostgresStore) CreateTenant(ctx context.Context, t *TenantRecord) error {
+	now := time.Now().UTC()
+	if t.CreatedAt.IsZero() {
+		t.CreatedAt = now
+	}
+	t.UpdatedAt = now
+	if t.Settings == "" {
+		t.Settings = "{}"
+	}
+	_, err := s.execContext(ctx,
+		`INSERT INTO tenants (id, name, owner_id, settings, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		t.ID, t.Name, t.OwnerID, t.Settings, t.CreatedAt.UTC(), t.UpdatedAt.UTC(),
+	)
+	return err
+}
+
+func (s *PostgresStore) GetTenant(ctx context.Context, id string) (*TenantRecord, error) {
+	t := &TenantRecord{}
+	err := s.queryRowContext(ctx,
+		`SELECT id, name, owner_id, settings, created_at, updated_at FROM tenants WHERE id = ?`, id,
+	).Scan(&t.ID, &t.Name, &t.OwnerID, &t.Settings, &t.CreatedAt, &t.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, NotFoundError("tenant", id)
+	}
+	return t, err
+}
+
+func (s *PostgresStore) ListTenants(ctx context.Context) ([]*TenantRecord, error) {
+	rows, err := s.queryContext(ctx,
+		`SELECT id, name, owner_id, settings, created_at, updated_at FROM tenants ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var tenants []*TenantRecord
+	for rows.Next() {
+		t := &TenantRecord{}
+		if err := rows.Scan(&t.ID, &t.Name, &t.OwnerID, &t.Settings, &t.CreatedAt, &t.UpdatedAt); err != nil {
+			return nil, err
+		}
+		tenants = append(tenants, t)
+	}
+	return tenants, rows.Err()
+}
+
+func (s *PostgresStore) UpdateTenant(ctx context.Context, t *TenantRecord) error {
+	t.UpdatedAt = time.Now().UTC()
+	res, err := s.execContext(ctx,
+		`UPDATE tenants SET name = ?, owner_id = ?, settings = ?, updated_at = ? WHERE id = ?`,
+		t.Name, t.OwnerID, t.Settings, t.UpdatedAt.UTC(), t.ID,
+	)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return NotFoundError("tenant", t.ID)
+	}
+	return nil
+}
+
+func (s *PostgresStore) DeleteTenant(ctx context.Context, id string) error {
+	res, err := s.execContext(ctx, `DELETE FROM tenants WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return NotFoundError("tenant", id)
+	}
+	return nil
+}
+
+// --- Tenant members ---
+
+func (s *PostgresStore) SaveTenantMember(ctx context.Context, m *TenantMemberRecord) error {
+	now := time.Now().UTC()
+	if m.CreatedAt.IsZero() {
+		m.CreatedAt = now
+	}
+	m.UpdatedAt = now
+	_, err := s.execContext(ctx, `
+		INSERT INTO tenant_members (tenant_id, user_id, role, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT (tenant_id, user_id) DO UPDATE SET role = EXCLUDED.role, updated_at = EXCLUDED.updated_at`,
+		m.TenantID, m.UserID, m.Role, m.CreatedAt.UTC(), m.UpdatedAt.UTC(),
+	)
+	return err
+}
+
+func (s *PostgresStore) GetTenantMember(ctx context.Context, tenantID, userID string) (*TenantMemberRecord, error) {
+	m := &TenantMemberRecord{}
+	err := s.queryRowContext(ctx,
+		`SELECT tenant_id, user_id, role, created_at, updated_at FROM tenant_members WHERE tenant_id = ? AND user_id = ?`,
+		tenantID, userID,
+	).Scan(&m.TenantID, &m.UserID, &m.Role, &m.CreatedAt, &m.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, NotFoundError("tenant_member", tenantID+"/"+userID)
+	}
+	return m, err
+}
+
+func (s *PostgresStore) ListTenantMembers(ctx context.Context, tenantID string) ([]*TenantMemberRecord, error) {
+	rows, err := s.queryContext(ctx,
+		`SELECT tenant_id, user_id, role, created_at, updated_at FROM tenant_members WHERE tenant_id = ? ORDER BY created_at ASC`,
+		tenantID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var members []*TenantMemberRecord
+	for rows.Next() {
+		m := &TenantMemberRecord{}
+		if err := rows.Scan(&m.TenantID, &m.UserID, &m.Role, &m.CreatedAt, &m.UpdatedAt); err != nil {
+			return nil, err
+		}
+		members = append(members, m)
+	}
+	return members, rows.Err()
+}
+
+func (s *PostgresStore) DeleteTenantMember(ctx context.Context, tenantID, userID string) error {
+	res, err := s.execContext(ctx, `DELETE FROM tenant_members WHERE tenant_id = ? AND user_id = ?`, tenantID, userID)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return NotFoundError("tenant_member", tenantID+"/"+userID)
+	}
+	return nil
+}
+
+// --- Policies ---
+
+func (s *PostgresStore) CreatePolicy(ctx context.Context, p *PolicyRecord) error {
+	now := time.Now().UTC()
+	if p.CreatedAt.IsZero() {
+		p.CreatedAt = now
+	}
+	p.UpdatedAt = now
+	_, err := s.execContext(ctx,
+		`INSERT INTO policies (id, tenant_id, resource_type, effect, pattern, priority, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		p.ID, p.TenantID, p.ResourceType, p.Effect, p.Pattern, p.Priority, p.CreatedAt.UTC(), p.UpdatedAt.UTC(),
+	)
+	return err
+}
+
+func (s *PostgresStore) GetPolicy(ctx context.Context, id string) (*PolicyRecord, error) {
+	p := &PolicyRecord{}
+	err := s.queryRowContext(ctx,
+		`SELECT id, tenant_id, resource_type, effect, pattern, priority, created_at, updated_at FROM policies WHERE id = ?`, id,
+	).Scan(&p.ID, &p.TenantID, &p.ResourceType, &p.Effect, &p.Pattern, &p.Priority, &p.CreatedAt, &p.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, NotFoundError("policy", id)
+	}
+	return p, err
+}
+
+func (s *PostgresStore) ListPolicies(ctx context.Context, query PolicyQuery) ([]*PolicyRecord, error) {
+	q := `SELECT id, tenant_id, resource_type, effect, pattern, priority, created_at, updated_at FROM policies WHERE 1=1`
+	var args []any
+	if query.TenantID != "" {
+		q += " AND (tenant_id = ? OR tenant_id = '')"
+		args = append(args, query.TenantID)
+	} else {
+		q += " AND tenant_id = ''"
+	}
+	if query.ResourceType != "" {
+		q += " AND resource_type = ?"
+		args = append(args, query.ResourceType)
+	}
+	q += " ORDER BY priority ASC, created_at ASC"
+	rows, err := s.queryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var policies []*PolicyRecord
+	for rows.Next() {
+		p := &PolicyRecord{}
+		if err := rows.Scan(&p.ID, &p.TenantID, &p.ResourceType, &p.Effect, &p.Pattern, &p.Priority, &p.CreatedAt, &p.UpdatedAt); err != nil {
+			return nil, err
+		}
+		policies = append(policies, p)
+	}
+	return policies, rows.Err()
+}
+
+func (s *PostgresStore) DeletePolicy(ctx context.Context, id string) error {
+	res, err := s.execContext(ctx, `DELETE FROM policies WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return NotFoundError("policy", id)
+	}
+	return nil
 }
 
 func (s *PostgresStore) Close() error {

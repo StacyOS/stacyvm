@@ -170,6 +170,19 @@ type AuthConfig struct {
 	WorkerRevokedTokenIDs []string          `mapstructure:"worker_revoked_token_ids"`
 	AdminFallbackEnabled  bool              `mapstructure:"admin_fallback_enabled"`
 	AdminAuditRetention   string            `mapstructure:"admin_audit_retention"`
+
+	// OIDC/JWT configuration for enterprise SSO
+	OIDCEnabled      bool     `mapstructure:"oidc_enabled"`
+	OIDCIssuer       string   `mapstructure:"oidc_issuer"`
+	OIDCAudience     string   `mapstructure:"oidc_audience"`
+	OIDCJWKSUrl      string   `mapstructure:"oidc_jwks_url"`
+	OIDCPublicKey    string   `mapstructure:"oidc_public_key"`
+	OIDCPublicKeyFile string  `mapstructure:"oidc_public_key_file"`
+	OIDCGroupsClaim  string   `mapstructure:"oidc_groups_claim"`
+	OIDCTenantClaim  string   `mapstructure:"oidc_tenant_claim"`
+	OIDCAdminGroups  []string `mapstructure:"oidc_admin_groups"`
+	OIDCOperatorGroups []string `mapstructure:"oidc_operator_groups"`
+	OIDCViewerGroups []string `mapstructure:"oidc_viewer_groups"`
 }
 
 type RateLimitConfig struct {
@@ -285,6 +298,17 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("auth.worker_revoked_token_ids", []string{})
 	v.SetDefault("auth.admin_fallback_enabled", true)
 	v.SetDefault("auth.admin_audit_retention", "0s")
+	v.SetDefault("auth.oidc_enabled", false)
+	v.SetDefault("auth.oidc_issuer", "")
+	v.SetDefault("auth.oidc_audience", "")
+	v.SetDefault("auth.oidc_jwks_url", "")
+	v.SetDefault("auth.oidc_public_key", "")
+	v.SetDefault("auth.oidc_public_key_file", "")
+	v.SetDefault("auth.oidc_groups_claim", "groups")
+	v.SetDefault("auth.oidc_tenant_claim", "tenant_id")
+	v.SetDefault("auth.oidc_admin_groups", []string{})
+	v.SetDefault("auth.oidc_operator_groups", []string{})
+	v.SetDefault("auth.oidc_viewer_groups", []string{})
 
 	v.SetDefault("rate_limit.enabled", false)
 	v.SetDefault("rate_limit.requests_per_minute", 120)
@@ -400,6 +424,9 @@ func (c *Config) resolveAuthSecretFiles() error {
 		return err
 	}
 	if err := resolveSecretFile("auth.worker_signing_key", &c.Auth.WorkerSigningKey, "auth.worker_signing_key_file", c.Auth.WorkerSigningKeyFile); err != nil {
+		return err
+	}
+	if err := resolveSecretFile("auth.oidc_public_key", &c.Auth.OIDCPublicKey, "auth.oidc_public_key_file", c.Auth.OIDCPublicKeyFile); err != nil {
 		return err
 	}
 	return nil

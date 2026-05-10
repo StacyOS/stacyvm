@@ -64,9 +64,10 @@ This checklist tracks the Phase 7 release-candidate hardening work needed before
 | Deployment smoke | Passing | Mock-provider smoke is in CI. Docker live host certification remains external. |
 | Cluster conformance | Partial | Always-on CI covers SQLite store contract, live Postgres store contract, Postgres migration rehearsal, Postgres lease concurrency, per-worker and signed worker identity, worker identity certification reporting, production cluster config lint, and Postgres-backed remote worker smoke. See `docs/cluster-conformance.md`. |
 | Runtime conformance | Partial | Harness and host certification script exist; Firecracker/PRoot remain platform-gated. |
-| Security posture | Partial | Admin governance, operation audit, path traversal checks, and explicit exec modes are implemented; OIDC/JWT implementation remains. |
+| Security posture | Strong | Admin governance, operation audit, path traversal checks, explicit exec modes, OIDC/JWT RS256 auth with RBAC, tenant/project model, per-tenant audit, policy controls for providers/images/networks, and centralized worker token issuer are implemented. |
 | Release automation | Passing | Release workflow signs binaries, checksums, and GHCR image digests; public verifier and installer verification exist. |
-| Worker registry | Partial | Durable worker registration, heartbeat, diagnostics, metrics, placement, ownership, leases, per-worker token auth, signed worker identity, worker RPC routing, and worker RPC mTLS wiring exist; production distributed mode still needs target-network mTLS smoke evidence and runtime-certified workers. |
+| Worker registry | Near-complete | Durable worker registration, heartbeat, diagnostics, metrics, placement, ownership, leases, per-worker token auth, signed worker identity, centralized token issuance, worker RPC routing, and worker RPC mTLS wiring exist. Remaining: target-network mTLS smoke with deployment-issued certificates. |
+| Enterprise/OIDC | Passing | OIDC/JWT RS256 verification, RBAC roles (viewer/operator/admin/tenant_admin), OIDC group→role mapping, tenant model, per-tenant audit, and policy enforcement are implemented. |
 
 ## Required Before Single-Node Production
 
@@ -96,10 +97,24 @@ This checklist tracks the Phase 7 release-candidate hardening work needed before
 
 ## Required Before Enterprise/Multi-Worker
 
-- Postgres store implementation. Driver, migrations, contract path, migration rehearsal, lease race coverage, and mock-provider remote worker smoke exist; production distributed mode still needs backup/restore-specific migration rehearsal.
-- Worker registration and heartbeat model. Durable registry, per-worker token auth, signed worker tokens, issuer/rotation workflow, worker identity certification reporting, and worker RPC mTLS wiring exist; production distributed mode still needs target-network mTLS smoke evidence and runtime-certified workers for public/enterprise deployments.
-- Scheduler abstraction with placement policy.
-- Durable queue/pub-sub for lifecycle events.
-- Distributed leases to prevent double ownership.
-- OIDC/SSO and RBAC implemented, not only designed.
-- Worker RPC transport must enforce [worker-rpc-contract.md](worker-rpc-contract.md).
+- Postgres store implementation. Driver, migrations, contract path, migration rehearsal, lease race coverage, and mock-provider remote worker smoke exist. Backup rehearsal is available via `stacyvm db pg-rehearse` and `stacyvm db pg-backup`. Done in Phase 14.
+- Worker registration and heartbeat model. Durable registry, per-worker token auth, signed worker tokens, issuer/rotation workflow, centralized token issuance via `/api/v1/admin/worker-tokens`, worker identity certification reporting, and worker RPC mTLS wiring exist. Target-network mTLS smoke with deployment-issued certificates remains pending for specific enterprise networks.
+- Scheduler abstraction with placement policy. Done in Phase 10.
+- Durable queue/pub-sub for lifecycle events. Covered by EventBus and persisted lease model.
+- Distributed leases to prevent double ownership. Done in Phase 10.
+- OIDC/SSO and RBAC implemented. RS256 JWT Bearer token validation with configurable OIDC issuer, JWKS URL, audience, and group-to-role mapping is implemented. Roles: `viewer`, `operator`, `admin`, `tenant_admin`, `worker`. Done in Phase 14.
+- Tenant/project model implemented. Tenants, tenant members with RBAC roles, policy controls (image/provider/network allow-deny lists), per-tenant audit export, and admin UI management are implemented. Done in Phase 14.
+- Worker RPC transport enforces [worker-rpc-contract.md](worker-rpc-contract.md). Done in Phase 11-13.
+
+## Phase 14 Acceptance Criteria
+
+- OIDC/JWT RS256 Bearer token validation with configurable issuer, JWKS URL, audience, groups claim, and group-to-role mapping. Done.
+- RBAC roles beyond admin/api: viewer, operator, tenant_admin with scoped permissions. Done.
+- Tenant/project model: tenant CRUD, member RBAC, per-tenant resource scoping. Done.
+- Per-tenant audit export: admin and operation audit logs scoped by tenant_id. Done.
+- Policy controls: per-tenant allow/deny policies for image, provider, and network resources. Done.
+- Centralized worker token issuer: admin API endpoint mints signed worker tokens so workers do not need direct signing key access. Done.
+- Postgres backup: `stacyvm db pg-backup` wraps pg_dump for production cluster snapshots. Done.
+- Postgres migration rehearsal: `stacyvm db pg-rehearse` verifies schema state before upgrades. Done.
+- Admin UI tenant management: Tenants page with member RBAC and policy management. Done.
+- Worker RPC mTLS smoke with deployment-issued certificates in target enterprise network: Pending (external to code).

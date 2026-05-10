@@ -38,6 +38,7 @@ func AdminAudit(st adminAuditStore, logger zerolog.Logger, retention time.Durati
 			rw := &auditResponseWriter{ResponseWriter: w, status: http.StatusOK}
 			next.ServeHTTP(rw, r)
 
+			identity := AuthIdentityFromContext(r.Context())
 			rec := &store.AdminAuditRecord{
 				Actor:      actorFromRequest(r),
 				Method:     r.Method,
@@ -47,6 +48,7 @@ func AdminAudit(st adminAuditStore, logger zerolog.Logger, retention time.Durati
 				RequestID:  GetRequestID(r.Context()),
 				RemoteAddr: clientAddr(r),
 				UserAgent:  r.UserAgent(),
+				TenantID:   identity.TenantID,
 				CreatedAt:  time.Now().UTC(),
 			}
 			if err := st.CreateAdminAudit(r.Context(), rec); err != nil {
@@ -70,7 +72,14 @@ func actorFromRequest(r *http.Request) string {
 	if actor := strings.TrimSpace(r.Header.Get("X-User-ID")); actor != "" {
 		return actor
 	}
-	if identity := AuthIdentityFromContext(r.Context()); identity.Role != AuthRoleAnonymous && identity.Header != "" {
+	identity := AuthIdentityFromContext(r.Context())
+	if identity.Email != "" {
+		return identity.Email
+	}
+	if identity.Subject != "" {
+		return identity.Subject
+	}
+	if identity.Role != AuthRoleAnonymous && identity.Header != "" {
 		return string(identity.Role) + ":" + identity.Header
 	} else if identity.Role != AuthRoleAnonymous {
 		return string(identity.Role)

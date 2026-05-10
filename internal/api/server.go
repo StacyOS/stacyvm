@@ -35,6 +35,7 @@ type ServerConfig struct {
 	Version               string
 	RateLimit             middleware.RateLimitConfig
 	WorkerHeartbeat       time.Duration
+	OIDC                  middleware.OIDCConfig
 }
 
 type Server struct {
@@ -89,6 +90,10 @@ func NewServer(cfg ServerConfig, registry *providers.Registry, manager *orchestr
 
 	// API routes — with auth and CORS
 	r.Group(func(r chi.Router) {
+		// OIDC Bearer token auth (runs before API key auth; falls through on no Bearer token).
+		if cfg.OIDC.Issuer != "" || cfg.OIDC.JWKSUrl != "" || cfg.OIDC.PublicKeyPEM != "" {
+			r.Use(middleware.OIDCAuth(cfg.OIDC))
+		}
 		if cfg.APIKey != "" || cfg.AdminAPIKey != "" {
 			r.Use(middleware.AuthAny(cfg.APIKey, cfg.AdminAPIKey))
 		}
@@ -98,7 +103,7 @@ func NewServer(cfg ServerConfig, registry *providers.Registry, manager *orchestr
 			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				w.Header().Set("Access-Control-Allow-Origin", "*")
 				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-API-Key, X-Admin-API-Key, X-Request-ID, X-User-ID")
+				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-API-Key, X-Admin-API-Key, X-Request-ID, X-User-ID, X-Tenant-ID, Authorization")
 				if r.Method == "OPTIONS" {
 					w.WriteHeader(http.StatusOK)
 					return
@@ -122,8 +127,11 @@ func NewServer(cfg ServerConfig, registry *providers.Registry, manager *orchestr
 		environmentRoutes := routes.NewEnvironmentRoutes(st, envBuild)
 		quotaRoutes := routes.NewQuotaRoutes(manager)
 		adminAuditRoutes := routes.NewAdminAuditRoutes(st)
+		tenantRoutes := routes.NewTenantRoutes(st)
+		tokenIssuerRoutes := routes.NewWorkerTokenIssuerRoutes(cfg.WorkerSigningKey)
+		authConfigured := cfg.APIKey != "" || cfg.AdminAPIKey != "" || cfg.OIDC.Issuer != "" || cfg.OIDC.JWKSUrl != "" || cfg.OIDC.PublicKeyPEM != ""
 		r.Route("/api/v1", func(r chi.Router) {
-			r.Mount("/sandboxes", sandboxRoutes.Routes())
+			r.Mount("/sandboxes", sandboxRoutes.RoutesWithScopeEnforcement(authConfigured))
 			r.Mount("/providers", providerRoutes.Routes())
 			r.Mount("/templates", templateRoutes.Routes())
 			r.Mount("/snapshots", snapshotRoutes.Routes())
@@ -141,6 +149,8 @@ func NewServer(cfg ServerConfig, registry *providers.Registry, manager *orchestr
 				r.Mount("/providers", providerRoutes.Routes())
 				r.Mount("/quotas", quotaRoutes.Routes())
 				r.Mount("/workers", workerRoutes.Routes())
+				r.Mount("/tenants", tenantRoutes.Routes())
+				r.Post("/worker-tokens", tokenIssuerRoutes.IssueToken)
 				r.Get("/diagnostics", systemRoutes.Diagnostics)
 				r.Get("/metrics", systemRoutes.Metrics)
 				r.Get("/metrics/prometheus", systemRoutes.PrometheusMetrics)

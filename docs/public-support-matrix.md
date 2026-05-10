@@ -23,7 +23,7 @@ This matrix sets expectations for public self-serve StacyVM installs. It separat
 | Firecracker | Host-certified | VM isolation path for Linux/KVM hosts | Runtime certification report for `firecracker` | Requires Linux, KVM, kernel/rootfs/agent assets, and host networking setup. |
 | PRoot | Experimental | Development and restricted hosts only | Runtime certification report for `proot` if used | Not a VM or container isolation boundary; production use is not recommended. |
 | E2B/custom provider | Preview | Integration-specific | Provider health, conformance results, and provider-specific logs | External provider availability, auth, and isolation guarantees are outside StacyVM's direct control. |
-| Multi-worker cluster | Preview | Not public self-serve yet | Cluster conformance output, Postgres contract output, worker identity certification report, and runtime certification for every worker runtime | Worker registry, placement, leases, Postgres store path, signed worker identity, worker RPC routing, and mTLS wiring exist; target-network mTLS smoke, runtime-certified worker hosts, backup/restore-specific Postgres rehearsal, OIDC/RBAC, and a centralized token issuer remain enterprise gates. |
+| Multi-worker cluster | Preview | Enterprise self-serve with OIDC + tenant model | Cluster conformance output, Postgres contract output, worker identity certification report, runtime certification for every worker runtime, OIDC provider configuration, and tenant policy review | Worker registry, placement, leases, Postgres store path, signed worker identity, centralized token issuance, worker RPC routing, mTLS wiring, OIDC/JWT RS256 auth, RBAC roles (viewer/operator/admin/tenant_admin), tenant model, policy controls, and per-tenant audit export are implemented. Remaining: target-network mTLS smoke with deployment-issued certificates for specific enterprise networks. |
 
 ## Public Install Requirements
 
@@ -43,7 +43,7 @@ GitHub bug and production support issue templates ask for this same evidence. Re
 ## Known Public Limitations
 
 - SQLite is the supported single-node store. Postgres-backed cluster semantics exist, but multi-worker production still requires deployment-specific Postgres contract evidence and backup/restore rehearsal.
-- API keys and admin keys are supported today. OIDC, SSO, and RBAC remain planned enterprise work.
+- API keys and admin keys are the primary auth path for single-node deployments. OIDC/JWT RS256 Bearer token auth with JWKS is implemented for enterprise multi-tenant deployments (`auth.oidc_enabled`, `auth.oidc_issuer`, `auth.oidc_jwks_url`). OIDC group-to-role mapping covers viewer, operator, admin, and tenant_admin roles.
 - Docker/runc is convenient and supported with hardened settings, but it is not equivalent to VM isolation.
 - Firecracker production readiness is host-gated because KVM, kernel, rootfs, agent, and networking setup vary by host.
 - PRoot is useful where Docker/KVM are unavailable, but it should not be presented as a production isolation boundary.

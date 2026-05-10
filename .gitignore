@@ -52,6 +52,14 @@ web/dist/
 .env
 .env.local
 
+# TLS certificates and private keys — never commit real certs or keys to the repo
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+*.csr
+
 # Coverage
 coverage/
 *.cover

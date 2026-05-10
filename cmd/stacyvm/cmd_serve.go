@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -57,8 +58,19 @@ func runServe() error {
 	}
 	defer st.Close()
 
-	// Event bus
+	// Event bus — attach a durable Postgres LISTEN/NOTIFY bridge when running
+	// in Postgres mode so events reach all control-plane replicas in HA setups.
 	events := orchestrator.NewEventBus()
+	if strings.EqualFold(strings.TrimSpace(cfg.Database.Driver), "postgres") ||
+		strings.EqualFold(strings.TrimSpace(cfg.Database.Driver), "postgresql") {
+		bridge, bridgeErr := orchestrator.NewDurableBridge(context.Background(), cfg.Database.DSN, events, logger)
+		if bridgeErr != nil {
+			logger.Warn().Err(bridgeErr).Msg("durable event bridge unavailable; events will not cross control-plane replicas")
+		} else {
+			defer bridge.Stop()
+			logger.Info().Msg("durable event bridge attached (Postgres LISTEN/NOTIFY)")
+		}
+	}
 
 	// Provider registry
 	registry := providers.NewRegistry()
@@ -247,6 +259,17 @@ func runServe() error {
 			KeyBy:             cfg.RateLimit.KeyBy,
 			BucketTTL:         rateLimitBucketTTL,
 			CleanupInterval:   rateLimitCleanupInterval,
+		},
+		OIDC: middleware.OIDCConfig{
+			Issuer:         cfg.Auth.OIDCIssuer,
+			Audience:       cfg.Auth.OIDCAudience,
+			JWKSUrl:        cfg.Auth.OIDCJWKSUrl,
+			PublicKeyPEM:   cfg.Auth.OIDCPublicKey,
+			GroupsClaim:    cfg.Auth.OIDCGroupsClaim,
+			TenantClaim:    cfg.Auth.OIDCTenantClaim,
+			AdminGroups:    cfg.Auth.OIDCAdminGroups,
+			OperatorGroups: cfg.Auth.OIDCOperatorGroups,
+			ViewerGroups:   cfg.Auth.OIDCViewerGroups,
 		},
 	}, registry, mgr, events, templates, pool, st, envBuilds, logger)
 

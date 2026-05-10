@@ -122,7 +122,11 @@ func (r Runtime) heartbeat(ctx context.Context, draining bool) error {
 		}
 		rpcURL := r.ListenAddr
 		if !strings.HasPrefix(rpcURL, "http://") && !strings.HasPrefix(rpcURL, "https://") {
-			rpcURL = "http://" + rpcURL
+			scheme := "http"
+			if r.RPCTLS.Enabled {
+				scheme = "https"
+			}
+			rpcURL = scheme + "://" + rpcURL
 		}
 		params.Capacity["rpc_url"] = rpcURL
 	}

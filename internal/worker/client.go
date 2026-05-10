@@ -109,6 +109,55 @@ func (c Client) RenewLease(ctx context.Context, resourceID, ttl string) (workerp
 	return result.Lease, nil
 }
 
+// NewIssuerTokenFunc returns a TokenFunc that fetches a short-lived signed worker
+// token from the control-plane's centralized issuer endpoint. This lets workers
+// authenticate without needing direct access to auth.worker_signing_key.
+//
+// bootstrapKey is an admin API key used solely to call POST /api/v1/admin/worker-tokens.
+// ttl is the desired token lifetime (max 15 minutes).
+func NewIssuerTokenFunc(controlPlaneURL, workerID, bootstrapAdminKey, ttl string) func() (string, error) {
+	if ttl == "" {
+		ttl = "5m"
+	}
+	return func() (string, error) {
+		base := strings.TrimRight(controlPlaneURL, "/")
+		url := base + "/api/v1/admin/worker-tokens"
+		body, _ := json.Marshal(map[string]string{
+			"worker_id": workerID,
+			"ttl":       ttl,
+			"audience":  "worker:control-plane",
+		})
+		req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+		if err != nil {
+			return "", fmt.Errorf("issuer: building request: %w", err)
+		}
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("X-Admin-API-Key", bootstrapAdminKey)
+
+		client := &http.Client{Timeout: 10 * time.Second}
+		resp, err := client.Do(req)
+		if err != nil {
+			return "", fmt.Errorf("issuer: calling control plane: %w", err)
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode >= 300 {
+			data, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
+			return "", fmt.Errorf("issuer: HTTP %d: %s", resp.StatusCode, strings.TrimSpace(string(data)))
+		}
+		var result struct {
+			Token string `json:"token"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+			return "", fmt.Errorf("issuer: decoding response: %w", err)
+		}
+		if strings.TrimSpace(result.Token) == "" {
+			return "", fmt.Errorf("issuer: response contained no token")
+		}
+		return result.Token, nil
+	}
+}
+
 func (c Client) authToken() (string, error) {
 	if c.TokenFunc != nil {
 		token, err := c.TokenFunc()

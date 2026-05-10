@@ -23,6 +23,9 @@ func newWorkerCmd() *cobra.Command {
 	var token string
 	var tokenFile string
 	var signingKeyFile string
+	var bootstrapAdminKey string
+	var bootstrapAdminKeyFile string
+	var bootstrapTokenTTL string
 	var heartbeatInterval string
 	var listenAddr string
 	var previewDomain string
@@ -81,10 +84,22 @@ func newWorkerCmd() *cobra.Command {
 			}
 			logger := newCommandLogger(cfg)
 			registry := buildWorkerRegistry(cfg, logger, previewDomain)
+			// Resolve bootstrap admin key from flag or file.
+			if bootstrapAdminKeyFile != "" {
+				bootstrapAdminKey, err = readSecretFile(bootstrapAdminKeyFile)
+				if err != nil {
+					return fmt.Errorf("bootstrap admin key file: %w", err)
+				}
+			}
+			// Priority: explicit token > token file > bootstrap issuer > local signing key.
 			if tokenFunc == nil {
-				tokenFunc = signedWorkerTokenFunc(id, signingKey)
-				if token != "" {
-					tokenFunc = nil
+				if bootstrapAdminKey != "" {
+					tokenFunc = worker.NewIssuerTokenFunc(controlPlaneURL, id, bootstrapAdminKey, bootstrapTokenTTL)
+				} else {
+					tokenFunc = signedWorkerTokenFunc(id, signingKey)
+					if token != "" {
+						tokenFunc = nil
+					}
 				}
 			}
 			rt := worker.Runtime{
@@ -123,6 +138,9 @@ func newWorkerCmd() *cobra.Command {
 	cmd.Flags().StringVar(&token, "worker-token", os.Getenv("STACYVM_AUTH_WORKER_TOKEN"), "worker bearer token; defaults to auth.worker_token")
 	cmd.Flags().StringVar(&tokenFile, "worker-token-file", "", "file containing the worker bearer token")
 	cmd.Flags().StringVar(&signingKeyFile, "worker-signing-key-file", "", "file containing the worker signing key used to derive short-lived signed tokens")
+	cmd.Flags().StringVar(&bootstrapAdminKey, "bootstrap-admin-key", os.Getenv("STACYVM_WORKER_BOOTSTRAP_ADMIN_KEY"), "admin API key used to fetch signed worker tokens from the control-plane issuer")
+	cmd.Flags().StringVar(&bootstrapAdminKeyFile, "bootstrap-admin-key-file", "", "file containing the admin API key for token issuance")
+	cmd.Flags().StringVar(&bootstrapTokenTTL, "bootstrap-token-ttl", "5m", "TTL for tokens fetched from the control-plane issuer (max 15m)")
 	cmd.Flags().StringVar(&heartbeatInterval, "heartbeat-interval", "", "worker heartbeat interval")
 	cmd.Flags().StringVar(&listenAddr, "listen", "", "worker RPC listen address; defaults to worker.listen_addr")
 	cmd.Flags().StringVar(&previewDomain, "preview-domain", "", "worker preview domain; defaults to worker.preview_domain or server.preview_domain")

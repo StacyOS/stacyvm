@@ -57,6 +57,10 @@ Self-hosted. Single binary. Python &amp; TypeScript SDKs. MIT licensed. No cloud
   - [Providers, pool, system](#providers-pool-system)
 - [CLI](#cli)
 - [Configuration](#configuration)
+- [Enterprise / Multi-worker](#enterprise--multi-worker)
+  - [OIDC & RBAC](#oidc--rbac)
+  - [Multi-tenancy & policy controls](#multi-tenancy--policy-controls)
+  - [Remote workers & mTLS](#remote-workers--mtls)
 - [Production deployment](#production-deployment)
 - [Templates](#templates-1)
 - [Security defaults](#security-defaults)
@@ -554,16 +558,28 @@ defaults:
 auth:
   enabled: false
   api_key: ""
-  admin_api_key: ""       # optional separate key for /api/v1/admin/*
-  worker_token: ""         # shared staging worker token
-  worker_token_file: ""    # file containing shared worker token
-  worker_tokens: {}        # production map of worker_id: token
-  worker_signing_key: ""   # production signed worker token verification key
-  worker_signing_key_file: ""  # file containing active worker signing key
-  worker_signing_keys: []   # old verification keys accepted during rotation
-  worker_revoked_token_ids: []  # signed worker token jti values rejected during incidents
-  admin_fallback_enabled: true  # false requires admin_api_key for admin routes
-  admin_audit_retention: "0s"  # 0s disables native audit pruning
+  admin_api_key: ""             # optional separate key for /api/v1/admin/*
+  worker_token: ""               # shared staging worker token
+  worker_token_file: ""          # file containing shared worker token
+  worker_tokens: {}              # production map of worker_id: token
+  worker_signing_key: ""         # production signed worker token verification key
+  worker_signing_key_file: ""    # file containing active worker signing key
+  worker_signing_keys: []        # old verification keys accepted during rotation
+  worker_revoked_token_ids: []   # signed worker token jti values rejected during incidents
+  admin_fallback_enabled: true   # false requires admin_api_key for admin routes
+  admin_audit_retention: "0s"    # 0s disables native audit pruning
+
+  # OIDC/SSO — enterprise single sign-on (RS256 and ES256/ES384/ES512)
+  oidc_enabled: false
+  oidc_issuer: ""                # e.g. https://accounts.google.com
+  oidc_audience: ""              # your application's client ID / audience
+  oidc_jwks_url: ""              # IdP's JWKS endpoint for key verification
+  oidc_public_key_file: ""       # alternative: static PEM public key file
+  oidc_groups_claim: "groups"    # JWT claim containing group memberships
+  oidc_tenant_claim: "tenant_id" # JWT claim containing tenant identifier
+  oidc_admin_groups: []          # groups that receive the admin role
+  oidc_operator_groups: []       # groups that receive the operator role
+  oidc_viewer_groups: []         # groups that receive the read-only viewer role
 
 rate_limit:
   enabled: false
@@ -607,9 +623,101 @@ STACYVM_LOGGING_LEVEL=debug
 
 ---
 
+## Enterprise / Multi-worker
+
+StacyVM ships everything you need to run as multi-tenant infrastructure. All features below are stable and covered by CI.
+
+### OIDC & RBAC
+
+Enable enterprise SSO by pointing StacyVM at any RFC 7517-compliant identity provider:
+
+```yaml
+auth:
+  enabled: true
+  oidc_enabled: true
+  oidc_issuer: "https://accounts.google.com"      # or Okta, Cloudflare, Azure AD
+  oidc_audience: "my-stacyvm"
+  oidc_jwks_url: "https://www.googleapis.com/oauth2/v3/certs"
+  oidc_admin_groups: ["stacyvm-admins"]
+  oidc_operator_groups: ["stacyvm-operators"]
+  oidc_viewer_groups: ["stacyvm-viewers"]
+```
+
+Callers send a standard Bearer token. StacyVM validates it (RS256 and ES256/ES384/ES512 are both supported) and maps IdP group membership to one of four roles:
+
+| Role | Can do |
+|---|---|
+| `viewer` | List and inspect sandboxes |
+| `api` / `operator` | Spawn, exec, read/write files, destroy |
+| `admin` | Everything + quotas, workers, provider config, tenants |
+| `tenant_admin` | Admin within their own tenant |
+
+Scope enforcement is applied on every route when auth is configured. A viewer token cannot spawn or exec — it gets 403.
+
+Run `stacyvm config lint --production` to validate your OIDC config before exposing it.
+
+### Multi-tenancy & policy controls
+
+Create isolated tenants and restrict what each one can use:
+
+```bash
+# Create a tenant
+curl -X POST /api/v1/admin/tenants \
+  -d '{"id":"acme","name":"Acme Corp","owner_id":"user-alice"}'
+
+# Add a member with operator role
+curl -X PUT /api/v1/admin/tenants/acme/members/user-bob \
+  -d '{"role":"operator"}'
+
+# Allow only trusted images
+curl -X POST /api/v1/admin/tenants/acme/policies \
+  -d '{"resource_type":"image","effect":"allow","pattern":"alpine:*","priority":10}'
+
+# Block untrusted networks
+curl -X POST /api/v1/admin/tenants/acme/policies \
+  -d '{"resource_type":"network","effect":"deny","pattern":"host","priority":1}'
+
+# Export per-tenant audit log
+curl /api/v1/admin/tenants/acme/audit
+```
+
+Each tenant's sandboxes, audit logs, and policies are fully isolated. OIDC callers are automatically scoped to their tenant via the configurable `oidc_tenant_claim`.
+
+### Remote workers & mTLS
+
+Run a distributed cluster with signed worker tokens and mutual TLS on the RPC channel:
+
+```yaml
+# Control plane
+auth:
+  worker_signing_key: "<32-byte secret>"
+worker:
+  rpc_tls:
+    enabled: true
+    ca_file: /etc/stacyvm/ca.crt
+    client_cert_file: /etc/stacyvm/cp-client.crt
+    client_key_file: /etc/stacyvm/cp-client.key
+```
+
+```bash
+# Worker — receives short-lived signed tokens from the control plane issuer
+# (no direct access to the signing key needed)
+stacyvm worker \
+  --control-plane https://cp.internal:7423 \
+  --bootstrap-admin-key "$STACYVM_ADMIN_KEY" \
+  --bootstrap-token-ttl 5m \
+  --listen 0.0.0.0:7430
+```
+
+Key rotation, token revocation, mTLS cert management, and the full enterprise signoff checklist are documented in [docs/enterprise-signoff-runbook.md](docs/enterprise-signoff-runbook.md).
+
+---
+
 ## Production deployment
 
 Use [docs/deployment.md](docs/deployment.md) for production setup guidance, including Docker Compose and systemd templates, auth and rate-limit defaults, health/readiness probes, Prometheus scraping, backup steps, and provider-specific rollout notes. Remote worker staging guidance lives in [docs/remote-worker-staging.md](docs/remote-worker-staging.md). Runtime signoff expectations live in [docs/runtime-conformance.md](docs/runtime-conformance.md), public self-serve support expectations live in [docs/public-support-matrix.md](docs/public-support-matrix.md), and release-candidate gates live in [docs/production-readiness.md](docs/production-readiness.md). The reusable templates live under [`deploy/`](deploy/).
+
+For enterprise multi-worker deployments, follow [docs/enterprise-signoff-runbook.md](docs/enterprise-signoff-runbook.md) — it covers mTLS smoke with deployment-issued certificates, per-host runtime certification, Postgres migration rehearsal, OIDC token validation, and the full pre-go-live checklist.
 
 Run `stacyvm doctor --production` on a target host before treating it as production-ready. Runtime host certification checks live in [docs/runtime-certification.md](docs/runtime-certification.md).
 
@@ -662,6 +770,8 @@ Every sandbox ships locked down. You opt *in* to less restriction, not out.
 | Lifetime | TTL auto-expiry | Forgotten sandboxes clean themselves up |
 
 With the Firecracker provider you also get: dedicated kernel per sandbox, vsock-only host-guest communication (no TCP between host and guest), and ephemeral rootfs destroyed on teardown.
+
+For enterprise deployments, OIDC/JWT authentication (RS256 + ES256) and RBAC role enforcement replace static API keys. Scope checks are applied on every sandbox route — a viewer-role token cannot spawn or exec. See the [Enterprise / Multi-worker](#enterprise--multi-worker) section above.
 
 Full security model and reporting policy: [SECURITY.md](SECURITY.md). Production admin hardening and identity-provider planning: [docs/security-governance.md](docs/security-governance.md). Release-candidate threat model: [docs/threat-model.md](docs/threat-model.md). Worker RPC and multi-worker trust boundary: [docs/worker-rpc-contract.md](docs/worker-rpc-contract.md).
 
@@ -764,6 +874,7 @@ stacyvm/
 
 ## Roadmap
 
+**Single-node & public self-serve**
 - [x] Firecracker provider (KVM microVMs, ~28ms snapshot restore)
 - [x] Docker provider (OCI containers, seccomp, no KVM needed)
 - [x] gVisor support (user-space kernel via runsc runtime)
@@ -774,11 +885,29 @@ stacyvm/
 - [x] Template system + warm pools
 - [x] PRoot provider (root-less, KVM-less)
 - [x] E2B + custom HTTP provider
+- [x] Signed release binaries + Sigstore verification
+- [x] `stacyvm doctor`, config lint, upgrade rehearsal, support bundle
+
+**Enterprise / multi-worker**
+- [x] Postgres store with durable leases and migration rehearsal
+- [x] Remote worker registry, placement, RPC routing
+- [x] Signed worker tokens (HMAC-SHA256, rotation, revocation)
+- [x] Worker RPC mutual TLS (mTLS)
+- [x] Centralized worker token issuance (no signing key on workers)
+- [x] Durable event bus (Postgres LISTEN/NOTIFY for HA replicas)
+- [x] OIDC/SSO — RS256 + ES256/ES384/ES512, JWKS, Google/Okta/Cloudflare/Azure
+- [x] RBAC roles — viewer, operator, admin, tenant_admin with scope enforcement
+- [x] Multi-tenancy — tenant model, member RBAC, per-tenant audit export
+- [x] Policy controls — image/provider/network allow-deny per tenant
+- [x] Enterprise signoff runbook + runtime certification script
+
+**Planned**
 - [ ] Live Preview for Firecracker
 - [ ] Kata Containers provider (K8s-native)
 - [ ] Persistent volumes across sandboxes
 - [ ] MCP server mode
 - [ ] GPU passthrough
+- [ ] Centralized token issuer as a standalone sidecar service
 
 ---
 

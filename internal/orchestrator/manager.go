@@ -511,6 +511,7 @@ func (m *Manager) Spawn(ctx context.Context, req SpawnRequest) (*Sandbox, error)
 		MemoryMB:      memMB,
 		VCPUs:         vcpus,
 		OwnerID:       req.OwnerID,
+		TenantID:      req.TenantID,
 		WorkerID:      m.workerID,
 		CreatedAt:     now,
 		ExpiresAt:     now.Add(ttl),
@@ -550,6 +551,7 @@ func (m *Manager) Spawn(ctx context.Context, req SpawnRequest) (*Sandbox, error)
 		VCPUs:     sb.VCPUs,
 		Metadata:  string(metaJSON),
 		OwnerID:   sb.OwnerID,
+		TenantID:  sb.TenantID,
 		VMID:      sb.VMID,
 		WorkerID:  sb.WorkerID,
 		CreatedAt: sb.CreatedAt,
@@ -951,9 +953,13 @@ func (m *Manager) ExecStream(ctx context.Context, sandboxID string, req ExecRequ
 	}
 
 	out := make(chan providers.StreamChunk, 64)
+	// metricsErr is read by the defer above; use a goroutine-local variable to
+	// avoid a data race between the defer (which runs at ExecStream return) and
+	// this goroutine (which may still be running).
 	go func() {
 		defer close(out)
 		defer cancel()
+		var goroutineErr error
 		interrupted := false
 		for chunk := range ch {
 			select {
@@ -963,17 +969,17 @@ func (m *Manager) ExecStream(ctx context.Context, sandboxID string, req ExecRequ
 			}
 		}
 		if errors.Is(execCtx.Err(), context.DeadlineExceeded) {
-			metricsErr = providers.ExecTimeoutError(sandboxID)
-			m.publishOperationFailure(EventExecTimeout, sandboxID, OperationExecStream, metricsProvider, metricsErr)
+			goroutineErr = providers.ExecTimeoutError(sandboxID)
+			m.publishOperationFailure(EventExecTimeout, sandboxID, OperationExecStream, metricsProvider, goroutineErr)
 			select {
-			case out <- providers.StreamChunk{Stream: "stderr", Data: metricsErr.Error()}:
+			case out <- providers.StreamChunk{Stream: "stderr", Data: goroutineErr.Error()}:
 			case <-ctx.Done():
 			}
 		} else if interrupted && execCtx.Err() != nil {
-			metricsErr = execCtx.Err()
-			m.publishOperationFailure(EventExecFailed, sandboxID, OperationExecStream, metricsProvider, metricsErr)
+			goroutineErr = execCtx.Err()
+			m.publishOperationFailure(EventExecFailed, sandboxID, OperationExecStream, metricsProvider, goroutineErr)
 		}
-		m.recordOperation(OperationExecStream, metricsProvider, time.Since(start), metricsErr)
+		m.recordOperation(OperationExecStream, metricsProvider, time.Since(start), goroutineErr)
 	}()
 	return out, nil
 }
@@ -2811,6 +2817,7 @@ func recordToSandbox(r *store.SandboxRecord) *Sandbox {
 		MemoryMB:  r.MemoryMB,
 		VCPUs:     r.VCPUs,
 		OwnerID:   r.OwnerID,
+		TenantID:  r.TenantID,
 		VMID:      r.VMID,
 		WorkerID:  r.WorkerID,
 		CreatedAt: r.CreatedAt,

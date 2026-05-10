@@ -18,13 +18,19 @@ import (
 type AuthRole string
 
 const (
-	AuthRoleAnonymous AuthRole = "anonymous"
-	AuthRoleAPI       AuthRole = "api"
-	AuthRoleAdmin     AuthRole = "admin"
-	AuthRoleWorker    AuthRole = "worker"
+	AuthRoleAnonymous   AuthRole = "anonymous"
+	AuthRoleViewer      AuthRole = "viewer"   // read-only sandbox/template list
+	AuthRoleAPI         AuthRole = "api"      // standard API access (spawn/exec/files)
+	AuthRoleOperator    AuthRole = "operator" // API + template/environment management
+	AuthRoleAdmin       AuthRole = "admin"    // operator + quotas/workers/provider config
+	AuthRoleTenantAdmin AuthRole = "tenant_admin" // admin within a specific tenant
+	AuthRoleWorker      AuthRole = "worker"
 
 	ScopeAPI             = "api:*"
 	ScopeAdmin           = "admin:*"
+	ScopeRead            = "read:*"
+	ScopeOperator        = "operator:*"
+	ScopeTenantAdmin     = "tenant:admin"
 	ScopeWorkerHeartbeat = "worker:heartbeat"
 	ScopeWorkerSpawn     = "worker:spawn"
 	ScopeWorkerDestroy   = "worker:destroy"
@@ -40,6 +46,11 @@ type AuthIdentity struct {
 	Header   string
 	WorkerID string
 	Scopes   []string
+	// OIDC-populated fields
+	Subject  string
+	Email    string
+	TenantID string
+	Groups   []string
 }
 
 type authIdentityContextKey struct{}
@@ -251,10 +262,13 @@ func authenticateRequest(r *http.Request, candidates ...authCandidate) (AuthIden
 				continue
 			}
 			if subtle.ConstantTimeCompare([]byte(candidate), []byte(authCandidate.Key)) == 1 {
+				// Extract tenant hint from header if present (API key users may still scope to a tenant).
+				tenantID := strings.TrimSpace(r.Header.Get("X-Tenant-ID"))
 				return AuthIdentity{
-					Role:   authCandidate.Role,
-					Header: header,
-					Scopes: scopesForRole(authCandidate.Role),
+					Role:     authCandidate.Role,
+					Header:   header,
+					Scopes:   scopesForRole(authCandidate.Role),
+					TenantID: tenantID,
 				}, true
 			}
 		}
@@ -265,9 +279,15 @@ func authenticateRequest(r *http.Request, candidates ...authCandidate) (AuthIden
 func scopesForRole(role AuthRole) []string {
 	switch role {
 	case AuthRoleAdmin:
-		return []string{ScopeAPI, ScopeAdmin}
+		return []string{ScopeRead, ScopeAPI, ScopeOperator, ScopeAdmin}
+	case AuthRoleTenantAdmin:
+		return []string{ScopeRead, ScopeAPI, ScopeOperator, ScopeTenantAdmin}
+	case AuthRoleOperator:
+		return []string{ScopeRead, ScopeAPI, ScopeOperator}
 	case AuthRoleAPI:
-		return []string{ScopeAPI}
+		return []string{ScopeRead, ScopeAPI}
+	case AuthRoleViewer:
+		return []string{ScopeRead}
 	case AuthRoleWorker:
 		return []string{
 			ScopeWorkerHeartbeat,
