@@ -9,11 +9,11 @@
     "dark": "#FF7038"
   },
   "logo": {
-    "light": "/assets/stacyvm-logo-light.svg",
-    "dark": "/assets/stacyvm-logo-dark.svg",
+    "light": "/assets/stacy-logo-light.png",
+    "dark": "/assets/stacy-logo-dark.png",
     "href": "https://github.com/StacyOS/stacyvm"
   },
-  "favicon": "/assets/stacyvm-favicon.svg",
+  "favicon": "/assets/stacy-mark-orange.png",
   "appearance": {
     "default": "system"
   },

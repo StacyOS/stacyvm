@@ -5,6 +5,21 @@ description: "Understand StacyVM's control plane, scheduler, workers, providers,
 
 This page explains StacyVM from top to bottom. Use it when you need to understand how a request moves from an SDK call to an isolated runtime and back.
 
+<div className="stacy-proof-grid">
+  <div className="stacy-proof">
+    <strong>Control plane</strong>
+    <span>HTTP API, auth, quotas, scheduling, audit events, and status.</span>
+  </div>
+  <div className="stacy-proof">
+    <strong>Execution plane</strong>
+    <span>Local or remote workers translate product requests into provider operations.</span>
+  </div>
+  <div className="stacy-proof">
+    <strong>Runtime plane</strong>
+    <span>Docker, Firecracker, PRoot, and custom providers run the actual sandbox.</span>
+  </div>
+</div>
+
 ## High-Level Architecture
 
 ```mermaid
