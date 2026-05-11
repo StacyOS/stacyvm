@@ -48,6 +48,7 @@
         "pages": [
           "index",
           "docs/getting-started/what-is-stacyvm",
+          "docs/getting-started/developer-onboarding",
           "docs/getting-started/prerequisites",
           "docs/getting-started/quickstart",
           "docs/getting-started/installation",

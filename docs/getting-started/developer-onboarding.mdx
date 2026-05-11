@@ -1,0 +1,179 @@
+---
+title: "Developer Onboarding"
+description: "Start StacyVM with one command, verify the server, run code in a sandbox, and troubleshoot common setup issues."
+---
+
+This is the fastest path for a developer who wants StacyVM running locally.
+
+## Start StacyVM
+
+Run this in a fresh terminal:
+
+```bash
+npx stacyvm-setup@latest
+```
+
+The setup command clones StacyVM if needed, installs package dependencies, downloads Go modules, builds the binary, and starts the server at `http://localhost:7423`.
+
+<Note>
+  You still need Docker Desktop or Docker Engine running locally. If Docker is not reachable, setup stops and prints the fix for your operating system.
+</Note>
+
+## Clean Verification Flow
+
+Use this flow when you want to verify each step before starting the server.
+
+### 1. Verify The Npm Package
+
+```bash
+npm view stacyvm-setup name version bin --json
+npx stacyvm-setup@latest --help
+```
+
+### 2. Run Setup Without Starting The Server
+
+This checks clone, dependency installation, Go module download, and build behavior safely.
+
+```bash
+mkdir -p /tmp/stacyvm-npx-test
+cd /tmp/stacyvm-npx-test
+
+npx stacyvm-setup@latest \
+  --dir ./stacyvm \
+  --no-start
+```
+
+Expected result:
+
+```bash
+./stacyvm/stacyvm
+```
+
+### 3. Start StacyVM
+
+```bash
+cd /tmp/stacyvm-npx-test/stacyvm
+./stacyvm serve
+```
+
+Leave this terminal running.
+
+### 4. Check Health
+
+In a second terminal:
+
+```bash
+curl http://localhost:7423/api/v1/live
+curl http://localhost:7423/api/v1/ready
+```
+
+### 5. Create A Sandbox
+
+```bash
+curl -sS -X POST http://localhost:7423/api/v1/sandboxes \
+  -H "Content-Type: application/json" \
+  -d '{"image":"python:3.12","ttl":"10m"}'
+```
+
+Copy the returned sandbox ID.
+
+### 6. Run Code
+
+```bash
+export SANDBOX_ID="PASTE_ID_HERE"
+
+curl -sS -X POST "http://localhost:7423/api/v1/sandboxes/${SANDBOX_ID}/exec" \
+  -H "Content-Type: application/json" \
+  -d '{"command":"python3 -c \"print(40 + 2)\"","timeout":"10s"}'
+```
+
+Expected output includes:
+
+```json
+"stdout": "42\n"
+```
+
+### 7. Destroy The Sandbox
+
+```bash
+curl -sS -X DELETE "http://localhost:7423/api/v1/sandboxes/${SANDBOX_ID}"
+```
+
+### 8. Optional Full One-Command Run
+
+After the verification flow passes:
+
+```bash
+cd /tmp
+npx stacyvm-setup@latest --dir ./stacyvm-full-test
+```
+
+This sets up StacyVM and starts the server directly.
+
+## Common Fixes
+
+<AccordionGroup>
+  <Accordion title="Docker CLI is installed, but the daemon is not reachable">
+    Start Docker, then verify it:
+
+    ```bash
+    docker info
+    docker run --rm hello-world
+    ```
+
+    On macOS, start Docker Desktop:
+
+    ```bash
+    open -a Docker
+    ```
+
+    On Windows, run setup inside WSL 2 Ubuntu and enable Docker Desktop WSL integration for that distro.
+  </Accordion>
+
+  <Accordion title="Go is missing">
+    Install Go, then rerun setup.
+
+    macOS:
+
+    ```bash
+    brew install go
+    ```
+
+    Ubuntu or Debian:
+
+    ```bash
+    sudo apt update
+    sudo apt install -y golang-go
+    ```
+  </Accordion>
+
+  <Accordion title="Port 7423 is already in use">
+    Check what is listening:
+
+    ```bash
+    lsof -iTCP:7423 -sTCP:LISTEN
+    ```
+
+    Stop that process, or use the StacyVM server that is already running.
+  </Accordion>
+
+  <Accordion title="You only want to test clone and build">
+    Skip server startup:
+
+    ```bash
+    npx stacyvm-setup@latest --dir ./stacyvm --no-start
+    ```
+
+    If Docker is not running yet, you can also skip Docker validation:
+
+    ```bash
+    npx stacyvm-setup@latest --dir ./stacyvm --no-start --skip-docker-check
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Next Steps
+
+- Use the [Quickstart](/docs/getting-started/quickstart) for SDK and REST examples.
+- Review [Core Concepts](/docs/getting-started/core-concepts) when you want the mental model.
+- Use [Production Deployment](/docs/deployment) before exposing StacyVM to other users.

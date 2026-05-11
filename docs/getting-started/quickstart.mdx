@@ -12,7 +12,7 @@ This guide gets you from a running StacyVM server to a verified sandbox workflow
 - An API key if `auth.enabled` is set in your config.
 - Python 3.9+ or Node.js 18+ if you want to use an SDK.
 
-If you have not set up a host yet, start with the [Prerequisites](/docs/getting-started/prerequisites) and [Installation](/docs/getting-started/installation) guides.
+If you have not set up a host yet, start with [Developer Onboarding](/docs/getting-started/developer-onboarding).
 
 From a source checkout, the simplest local start command is:
 
@@ -20,18 +20,10 @@ From a source checkout, the simplest local start command is:
 make dev
 ```
 
-From npm/npx, use:
+From npm/npx, use one command:
 
 ```bash
-npx stacyvm-setup@latest \
-  --branch phase-14-worker-identity-hardening
-```
-
-To test the branch directly from GitHub instead of npm, use:
-
-```bash
-npx github:StacyOS/stacyvm#phase-14-worker-identity-hardening stacyvm-setup \
-  --branch phase-14-worker-identity-hardening
+npx stacyvm-setup@latest
 ```
 
 ## 1. Check The Server
