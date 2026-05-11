@@ -20,6 +20,7 @@ interface AppSettings {
   poolSize: number;
   authEnabled: boolean;
   authToken: string;
+  adminToken: string;
   serverPort: number;
   serverHost: string;
   theme: 'dark' | 'light' | 'system';
@@ -32,6 +33,7 @@ const DEFAULT_SETTINGS: AppSettings = {
   poolSize: 5,
   authEnabled: false,
   authToken: '',
+  adminToken: '',
   serverPort: 7423,
   serverHost: 'localhost',
   theme: 'dark',
@@ -293,11 +295,11 @@ export default function Settings() {
           {activeSection === 'auth' && (
             <SettingsPanel
               title="Authentication"
-              description="API authentication settings"
+              description="Browser API key settings"
             >
               <SettingsField
-                label="Enable Authentication"
-                description="Require API token for all requests"
+                label="Send API Keys"
+                description="Attach configured API keys to dashboard requests"
               >
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input
@@ -319,18 +321,33 @@ export default function Settings() {
               </SettingsField>
 
               {settings.authEnabled && (
-                <SettingsField
-                  label="API Token"
-                  description="Bearer token used to authenticate API requests"
-                >
-                  <input
-                    type="password"
-                    value={settings.authToken}
-                    onChange={(e) => update('authToken', e.target.value)}
-                    className="input"
-                    placeholder="Enter your API token"
-                  />
-                </SettingsField>
+                <>
+                  <SettingsField
+                    label="API Key"
+                    description="Sent as X-API-Key for regular API requests"
+                  >
+                    <input
+                      type="password"
+                      value={settings.authToken}
+                      onChange={(e) => update('authToken', e.target.value)}
+                      className="input"
+                      placeholder="Enter your API key"
+                    />
+                  </SettingsField>
+
+                  <SettingsField
+                    label="Admin API Key"
+                    description="Sent as X-Admin-API-Key for operator routes"
+                  >
+                    <input
+                      type="password"
+                      value={settings.adminToken}
+                      onChange={(e) => update('adminToken', e.target.value)}
+                      className="input"
+                      placeholder="Enter your admin API key"
+                    />
+                  </SettingsField>
+                </>
               )}
 
               <div className="bg-amber-500/10 border border-amber-500/20 rounded-lg p-3 flex items-start gap-2.5">

@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="220" height="44" viewBox="0 0 220 44" role="img" aria-label="StacyVM">
+  <rect width="220" height="44" fill="#262626"/>
+  <path d="M12 8h28l-6 6v16l6 6H12l6-6V14z" fill="#FF7038"/>
+  <path d="M22 16h8v12h-8z" fill="#F0E7DA"/>
+  <text x="52" y="29" fill="#D1C2A5" font-family="IBM Plex Mono, monospace" font-size="22" font-weight="700" letter-spacing="0">STACYVM</text>
+</svg>

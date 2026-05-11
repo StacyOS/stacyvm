@@ -1,0 +1,289 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - 'phase-*'
+      - 'feat/*'
+
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  go:
+    name: Go tests and build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run Go tests
+        run: make test
+
+      - name: Build CLI
+        run: make build
+
+  swagger:
+    name: Swagger drift
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Check generated Swagger docs
+        run: scripts/check-swagger.sh
+
+  deployment-smoke:
+    name: Deployment smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build CLI
+        run: make build
+
+      - name: Run mock-provider deployment smoke
+        run: scripts/ci-smoke-deployment.sh
+
+  upgrade-migration:
+    name: Upgrade and migration checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run upgrade and migration checks
+        run: scripts/ci-upgrade-migration.sh
+
+  cluster-conformance:
+    name: Cluster conformance checks
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: stacyvm
+          POSTGRES_PASSWORD: stacyvm
+          POSTGRES_DB: stacyvm
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U stacyvm -d stacyvm"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run cluster conformance checks
+        env:
+          STACYVM_POSTGRES_TEST_DSN: postgres://stacyvm:stacyvm@127.0.0.1:5432/stacyvm?sslmode=disable
+        run: scripts/ci-cluster-conformance.sh
+
+  remote-worker-postgres-smoke:
+    name: Remote worker Postgres smoke
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: stacyvm
+          POSTGRES_PASSWORD: stacyvm
+          POSTGRES_DB: stacyvm
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U stacyvm -d stacyvm"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build CLI
+        run: make build
+
+      - name: Run remote worker smoke with Postgres store
+        env:
+          STACYVM_REMOTE_SMOKE_DATABASE_DRIVER: postgres
+          STACYVM_REMOTE_SMOKE_DATABASE_DSN: postgres://stacyvm:stacyvm@127.0.0.1:5432/stacyvm?sslmode=disable
+        run: scripts/smoke-remote-worker.sh ./stacyvm
+
+  remote-worker-mtls-smoke:
+    name: Remote worker mTLS smoke
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build CLI
+        run: make build
+
+      - name: Run remote worker mTLS smoke with ephemeral certs
+        run: scripts/smoke-remote-worker.sh ./stacyvm --mtls
+
+  runtime-certification:
+    name: Runtime certification (Docker)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build CLI
+        run: make build
+
+      - name: Run Docker runtime certification with StacyVM integration smoke
+        run: |
+          scripts/certify-runtime.sh docker \
+            --stacyvm-bin ./stacyvm \
+            --format markdown \
+            --output /tmp/docker-certification.md
+          cat /tmp/docker-certification.md
+
+      - name: Upload certification report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-runtime-certification
+          path: /tmp/docker-certification.md
+
+  public-release-sanity:
+    name: Public release sanity
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Run public release sanity checks
+        run: scripts/ci-public-release-sanity.sh
+
+  web:
+    name: Web build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web app
+        run: npm run build
+
+  sdk-js:
+    name: TypeScript SDK build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: sdk/js
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build TypeScript SDK
+        run: bun run build
+
+      - name: Run TypeScript SDK parity tests
+        run: bun test
+
+  sdk-python:
+    name: Python SDK tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install Python SDK
+        run: python -m pip install -e sdk/python
+
+      - name: Compile Python SDK
+        run: python -m compileall sdk/python/stacyvm
+
+      - name: Import Python SDK
+        run: python -c "import stacyvm; print(stacyvm.__version__)"
+
+      - name: Run Python SDK parity tests
+        run: python -m unittest sdk/python/tests/test_client_parity.py

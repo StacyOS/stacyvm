@@ -46,9 +46,12 @@ export type {
   TemplateConfig,
   TemplateSpawnOverrides,
   ProviderInfo,
+  QuotaSummary,
   HealthInfo,
+  SpawnAdmissionDecision,
   StreamChunk,
   FileInfo,
+  ForgevmClientConfig,
   ForgevmClientOptions,
   ApiErrorBody,
 } from "./types.js";

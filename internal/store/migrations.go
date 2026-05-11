@@ -1,9 +1,11 @@
 package store
 
-var migrations = []struct {
+type migration struct {
 	version int
 	sql     string
-}{
+}
+
+var migrations = []migration{
 	{
 		version: 1,
 		sql: `
@@ -143,6 +145,148 @@ ALTER TABLE sandboxes ADD COLUMN owner_id TEXT NOT NULL DEFAULT '';
 ALTER TABLE sandboxes ADD COLUMN vm_id TEXT NOT NULL DEFAULT '';
 CREATE INDEX IF NOT EXISTS idx_sandboxes_owner ON sandboxes(owner_id);
 CREATE INDEX IF NOT EXISTS idx_sandboxes_vm ON sandboxes(vm_id);
+`,
+	},
+	{
+		version: 5,
+		sql: `
+CREATE TABLE IF NOT EXISTS owner_quotas (
+    owner_id                 TEXT PRIMARY KEY,
+    max_sandboxes            INTEGER NOT NULL DEFAULT 0,
+    max_ttl_seconds          INTEGER NOT NULL DEFAULT 0,
+    max_exec_timeout_seconds INTEGER NOT NULL DEFAULT 0,
+    created_at               DATETIME NOT NULL DEFAULT (datetime('now')),
+    updated_at               DATETIME NOT NULL DEFAULT (datetime('now'))
+);
+`,
+	},
+	{
+		version: 6,
+		sql: `
+CREATE TABLE IF NOT EXISTS admin_audit_logs (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    actor       TEXT NOT NULL DEFAULT '',
+    method      TEXT NOT NULL,
+    path        TEXT NOT NULL,
+    status      INTEGER NOT NULL DEFAULT 0,
+    duration_ms INTEGER NOT NULL DEFAULT 0,
+    request_id  TEXT NOT NULL DEFAULT '',
+    remote_addr TEXT NOT NULL DEFAULT '',
+    user_agent  TEXT NOT NULL DEFAULT '',
+    created_at  DATETIME NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_admin_audit_logs_created_at ON admin_audit_logs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_admin_audit_logs_actor ON admin_audit_logs(actor);
+`,
+	},
+	{
+		version: 7,
+		sql: `
+CREATE TABLE IF NOT EXISTS operation_audit_logs (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    actor      TEXT NOT NULL DEFAULT '',
+    action     TEXT NOT NULL,
+    sandbox_id TEXT NOT NULL DEFAULT '',
+    resource   TEXT NOT NULL DEFAULT '',
+    provider   TEXT NOT NULL DEFAULT '',
+    status     TEXT NOT NULL DEFAULT '',
+    detail     TEXT NOT NULL DEFAULT '',
+    created_at DATETIME NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_operation_audit_logs_created_at ON operation_audit_logs(created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_operation_audit_logs_actor ON operation_audit_logs(actor);
+CREATE INDEX IF NOT EXISTS idx_operation_audit_logs_sandbox ON operation_audit_logs(sandbox_id);
+CREATE INDEX IF NOT EXISTS idx_operation_audit_logs_action ON operation_audit_logs(action);
+`,
+	},
+	{
+		version: 8,
+		sql: `
+CREATE TABLE IF NOT EXISTS workers (
+    id             TEXT PRIMARY KEY,
+    hostname       TEXT NOT NULL DEFAULT '',
+    status         TEXT NOT NULL DEFAULT 'online',
+    providers      TEXT NOT NULL DEFAULT '[]',
+    capabilities   TEXT NOT NULL DEFAULT '[]',
+    capacity       TEXT NOT NULL DEFAULT '{}',
+    last_heartbeat DATETIME NOT NULL DEFAULT (datetime('now')),
+    created_at     DATETIME NOT NULL DEFAULT (datetime('now')),
+    updated_at     DATETIME NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_workers_status ON workers(status);
+CREATE INDEX IF NOT EXISTS idx_workers_last_heartbeat ON workers(last_heartbeat DESC);
+`,
+	},
+	{
+		version: 9,
+		sql: `
+ALTER TABLE sandboxes ADD COLUMN worker_id TEXT NOT NULL DEFAULT 'local';
+CREATE INDEX IF NOT EXISTS idx_sandboxes_worker ON sandboxes(worker_id);
+`,
+	},
+	{
+		version: 10,
+		sql: `
+CREATE TABLE IF NOT EXISTS leases (
+    resource_id   TEXT PRIMARY KEY,
+    resource_type TEXT NOT NULL DEFAULT '',
+    holder_id     TEXT NOT NULL,
+    generation    INTEGER NOT NULL DEFAULT 1,
+    expires_at    DATETIME NOT NULL,
+    created_at    DATETIME NOT NULL DEFAULT (datetime('now')),
+    updated_at    DATETIME NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_leases_holder ON leases(holder_id);
+CREATE INDEX IF NOT EXISTS idx_leases_expires_at ON leases(expires_at);
+`,
+	},
+	{
+		version: 11,
+		sql: `
+CREATE TABLE IF NOT EXISTS tenants (
+    id         TEXT PRIMARY KEY,
+    name       TEXT NOT NULL,
+    owner_id   TEXT NOT NULL DEFAULT '',
+    settings   TEXT NOT NULL DEFAULT '{}',
+    created_at DATETIME NOT NULL DEFAULT (datetime('now')),
+    updated_at DATETIME NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_tenants_owner ON tenants(owner_id);
+
+CREATE TABLE IF NOT EXISTS tenant_members (
+    tenant_id  TEXT NOT NULL,
+    user_id    TEXT NOT NULL,
+    role       TEXT NOT NULL DEFAULT 'viewer',
+    created_at DATETIME NOT NULL DEFAULT (datetime('now')),
+    updated_at DATETIME NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (tenant_id, user_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_tenant_members_user ON tenant_members(user_id);
+
+CREATE TABLE IF NOT EXISTS policies (
+    id            TEXT PRIMARY KEY,
+    tenant_id     TEXT NOT NULL DEFAULT '',
+    resource_type TEXT NOT NULL,
+    effect        TEXT NOT NULL DEFAULT 'allow',
+    pattern       TEXT NOT NULL,
+    priority      INTEGER NOT NULL DEFAULT 10,
+    created_at    DATETIME NOT NULL DEFAULT (datetime('now')),
+    updated_at    DATETIME NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_policies_tenant ON policies(tenant_id);
+CREATE INDEX IF NOT EXISTS idx_policies_resource ON policies(resource_type);
+
+ALTER TABLE admin_audit_logs ADD COLUMN tenant_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE operation_audit_logs ADD COLUMN tenant_id TEXT NOT NULL DEFAULT '';
+ALTER TABLE sandboxes ADD COLUMN tenant_id TEXT NOT NULL DEFAULT '';
+CREATE INDEX IF NOT EXISTS idx_sandboxes_tenant ON sandboxes(tenant_id);
 `,
 	},
 }

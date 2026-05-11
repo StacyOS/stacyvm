@@ -11,10 +11,13 @@ import {
 import { Sandbox } from "./sandbox.js";
 import { TemplateManager } from "./templates.js";
 import type {
+  ForgevmClientConfig,
   ForgevmClientOptions,
   HealthInfo,
   ProviderInfo,
+  QuotaSummary,
   SandboxInfo,
+  SpawnAdmissionDecision,
   SpawnOptions,
   VMPoolStatus,
 } from "./types.js";
@@ -112,8 +115,10 @@ export class Client {
    * });
    * ```
    */
-  constructor(options?: ForgevmClientOptions) {
-    const opts = options ?? {};
+  constructor(options?: ForgevmClientConfig) {
+    const opts: ForgevmClientOptions = typeof options === "string"
+      ? { baseUrl: options }
+      : options ?? {};
 
     if (opts.baseUrl) {
       // Strip trailing slash for consistent URL construction.
@@ -173,6 +178,8 @@ export class Client {
     if (opts?.memory_mb !== undefined) body["memory_mb"] = opts.memory_mb;
     if (opts?.vcpus !== undefined) body["vcpus"] = opts.vcpus;
     if (opts?.ttl) body["ttl"] = opts.ttl;
+    if (opts?.owner_id) body["owner_id"] = opts.owner_id;
+    if (opts?.template) body["template"] = opts.template;
     if (opts?.metadata) body["metadata"] = opts.metadata;
 
     const response = await this._fetch("/api/v1/sandboxes", {
@@ -184,6 +191,31 @@ export class Client {
     const data = (await response.json()) as SandboxInfo;
 
     return new Sandbox(this._baseUrl, this._headers, this._timeout, data);
+  }
+
+  /**
+   * Preflight a spawn request against quota and scheduler limits.
+   *
+   * @param opts - Sandbox configuration to evaluate.
+   * @returns Admission decision without creating a sandbox.
+   */
+  async admission(opts?: SpawnOptions): Promise<SpawnAdmissionDecision> {
+    const body: Record<string, unknown> = {};
+    if (opts?.image) body["image"] = opts.image;
+    if (opts?.provider) body["provider"] = opts.provider;
+    if (opts?.memory_mb !== undefined) body["memory_mb"] = opts.memory_mb;
+    if (opts?.vcpus !== undefined) body["vcpus"] = opts.vcpus;
+    if (opts?.ttl) body["ttl"] = opts.ttl;
+    if (opts?.owner_id) body["owner_id"] = opts.owner_id;
+    if (opts?.metadata) body["metadata"] = opts.metadata;
+
+    const response = await this._fetch("/api/v1/sandboxes/admission", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+
+    await handleResponse(response);
+    return (await response.json()) as SpawnAdmissionDecision;
   }
 
   /**
@@ -317,6 +349,18 @@ export class Client {
 
     await handleResponse(response);
     return (await response.json()) as VMPoolStatus;
+  }
+
+  /**
+   * Get redacted quota policy coverage counts.
+   */
+  async quotaSummary(): Promise<QuotaSummary> {
+    const response = await this._fetch("/api/v1/quotas/summary", {
+      method: "GET",
+    });
+
+    await handleResponse(response);
+    return (await response.json()) as QuotaSummary;
   }
 
   // -----------------------------------------------------------------------

@@ -74,8 +74,14 @@ export interface CreateTemplateRequest {
 
 export interface Provider {
   name: string;
+  default?: boolean;
   is_default: boolean;
   healthy: boolean;
+  latency_ms?: number;
+  last_checked?: string;
+  error?: string;
+  capabilities?: string[];
+  runtime_count?: number;
 }
 
 export interface HealthResponse {
@@ -87,8 +93,93 @@ export interface HealthResponse {
 export interface MetricsResponse {
   goroutines: number;
   memory_alloc: number;
+  memory_sys?: number;
+  memory_heap_alloc?: number;
+  gc_cycles?: number;
   active_sandboxes: number;
   total_sandboxes: number;
+  sandboxes?: {
+    total: number;
+    active: number;
+    by_state: Record<string, number>;
+    by_provider: Record<string, number>;
+  };
+  providers?: {
+    total: number;
+    healthy: number;
+    items: Provider[];
+  };
+}
+
+export interface OwnerQuota {
+  owner_id: string;
+  max_sandboxes: number;
+  max_ttl: string;
+  max_exec_timeout: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface OwnerUsage {
+  owner_id: string;
+  active_sandboxes: number;
+  max_sandboxes: number;
+  max_ttl: string;
+  max_exec_timeout: string;
+  quota_configured: boolean;
+}
+
+export interface QuotaSummary {
+  total: number;
+  with_max_sandboxes: number;
+  with_max_ttl: number;
+  with_max_exec_timeout: number;
+}
+
+export interface DiagnosticsResponse {
+  generated_at: string;
+  build: Record<string, unknown>;
+  process: Record<string, unknown>;
+  store: {
+    healthy?: boolean;
+    latency_ms?: number;
+    error?: string;
+  };
+  limits: Record<string, unknown>;
+  scheduler: Record<string, unknown>;
+  quotas: QuotaSummary;
+  rate_limit: Record<string, unknown>;
+  providers: Provider[];
+  sandboxes: {
+    total: number;
+    active: number;
+    by_state: Record<string, number>;
+    by_provider: Record<string, number>;
+  };
+  events: Record<string, unknown>;
+  operations: Array<Record<string, unknown>>;
+  redactions: string[];
+}
+
+export interface AdminAuditRecord {
+  id: number;
+  actor: string;
+  method: string;
+  path: string;
+  status: number;
+  duration_ms: number;
+  request_id: string;
+  remote_addr: string;
+  user_agent: string;
+  created_at: string;
+}
+
+export interface AdminAuditQuery {
+  limit?: number;
+  actor?: string;
+  method?: string;
+  status?: number;
+  path?: string;
 }
 
 export interface SSEEvent {
@@ -189,6 +280,12 @@ export interface EnvironmentSuggestionsResponse {
   suggestions: string[];
 }
 
+interface StoredAppSettings {
+  authEnabled?: boolean;
+  authToken?: string;
+  adminToken?: string;
+}
+
 // ---------------------------------------------------------------------------
 // API Error
 // ---------------------------------------------------------------------------
@@ -210,21 +307,72 @@ export class ApiError extends Error {
 
 const BASE = '/api/v1';
 
+interface RequestOptions extends RequestInit {
+  admin?: boolean;
+}
+
+function loadStoredSettings(): StoredAppSettings {
+  if (typeof window === 'undefined') return {};
+
+  try {
+    const stored = window.localStorage.getItem('stacyvm-settings');
+    return stored ? (JSON.parse(stored) as StoredAppSettings) : {};
+  } catch {
+    return {};
+  }
+}
+
+function normalizeHeaders(headers?: HeadersInit): Record<string, string> {
+  if (!headers) return {};
+  if (headers instanceof Headers) return Object.fromEntries(headers.entries());
+  if (Array.isArray(headers)) return Object.fromEntries(headers);
+  return { ...headers };
+}
+
+function authHeaders(admin: boolean): Record<string, string> {
+  const settings = loadStoredSettings();
+  if (!settings.authEnabled) return {};
+
+  const headers: Record<string, string> = {};
+  const apiKey = settings.authToken?.trim();
+  const adminKey = settings.adminToken?.trim();
+
+  if (apiKey) {
+    headers['X-API-Key'] = apiKey;
+  }
+  if (admin && adminKey) {
+    headers['X-Admin-API-Key'] = adminKey;
+  }
+
+  return headers;
+}
+
+function normalizeProvider(provider: Provider): Provider {
+  const isDefault = provider.is_default ?? provider.default ?? false;
+  return {
+    ...provider,
+    default: provider.default ?? isDefault,
+    is_default: isDefault,
+  };
+}
+
 async function request<T>(
   path: string,
-  options: RequestInit = {},
+  options: RequestOptions = {},
 ): Promise<T> {
   const url = `${BASE}${path}`;
+  const { admin = false, headers: optionHeaders, ...fetchOptions } = options;
   const headers: Record<string, string> = {
-    ...(options.headers as Record<string, string>),
+    ...authHeaders(admin),
+    ...normalizeHeaders(optionHeaders),
   };
 
-  if (options.body && typeof options.body === 'string') {
+  if (fetchOptions.body && typeof fetchOptions.body === 'string') {
     headers['Content-Type'] = 'application/json';
   }
 
   const res = await fetch(url, {
-    ...options,
+    ...fetchOptions,
     headers,
   });
 
@@ -317,7 +465,7 @@ export async function execStreamNDJSON(
   const url = `${BASE}/sandboxes/${encodeURIComponent(sandboxId)}/exec`;
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { ...authHeaders(false), 'Content-Type': 'application/json' },
     body: JSON.stringify({ command, stream: true }),
     signal,
   });
@@ -475,8 +623,10 @@ export async function spawnFromTemplate(
 // ---------------------------------------------------------------------------
 
 export async function listProviders(): Promise<Provider[]> {
-  const result = await request<Provider[] | null>('/providers');
-  return result ?? [];
+  const result = await request<Provider[] | null>('/admin/providers', {
+    admin: true,
+  });
+  return (result ?? []).map(normalizeProvider);
 }
 
 export interface ProviderDetail {
@@ -484,11 +634,22 @@ export interface ProviderDetail {
   healthy: boolean;
   default: boolean;
   sandbox_count: number;
+  health?: Provider;
   config: Record<string, string>;
 }
 
 export async function getProviderDetail(name: string): Promise<ProviderDetail> {
-  return request<ProviderDetail>(`/providers/${encodeURIComponent(name)}`);
+  return request<ProviderDetail>(
+    `/admin/providers/${encodeURIComponent(name)}`,
+    { admin: true },
+  );
+}
+
+export async function testProviders(): Promise<Record<string, boolean>> {
+  return request<Record<string, boolean>>('/admin/providers/test', {
+    method: 'POST',
+    admin: true,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -598,7 +759,74 @@ export async function getHealth(): Promise<HealthResponse> {
 }
 
 export async function getMetrics(): Promise<MetricsResponse> {
-  return request<MetricsResponse>('/metrics');
+  const metrics = await request<MetricsResponse>('/admin/metrics', { admin: true });
+  return {
+    ...metrics,
+    active_sandboxes: metrics.active_sandboxes ?? metrics.sandboxes?.active ?? 0,
+    total_sandboxes: metrics.total_sandboxes ?? metrics.sandboxes?.total ?? 0,
+  };
+}
+
+export async function getDiagnostics(): Promise<DiagnosticsResponse> {
+  return request<DiagnosticsResponse>('/admin/diagnostics', { admin: true });
+}
+
+export async function listOwnerQuotas(): Promise<OwnerQuota[]> {
+  const result = await request<OwnerQuota[] | null>('/admin/quotas', { admin: true });
+  return result ?? [];
+}
+
+export async function getQuotaSummary(): Promise<QuotaSummary> {
+  return request<QuotaSummary>('/admin/quotas/summary', { admin: true });
+}
+
+export async function saveOwnerQuota(quota: OwnerQuota): Promise<OwnerQuota> {
+  return request<OwnerQuota>(
+    `/admin/quotas/${encodeURIComponent(quota.owner_id)}`,
+    {
+      method: 'PUT',
+      body: JSON.stringify(quota),
+      admin: true,
+    },
+  );
+}
+
+export async function deleteOwnerQuota(ownerId: string): Promise<void> {
+  await request<void>(`/admin/quotas/${encodeURIComponent(ownerId)}`, {
+    method: 'DELETE',
+    admin: true,
+  });
+}
+
+export async function getOwnerUsage(ownerId: string): Promise<OwnerUsage> {
+  return request<OwnerUsage>(
+    `/admin/quotas/${encodeURIComponent(ownerId)}/usage`,
+    { admin: true },
+  );
+}
+
+function auditQueryParams(query: AdminAuditQuery): string {
+  const params = new URLSearchParams();
+  params.set('limit', String(query.limit ?? 100));
+  if (query.actor) params.set('actor', query.actor);
+  if (query.method) params.set('method', query.method);
+  if (query.status) params.set('status', String(query.status));
+  if (query.path) params.set('path', query.path);
+  return params.toString();
+}
+
+export async function listAdminAudit(query: AdminAuditQuery = {}): Promise<AdminAuditRecord[]> {
+  const result = await request<AdminAuditRecord[] | null>(
+    `/admin/audit?${auditQueryParams(query)}`,
+    { admin: true },
+  );
+  return result ?? [];
+}
+
+export async function exportAdminAuditCsv(query: AdminAuditQuery = {}): Promise<string> {
+  const params = new URLSearchParams(auditQueryParams(query));
+  params.set('format', 'csv');
+  return request<string>(`/admin/audit?${params.toString()}`, { admin: true });
 }
 
 // ---------------------------------------------------------------------------

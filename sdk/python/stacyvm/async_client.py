@@ -6,7 +6,7 @@ import httpx
 
 from stacyvm.async_sandbox import AsyncSandbox
 from stacyvm.exceptions import ConnectionError, handle_response
-from stacyvm.models import SandboxInfo
+from stacyvm.models import QuotaSummary, SandboxInfo, SpawnAdmissionDecision
 
 
 class AsyncClient:
@@ -46,6 +46,7 @@ class AsyncClient:
         memory_mb: int | None = None,
         vcpus: int | None = None,
         ttl: str | None = None,
+        owner_id: str | None = None,
         template: str | None = None,
         metadata: dict[str, str] | None = None,
     ) -> AsyncSandbox:
@@ -59,6 +60,8 @@ class AsyncClient:
             body["vcpus"] = vcpus
         if ttl:
             body["ttl"] = ttl
+        if owner_id:
+            body["owner_id"] = owner_id
         if template:
             body["template"] = template
         if metadata:
@@ -72,6 +75,37 @@ class AsyncClient:
         handle_response(resp)
         data = resp.json()
         return AsyncSandbox(self._http, data["id"], info=data)
+
+    async def admission(
+        self,
+        image: str | None = None,
+        provider: str | None = None,
+        memory_mb: int | None = None,
+        vcpus: int | None = None,
+        ttl: str | None = None,
+        owner_id: str | None = None,
+        metadata: dict[str, str] | None = None,
+    ) -> SpawnAdmissionDecision:
+        """Preflight a spawn request without creating a sandbox."""
+        body: dict = {}
+        if image:
+            body["image"] = image
+        if provider:
+            body["provider"] = provider
+        if memory_mb:
+            body["memory_mb"] = memory_mb
+        if vcpus:
+            body["vcpus"] = vcpus
+        if ttl:
+            body["ttl"] = ttl
+        if owner_id:
+            body["owner_id"] = owner_id
+        if metadata:
+            body["metadata"] = metadata
+
+        resp = await self._http.post("/api/v1/sandboxes/admission", json=body)
+        handle_response(resp)
+        return SpawnAdmissionDecision(**resp.json())
 
     async def spawn_template(self, template_name: str) -> AsyncSandbox:
         """Spawn a sandbox from a saved template."""
@@ -122,9 +156,21 @@ class AsyncClient:
         handle_response(resp)
         return resp.json()
 
+    async def quota_summary(self) -> QuotaSummary:
+        """Get redacted quota policy coverage counts."""
+        resp = await self._http.get("/api/v1/quotas/summary")
+        handle_response(resp)
+        return QuotaSummary(**resp.json())
+
     async def health(self) -> dict:
         """Check server health."""
         resp = await self._http.get("/api/v1/health")
+        handle_response(resp)
+        return resp.json()
+
+    async def providers(self) -> list[dict]:
+        """List registered providers and their health status."""
+        resp = await self._http.get("/api/v1/providers")
         handle_response(resp)
         return resp.json()
 

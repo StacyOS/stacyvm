@@ -1,0 +1,120 @@
+---
+title: "Installation"
+description: "Install and run StacyVM locally from a release binary, Docker image, or source checkout."
+---
+
+Use this page to get a StacyVM server running before you follow the quickstart.
+
+## Prerequisites
+
+- Linux is recommended for runtime work. macOS is useful for SDK and docs development, but Docker provider behavior should be certified on Linux before public claims.
+- Docker is required for the default local provider path.
+- Go is required only when building from source.
+
+See [Prerequisites](/docs/getting-started/prerequisites) for the full local, SDK, and production checklist.
+
+## OS-Specific Setup
+
+Use the [Prerequisites OS setup](/docs/getting-started/prerequisites#os-setup) before choosing an installation mode:
+
+- macOS: Docker Desktop plus Go for `make serve`.
+- Windows: WSL 2 with Ubuntu and Docker Desktop WSL integration.
+- Linux: Docker and Go from your distribution package manager.
+- Ubuntu: Docker Engine, Compose plugin, Go, Git, curl, and make.
+
+For individual local development from a source checkout, use the one-command setup:
+
+```bash
+make dev
+```
+
+This checks the host, builds StacyVM, and starts the API server.
+
+You can also use the npm/npx bootstrapper:
+
+```bash
+npx stacyvm-setup@latest \
+  --branch phase-14-worker-identity-hardening
+```
+
+That command can clone the repo, install Node package dependencies, download Go modules, build StacyVM, and start the server. It does not install Docker Desktop or Go for you.
+
+To test the branch directly from GitHub instead of npm, use:
+
+```bash
+npx github:StacyOS/stacyvm#phase-14-worker-identity-hardening stacyvm-setup \
+  --branch phase-14-worker-identity-hardening
+```
+
+## Option 1: Release Binary
+
+Use a signed GitHub release for production-like installs.
+
+```bash
+curl -L -o stacyvm.tar.gz \
+  https://github.com/StacyOS/stacyvm/releases/latest/download/stacyvm_linux_amd64.tar.gz
+tar -xzf stacyvm.tar.gz
+sudo install -m 0755 stacyvm /usr/local/bin/stacyvm
+```
+
+Validate the release artifacts before you install them in production:
+
+```bash
+scripts/post-release-validate.sh v0.14.4
+```
+
+Replace `v0.14.4` with the release tag you plan to deploy.
+
+## Option 2: Docker Compose
+
+The repository includes a production-oriented Docker Compose starting point.
+
+```bash
+cd deploy
+cp .env.example .env
+docker compose up -d
+docker compose logs -f stacyvm
+```
+
+Edit `.env` before exposing the service. Use strong API keys, exact CORS origins, and a persistent data directory.
+
+## Option 3: Source Checkout
+
+Build from source when you are contributing to StacyVM itself.
+
+```bash
+git clone https://github.com/StacyOS/stacyvm.git
+cd stacyvm
+make dev
+```
+
+## Configure Auth
+
+For local experiments you can run without auth. For any shared host, enable auth and pass `X-API-Key` from clients.
+
+```yaml
+auth:
+  enabled: true
+  api_key: "sk_live_REPLACE_ME"
+server:
+  cors_allowed_origins:
+    - "https://your-app.example.com"
+```
+
+## Verify The Host
+
+Run config validation before a deploy:
+
+```bash
+stacyvm config lint --production --file deploy/stacyvm.production.yaml
+```
+
+Run live host diagnostics after the service is installed:
+
+```bash
+stacyvm doctor --production
+```
+
+## Continue
+
+Once the server responds, follow the [quickstart](/docs/getting-started/quickstart). If setup fails, use the [troubleshooting guide](/docs/getting-started/prerequisites#troubleshooting).

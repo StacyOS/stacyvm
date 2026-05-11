@@ -2,8 +2,15 @@ package providers
 
 import (
 	"context"
+	"fmt"
 	"io"
+	"strings"
 	"time"
+)
+
+const (
+	ExecModeShell = "shell"
+	ExecModeArgv  = "argv"
 )
 
 type SpawnOptions struct {
@@ -17,6 +24,7 @@ type SpawnOptions struct {
 type ExecOptions struct {
 	Command string
 	Args    []string
+	Mode    string
 	Env     map[string]string
 	WorkDir string
 }
@@ -45,7 +53,21 @@ type SandboxStatus struct {
 	State string
 }
 
+// RuntimeSandbox describes a provider-owned runtime discovered outside the
+// orchestrator's in-memory state, usually during startup reconciliation.
+type RuntimeSandbox struct {
+	ID        string
+	State     string
+	Provider  string
+	Image     string
+	CreatedAt time.Time
+	Metadata  map[string]string
+}
+
 // Provider defines the interface for sandbox execution backends.
+//
+// Implementations must satisfy the behavior documented in
+// docs/provider-contract.md and exercised by provider_conformance_test.go.
 type Provider interface {
 	// Name returns the unique provider identifier.
 	Name() string
@@ -107,4 +129,44 @@ type SnapshotSummary struct {
 // to expose their cached snapshots.
 type SnapshotLister interface {
 	ListSnapshots() []SnapshotSummary
+}
+
+// RuntimeSandboxLister is implemented by providers that can enumerate
+// already-running runtimes for startup reconciliation.
+type RuntimeSandboxLister interface {
+	ListRuntimeSandboxes(ctx context.Context) ([]RuntimeSandbox, error)
+}
+
+func normalizeExecMode(mode string) (string, error) {
+	switch strings.TrimSpace(mode) {
+	case "", ExecModeShell:
+		return ExecModeShell, nil
+	case ExecModeArgv:
+		return ExecModeArgv, nil
+	default:
+		return "", fmt.Errorf("unsupported exec mode %q", mode)
+	}
+}
+
+func shellQuoteArg(s string) string {
+	return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'"
+}
+
+func buildExecCommand(opts ExecOptions) ([]string, error) {
+	mode, err := normalizeExecMode(opts.Mode)
+	if err != nil {
+		return nil, err
+	}
+	if mode == ExecModeArgv {
+		if strings.TrimSpace(opts.Command) == "" {
+			return nil, fmt.Errorf("argv exec mode requires command")
+		}
+		return append([]string{opts.Command}, opts.Args...), nil
+	}
+
+	shellCmd := opts.Command
+	for _, arg := range opts.Args {
+		shellCmd += " " + shellQuoteArg(arg)
+	}
+	return []string{"sh", "-c", shellCmd}, nil
 }

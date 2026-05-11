@@ -38,7 +38,7 @@ type Response struct {
 // StreamResponse is sent from agent to host for exec_stream, one per chunk.
 type StreamResponse struct {
 	ID       string `json:"id"`
-	Stream   string `json:"stream,omitempty"`   // "stdout" or "stderr"
+	Stream   string `json:"stream,omitempty"` // "stdout" or "stderr"
 	Data     string `json:"data,omitempty"`
 	Error    string `json:"error,omitempty"`
 	Done     bool   `json:"done,omitempty"`
@@ -54,6 +54,7 @@ type PingResult struct {
 type ExecParams struct {
 	Command string            `json:"command"`
 	Args    []string          `json:"args,omitempty"`
+	Mode    string            `json:"mode,omitempty"`
 	WorkDir string            `json:"work_dir,omitempty"`
 	Env     map[string]string `json:"env,omitempty"`
 }

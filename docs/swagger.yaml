@@ -1,13 +1,36 @@
 basePath: /api/v1
 definitions:
-  github_com_stacyvm-dev_stacyvm_internal_httputil.APIError:
+  github_com_StacyOs_stacyvm_internal_api_middleware.RateLimitStats:
+    properties:
+      active_buckets:
+        type: integer
+      allowed_total:
+        type: integer
+      bucket_ttl:
+        type: string
+      burst:
+        type: integer
+      cleanup_interval:
+        type: string
+      enabled:
+        type: boolean
+      evicted_total:
+        type: integer
+      key_by:
+        type: string
+      limited_total:
+        type: integer
+      requests_per_minute:
+        type: integer
+    type: object
+  github_com_StacyOs_stacyvm_internal_httputil.APIError:
     properties:
       code:
-        $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.ErrorCode'
+        $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.ErrorCode'
       message:
         type: string
     type: object
-  github_com_stacyvm-dev_stacyvm_internal_httputil.ErrorCode:
+  github_com_StacyOs_stacyvm_internal_httputil.ErrorCode:
     enum:
     - NOT_FOUND
     - BAD_REQUEST
@@ -15,6 +38,8 @@ definitions:
     - UNAUTHORIZED
     - CONFLICT
     - UNAVAILABLE
+    - TIMEOUT
+    - RESOURCE_LIMIT
     type: string
     x-enum-varnames:
     - CodeNotFound
@@ -23,7 +48,9 @@ definitions:
     - CodeUnauth
     - CodeConflict
     - CodeUnavailable
-  github_com_stacyvm-dev_stacyvm_internal_orchestrator.Event:
+    - CodeTimeout
+    - CodeResourceLimit
+  github_com_StacyOs_stacyvm_internal_orchestrator.Event:
     properties:
       data:
         items:
@@ -36,9 +63,18 @@ definitions:
       timestamp:
         type: string
       type:
-        $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_orchestrator.EventType'
+        $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.EventType'
     type: object
-  github_com_stacyvm-dev_stacyvm_internal_orchestrator.EventType:
+  github_com_StacyOs_stacyvm_internal_orchestrator.EventBusStats:
+    properties:
+      events_total:
+        type: integer
+      history_size:
+        type: integer
+      subscribers:
+        type: integer
+    type: object
+  github_com_StacyOs_stacyvm_internal_orchestrator.EventType:
     enum:
     - sandbox.created
     - sandbox.running
@@ -46,8 +82,19 @@ definitions:
     - sandbox.error
     - exec.started
     - exec.completed
+    - exec.failed
+    - exec.timeout
     - file.written
     - file.read
+    - operation.failed
+    - resource.limit
+    - provider.failed
+    - reconcile.action
+    - spawn.queued
+    - spawn.dequeued
+    - spawn.queue_timeout
+    - quota.saved
+    - quota.deleted
     type: string
     x-enum-varnames:
     - EventSandboxCreated
@@ -56,9 +103,20 @@ definitions:
     - EventSandboxError
     - EventExecStarted
     - EventExecCompleted
+    - EventExecFailed
+    - EventExecTimeout
     - EventFileWritten
     - EventFileRead
-  github_com_stacyvm-dev_stacyvm_internal_orchestrator.ExecRequest:
+    - EventOperationFailed
+    - EventResourceLimit
+    - EventProviderFailed
+    - EventReconcileAction
+    - EventSpawnQueued
+    - EventSpawnDequeued
+    - EventSpawnQueueTimeout
+    - EventQuotaSaved
+    - EventQuotaDeleted
+  github_com_StacyOs_stacyvm_internal_orchestrator.ExecRequest:
     properties:
       args:
         items:
@@ -70,6 +128,8 @@ definitions:
         additionalProperties:
           type: string
         type: object
+      mode:
+        type: string
       stream:
         type: boolean
       timeout:
@@ -77,7 +137,7 @@ definitions:
       workdir:
         type: string
     type: object
-  github_com_stacyvm-dev_stacyvm_internal_orchestrator.ExecResult:
+  github_com_StacyOs_stacyvm_internal_orchestrator.ExecResult:
     properties:
       duration:
         type: string
@@ -88,7 +148,7 @@ definitions:
       stdout:
         type: string
     type: object
-  github_com_stacyvm-dev_stacyvm_internal_orchestrator.FileInfo:
+  github_com_StacyOs_stacyvm_internal_orchestrator.FileInfo:
     properties:
       is_dir:
         type: boolean
@@ -101,7 +161,7 @@ definitions:
       size:
         type: integer
     type: object
-  github_com_stacyvm-dev_stacyvm_internal_orchestrator.FileWriteRequest:
+  github_com_StacyOs_stacyvm_internal_orchestrator.FileWriteRequest:
     properties:
       content:
         type: string
@@ -110,7 +170,92 @@ definitions:
       path:
         type: string
     type: object
-  github_com_stacyvm-dev_stacyvm_internal_orchestrator.Sandbox:
+  github_com_StacyOs_stacyvm_internal_orchestrator.OperationMetrics:
+    properties:
+      failure_total:
+        type: integer
+      last_error:
+        type: string
+      last_observed_unix:
+        type: integer
+      latency_avg_ms:
+        type: integer
+      latency_count:
+        type: integer
+      latency_max_ms:
+        type: integer
+      latency_min_ms:
+        type: integer
+      latency_total_ms:
+        type: integer
+      operation:
+        type: string
+      provider:
+        type: string
+      success_total:
+        type: integer
+    type: object
+  github_com_StacyOs_stacyvm_internal_orchestrator.OperationalLimitsInfo:
+    properties:
+      default_exec_timeout:
+        type: string
+      max_exec_timeout:
+        type: string
+      max_sandboxes:
+        type: integer
+      max_sandboxes_per_owner:
+        type: integer
+      max_spawn_queue:
+        type: integer
+      max_ttl:
+        type: string
+      spawn_overflow:
+        type: string
+      spawn_queue_timeout:
+        type: string
+    type: object
+  github_com_StacyOs_stacyvm_internal_orchestrator.OwnerQuota:
+    properties:
+      created_at:
+        type: string
+      max_exec_timeout:
+        type: string
+      max_sandboxes:
+        type: integer
+      max_ttl:
+        type: string
+      owner_id:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  github_com_StacyOs_stacyvm_internal_orchestrator.OwnerUsage:
+    properties:
+      active_sandboxes:
+        type: integer
+      max_exec_timeout:
+        type: string
+      max_sandboxes:
+        type: integer
+      max_ttl:
+        type: string
+      owner_id:
+        type: string
+      quota_configured:
+        type: boolean
+    type: object
+  github_com_StacyOs_stacyvm_internal_orchestrator.QuotaSummary:
+    properties:
+      total:
+        type: integer
+      with_max_exec_timeout:
+        type: integer
+      with_max_sandboxes:
+        type: integer
+      with_max_ttl:
+        type: integer
+    type: object
+  github_com_StacyOs_stacyvm_internal_orchestrator.Sandbox:
     properties:
       created_at:
         type: string
@@ -126,18 +271,30 @@ definitions:
         additionalProperties:
           type: string
         type: object
+      owner_id:
+        type: string
+      preview_domain:
+        type: string
       provider:
         type: string
       state:
-        $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_orchestrator.SandboxState'
+        $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.SandboxState'
+      tenant_id:
+        type: string
       vcpus:
         type: integer
+      vm_id:
+        type: string
+      worker_id:
+        type: string
     type: object
-  github_com_stacyvm-dev_stacyvm_internal_orchestrator.SandboxState:
+  github_com_StacyOs_stacyvm_internal_orchestrator.SandboxState:
     enum:
     - creating
     - running
     - idle
+    - unhealthy
+    - expired
     - destroyed
     - error
     type: string
@@ -145,16 +302,82 @@ definitions:
     - StateCreating
     - StateRunning
     - StateIdle
+    - StateUnhealthy
+    - StateExpired
     - StateDestroyed
     - StateError
-  github_com_stacyvm-dev_stacyvm_internal_orchestrator.SecretConfig:
+  github_com_StacyOs_stacyvm_internal_orchestrator.SchedulerStatus:
+    properties:
+      admission_control:
+        type: string
+      eligible_workers:
+        type: integer
+      max_spawn_queue:
+        type: integer
+      selected_worker_id:
+        type: string
+      spawn_dequeued_total:
+        type: integer
+      spawn_overflow:
+        type: string
+      spawn_queue_depth:
+        type: integer
+      spawn_queue_timeout:
+        type: string
+      spawn_queue_timeouts:
+        type: integer
+      spawn_queue_wait_avg:
+        type: string
+      spawn_queue_wait_avg_ms:
+        type: integer
+      spawn_queue_wait_count:
+        type: integer
+      spawn_queue_wait_max:
+        type: string
+      spawn_queue_wait_max_ms:
+        type: integer
+      spawn_queue_wait_total:
+        type: string
+      spawn_queue_wait_total_ms:
+        type: integer
+      spawn_queued_total:
+        type: integer
+      worker_id:
+        type: string
+    type: object
+  github_com_StacyOs_stacyvm_internal_orchestrator.SecretConfig:
     properties:
       inject_at:
         type: string
       name:
         type: string
     type: object
-  github_com_stacyvm-dev_stacyvm_internal_orchestrator.SpawnRequest:
+  github_com_StacyOs_stacyvm_internal_orchestrator.SpawnAdmissionDecision:
+    properties:
+      active_owner_sandboxes:
+        type: integer
+      active_sandboxes:
+        type: integer
+      allowed:
+        type: boolean
+      eligible_workers:
+        type: integer
+      max_owner_sandboxes:
+        type: integer
+      max_sandboxes:
+        type: integer
+      max_ttl:
+        type: string
+      queueable:
+        type: boolean
+      reason:
+        type: string
+      selected_worker_id:
+        type: string
+      worker_reason:
+        type: string
+    type: object
+  github_com_StacyOs_stacyvm_internal_orchestrator.SpawnRequest:
     properties:
       image:
         type: string
@@ -164,16 +387,20 @@ definitions:
         additionalProperties:
           type: string
         type: object
+      owner_id:
+        type: string
       provider:
         type: string
       template:
+        type: string
+      tenant_id:
         type: string
       ttl:
         type: string
       vcpus:
         type: integer
     type: object
-  github_com_stacyvm-dev_stacyvm_internal_orchestrator.Template:
+  github_com_StacyOs_stacyvm_internal_orchestrator.Template:
     properties:
       allowed_hosts:
         items:
@@ -199,7 +426,7 @@ definitions:
         type: integer
       secrets:
         items:
-          $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_orchestrator.SecretConfig'
+          $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.SecretConfig'
         type: array
       setup:
         items:
@@ -211,6 +438,101 @@ definitions:
         type: string
       version:
         type: integer
+    type: object
+  github_com_StacyOs_stacyvm_internal_providers.SnapshotSummary:
+    properties:
+      created_at:
+        type: string
+      image:
+        type: string
+      provider:
+        type: string
+    type: object
+  internal_api_routes.AdminAuditResponse:
+    properties:
+      actor:
+        example: admin
+        type: string
+      created_at:
+        example: "2026-05-08T10:30:00Z"
+        type: string
+      duration_ms:
+        example: 4
+        type: integer
+      id:
+        example: 42
+        type: integer
+      method:
+        example: PUT
+        type: string
+      path:
+        example: /api/v1/admin/quotas/owner-a
+        type: string
+      remote_addr:
+        example: 127.0.0.1
+        type: string
+      request_id:
+        example: req-abc123
+        type: string
+      status:
+        example: 200
+        type: integer
+      tenant_id:
+        example: tenant-acme
+        type: string
+      user_agent:
+        example: stacyvm-web
+        type: string
+    type: object
+  internal_api_routes.DiagnosticsResponse:
+    properties:
+      build:
+        additionalProperties: true
+        type: object
+      events:
+        $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.EventBusStats'
+      generated_at:
+        example: "2026-05-08T10:30:00Z"
+        type: string
+      leases:
+        additionalProperties: true
+        type: object
+      limits:
+        $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.OperationalLimitsInfo'
+      operations:
+        items:
+          $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.OperationMetrics'
+        type: array
+      process:
+        additionalProperties: true
+        type: object
+      providers:
+        items:
+          $ref: '#/definitions/internal_api_routes.ProviderHealth'
+        type: array
+      quotas:
+        $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.QuotaSummary'
+      rate_limit:
+        $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_api_middleware.RateLimitStats'
+      redactions:
+        items:
+          type: string
+        type: array
+      remediation:
+        additionalProperties:
+          type: string
+        type: object
+      sandboxes:
+        additionalProperties: true
+        type: object
+      scheduler:
+        $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.SchedulerStatus'
+      store:
+        additionalProperties: true
+        type: object
+      workers:
+        additionalProperties: true
+        type: object
     type: object
   internal_api_routes.HealthResponse:
     properties:
@@ -251,6 +573,8 @@ definitions:
       default:
         example: true
         type: boolean
+      health:
+        $ref: '#/definitions/internal_api_routes.ProviderHealth'
       healthy:
         example: true
         type: boolean
@@ -261,23 +585,93 @@ definitions:
         example: 3
         type: integer
     type: object
-  internal_api_routes.ProviderInfo:
+  internal_api_routes.ProviderHealth:
     properties:
+      capabilities:
+        example:
+        - spawn
+        - exec
+        - files
+        items:
+          type: string
+        type: array
       default:
         example: true
         type: boolean
+      error:
+        example: health check returned false
+        type: string
       healthy:
         example: true
         type: boolean
+      last_checked:
+        example: "2026-05-08T10:30:00Z"
+        type: string
+      latency_ms:
+        example: 3
+        type: integer
+      name:
+        example: docker
+        type: string
+      runtime_count:
+        example: 2
+        type: integer
+    type: object
+  internal_api_routes.ProviderInfo:
+    properties:
+      capabilities:
+        items:
+          type: string
+        type: array
+      default:
+        example: true
+        type: boolean
+      error:
+        example: health check returned false
+        type: string
+      healthy:
+        example: true
+        type: boolean
+      last_checked:
+        example: "2026-05-08T10:30:00Z"
+        type: string
+      latency_ms:
+        example: 3
+        type: integer
       name:
         example: firecracker
         type: string
+      runtime_count:
+        example: 2
+        type: integer
     type: object
   internal_api_routes.PruneResponse:
     properties:
       pruned:
         example: 3
         type: integer
+    type: object
+  internal_api_routes.ReadinessResponse:
+    properties:
+      providers:
+        items:
+          $ref: '#/definitions/internal_api_routes.ProviderHealth'
+        type: array
+      ready_providers:
+        example: 1
+        type: integer
+      status:
+        example: ready
+        type: string
+      total_providers:
+        example: 2
+        type: integer
+      uptime:
+        example: 2h30m15s
+        type: string
+      version:
+        example: 1.0.0
+        type: string
     type: object
   internal_api_routes.StatusResponse:
     properties:
@@ -294,6 +688,61 @@ definitions:
         example: 30m
         type: string
     type: object
+  internal_api_routes.WorkerHeartbeatRequest:
+    properties:
+      capabilities:
+        items:
+          type: string
+        type: array
+      capacity:
+        additionalProperties: true
+        type: object
+      hostname:
+        example: stacyvm-host-1
+        type: string
+      providers:
+        items:
+          type: string
+        type: array
+      status:
+        example: online
+        type: string
+    type: object
+  internal_api_routes.WorkerResponse:
+    properties:
+      capabilities:
+        items:
+          type: string
+        type: array
+      capacity:
+        additionalProperties: true
+        type: object
+      created_at:
+        example: "2026-05-09T10:00:00Z"
+        type: string
+      hostname:
+        example: stacyvm-host-1
+        type: string
+      id:
+        example: worker-local
+        type: string
+      last_heartbeat:
+        example: "2026-05-09T10:30:00Z"
+        type: string
+      providers:
+        items:
+          type: string
+        type: array
+      stale:
+        example: false
+        type: boolean
+      status:
+        example: online
+        type: string
+      updated_at:
+        example: "2026-05-09T10:30:00Z"
+        type: string
+    type: object
 host: localhost:7423
 info:
   contact: {}
@@ -301,6 +750,64 @@ info:
   title: StacyVM API
   version: "1.0"
 paths:
+  /admin/audit:
+    get:
+      description: Return recent redacted admin route access records
+      parameters:
+      - description: Maximum number of records, capped at 500
+        in: query
+        name: limit
+        type: integer
+      - description: Actor exact match
+        in: query
+        name: actor
+        type: string
+      - description: HTTP method exact match
+        in: query
+        name: method
+        type: string
+      - description: HTTP status exact match
+        in: query
+        name: status
+        type: integer
+      - description: Path substring match
+        in: query
+        name: path
+        type: string
+      - description: 'Response format: json or csv'
+        in: query
+        name: format
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/internal_api_routes.AdminAuditResponse'
+            type: array
+      security:
+      - ApiKeyAuth: []
+      summary: List admin audit logs
+      tags:
+      - admin
+  /diagnostics:
+    get:
+      description: Return redacted build, store, provider, sandbox, event, and operation
+        diagnostics
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_routes.DiagnosticsResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Get diagnostics
+      tags:
+      - system
   /events:
     get:
       description: Open an SSE stream for real-time sandbox and system events
@@ -310,7 +817,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_orchestrator.Event'
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.Event'
       security:
       - ApiKeyAuth: []
       summary: Subscribe to events
@@ -331,6 +838,21 @@ paths:
       summary: Health check
       tags:
       - system
+  /live:
+    get:
+      description: Return whether the StacyVM API process is alive
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_routes.HealthResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Liveness check
+      tags:
+      - system
   /metrics:
     get:
       description: Return runtime metrics including sandbox count, goroutines, and
@@ -345,6 +867,22 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: Get metrics
+      tags:
+      - system
+  /metrics/prometheus:
+    get:
+      description: Return runtime, provider, sandbox, event, and operation metrics
+        in Prometheus text format
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: OK
+          schema:
+            type: string
+      security:
+      - ApiKeyAuth: []
+      summary: Get Prometheus metrics
       tags:
       - system
   /providers:
@@ -383,7 +921,7 @@ paths:
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError'
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError'
       security:
       - ApiKeyAuth: []
       summary: Get provider details
@@ -406,6 +944,155 @@ paths:
       summary: Test providers
       tags:
       - providers
+  /quotas:
+    get:
+      description: Return all persisted owner quota overrides
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.OwnerQuota'
+            type: array
+      security:
+      - ApiKeyAuth: []
+      summary: List owner quotas
+      tags:
+      - quotas
+  /quotas/{ownerID}:
+    delete:
+      description: Delete the quota override for an owner
+      parameters:
+      - description: Owner ID
+        in: path
+        name: ownerID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_routes.StatusResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError'
+      security:
+      - ApiKeyAuth: []
+      summary: Delete owner quota
+      tags:
+      - quotas
+    get:
+      description: Return the persisted quota override for an owner
+      parameters:
+      - description: Owner ID
+        in: path
+        name: ownerID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.OwnerQuota'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError'
+      security:
+      - ApiKeyAuth: []
+      summary: Get owner quota
+      tags:
+      - quotas
+    put:
+      consumes:
+      - application/json
+      description: Create or update quota overrides for an owner
+      parameters:
+      - description: Owner ID
+        in: path
+        name: ownerID
+        required: true
+        type: string
+      - description: Quota request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.OwnerQuota'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.OwnerQuota'
+      security:
+      - ApiKeyAuth: []
+      summary: Save owner quota
+      tags:
+      - quotas
+  /quotas/{ownerID}/usage:
+    get:
+      description: Return active sandbox usage and effective quota for an owner
+      parameters:
+      - description: Owner ID
+        in: path
+        name: ownerID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.OwnerUsage'
+      security:
+      - ApiKeyAuth: []
+      summary: Get owner quota usage
+      tags:
+      - quotas
+  /quotas/summary:
+    get:
+      description: Return non-identifying counts for persisted owner quota overrides
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.QuotaSummary'
+      security:
+      - ApiKeyAuth: []
+      summary: Get quota summary
+      tags:
+      - quotas
+  /ready:
+    get:
+      description: Return whether the API is ready to serve sandbox traffic
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_routes.ReadinessResponse'
+        "503":
+          description: Service Unavailable
+          schema:
+            $ref: '#/definitions/internal_api_routes.ReadinessResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Readiness check
+      tags:
+      - system
   /sandboxes:
     delete:
       description: Destroy all expired sandboxes and return the count
@@ -419,7 +1106,7 @@ paths:
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError'
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError'
       security:
       - ApiKeyAuth: []
       summary: Prune sandboxes
@@ -434,12 +1121,12 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_orchestrator.Sandbox'
+              $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.Sandbox'
             type: array
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError'
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError'
       security:
       - ApiKeyAuth: []
       summary: List sandboxes
@@ -455,22 +1142,26 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_orchestrator.SpawnRequest'
+          $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.SpawnRequest'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_orchestrator.Sandbox'
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.Sandbox'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError'
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError'
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError'
       security:
       - ApiKeyAuth: []
       summary: Create a sandbox
@@ -495,11 +1186,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError'
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError'
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError'
       security:
       - ApiKeyAuth: []
       summary: Destroy a sandbox
@@ -519,15 +1210,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_orchestrator.Sandbox'
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.Sandbox'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError'
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError'
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError'
       security:
       - ApiKeyAuth: []
       summary: Get a sandbox
@@ -549,22 +1240,22 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_orchestrator.ExecRequest'
+          $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.ExecRequest'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_orchestrator.ExecResult'
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.ExecResult'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError'
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError'
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError'
       security:
       - ApiKeyAuth: []
       summary: Execute a command
@@ -588,6 +1279,50 @@ paths:
       security:
       - ApiKeyAuth: []
       summary: Execute via WebSocket
+      tags:
+      - sandboxes
+  /sandboxes/{sandboxID}/extend:
+    post:
+      consumes:
+      - application/json
+      description: Add additional time to a sandbox's expiration
+      parameters:
+      - description: Sandbox ID
+        in: path
+        name: sandboxID
+        required: true
+        type: string
+      - description: TTL extension
+        in: body
+        name: request
+        required: true
+        schema:
+          properties:
+            ttl:
+              type: string
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.Sandbox'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError'
+      security:
+      - ApiKeyAuth: []
+      summary: Extend sandbox TTL
       tags:
       - sandboxes
   /sandboxes/{sandboxID}/files:
@@ -614,15 +1349,15 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError'
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError'
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError'
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError'
       security:
       - ApiKeyAuth: []
       summary: Read a file
@@ -643,7 +1378,7 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_orchestrator.FileWriteRequest'
+          $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.FileWriteRequest'
       produces:
       - application/json
       responses:
@@ -654,15 +1389,15 @@ paths:
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError'
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError'
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError'
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError'
       security:
       - ApiKeyAuth: []
       summary: Write a file
@@ -688,16 +1423,16 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_orchestrator.FileInfo'
+              $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.FileInfo'
             type: array
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError'
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError'
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError'
       security:
       - ApiKeyAuth: []
       summary: List files
@@ -728,16 +1463,66 @@ paths:
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError'
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError'
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError'
       security:
       - ApiKeyAuth: []
       summary: Get console logs
       tags:
       - sandboxes
+  /sandboxes/admission:
+    post:
+      consumes:
+      - application/json
+      description: Return whether a spawn request would be allowed, queued, or denied
+        by quota and scheduler limits
+      parameters:
+      - description: Spawn request
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.SpawnRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.SpawnAdmissionDecision'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError'
+      security:
+      - ApiKeyAuth: []
+      summary: Evaluate spawn admission
+      tags:
+      - sandboxes
+  /snapshots:
+    get:
+      description: Return all pre-built VM snapshots available for fast restore
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_providers.SnapshotSummary'
+            type: array
+      security:
+      - ApiKeyAuth: []
+      summary: List snapshots
+      tags:
+      - snapshots
   /templates:
     get:
       description: Return all registered templates
@@ -748,12 +1533,12 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_orchestrator.Template'
+              $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.Template'
             type: array
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError'
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError'
       security:
       - ApiKeyAuth: []
       summary: List templates
@@ -769,26 +1554,26 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_orchestrator.Template'
+          $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.Template'
       produces:
       - application/json
       responses:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_orchestrator.Template'
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.Template'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError'
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError'
         "409":
           description: Conflict
           schema:
-            $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError'
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError'
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError'
       security:
       - ApiKeyAuth: []
       summary: Create a template
@@ -813,11 +1598,11 @@ paths:
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError'
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError'
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError'
       security:
       - ApiKeyAuth: []
       summary: Delete a template
@@ -837,15 +1622,15 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_orchestrator.Template'
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.Template'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError'
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError'
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError'
       security:
       - ApiKeyAuth: []
       summary: Get a template
@@ -866,26 +1651,26 @@ paths:
         name: request
         required: true
         schema:
-          $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_orchestrator.Template'
+          $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.Template'
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_orchestrator.Template'
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.Template'
         "400":
           description: Bad Request
           schema:
-            $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError'
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError'
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError'
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError'
       security:
       - ApiKeyAuth: []
       summary: Update a template
@@ -914,20 +1699,113 @@ paths:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_orchestrator.Sandbox'
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_orchestrator.Sandbox'
         "404":
           description: Not Found
           schema:
-            $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError'
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError'
         "500":
           description: Internal Server Error
           schema:
-            $ref: '#/definitions/github_com_stacyvm-dev_stacyvm_internal_httputil.APIError'
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError'
       security:
       - ApiKeyAuth: []
       summary: Spawn from template
       tags:
       - templates
+  /workers:
+    get:
+      description: Return worker registry records and heartbeat state
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/internal_api_routes.WorkerResponse'
+            type: array
+      security:
+      - ApiKeyAuth: []
+      summary: List workers
+      tags:
+      - workers
+  /workers/{workerID}:
+    delete:
+      description: Remove a worker registry record
+      parameters:
+      - description: Worker ID
+        in: path
+        name: workerID
+        required: true
+        type: string
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_routes.StatusResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError'
+      security:
+      - ApiKeyAuth: []
+      summary: Delete worker
+      tags:
+      - workers
+    get:
+      description: Return one worker registry record
+      parameters:
+      - description: Worker ID
+        in: path
+        name: workerID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_routes.WorkerResponse'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError'
+      security:
+      - ApiKeyAuth: []
+      summary: Get worker
+      tags:
+      - workers
+  /workers/{workerID}/heartbeat:
+    post:
+      consumes:
+      - application/json
+      description: Create or update worker registry state for a worker
+      parameters:
+      - description: Worker ID
+        in: path
+        name: workerID
+        required: true
+        type: string
+      - description: Worker heartbeat
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/internal_api_routes.WorkerHeartbeatRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_routes.WorkerResponse'
+      security:
+      - ApiKeyAuth: []
+      summary: Heartbeat worker
+      tags:
+      - workers
 securityDefinitions:
   ApiKeyAuth:
     in: header

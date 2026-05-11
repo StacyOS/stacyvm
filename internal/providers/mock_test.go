@@ -22,6 +22,13 @@ func TestMockProvider_Healthy(t *testing.T) {
 	}
 }
 
+func TestMockProvider_Conformance(t *testing.T) {
+	runProviderConformance(t, func(t *testing.T) Provider {
+		t.Helper()
+		return NewMockProvider()
+	})
+}
+
 func TestMockProvider_Spawn(t *testing.T) {
 	p := NewMockProvider()
 	ctx := context.Background()
@@ -65,6 +72,48 @@ func TestMockProvider_Exec(t *testing.T) {
 	}
 	if strings.TrimSpace(result.Stdout) != "hello world" {
 		t.Fatalf("expected stdout 'hello world', got %q", result.Stdout)
+	}
+}
+
+func TestMockProvider_ExecArgvModeDoesNotUseShell(t *testing.T) {
+	p := NewMockProvider()
+	ctx := context.Background()
+
+	id, err := p.Spawn(ctx, SpawnOptions{Image: "alpine:latest"})
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	defer p.Destroy(ctx, id)
+
+	result, err := p.Exec(ctx, id, ExecOptions{
+		Mode:    ExecModeArgv,
+		Command: "printf",
+		Args:    []string{"%s", "$HOME && echo injected"},
+	})
+	if err != nil {
+		t.Fatalf("exec: %v", err)
+	}
+	if got := result.Stdout; got != "$HOME && echo injected" {
+		t.Fatalf("stdout = %q, want literal argv payload", got)
+	}
+}
+
+func TestMockProvider_ExecRejectsUnsupportedMode(t *testing.T) {
+	p := NewMockProvider()
+	ctx := context.Background()
+
+	id, err := p.Spawn(ctx, SpawnOptions{Image: "alpine:latest"})
+	if err != nil {
+		t.Fatalf("spawn: %v", err)
+	}
+	defer p.Destroy(ctx, id)
+
+	_, err = p.Exec(ctx, id, ExecOptions{
+		Mode:    "raw",
+		Command: "echo nope",
+	})
+	if err == nil {
+		t.Fatal("expected unsupported mode error")
 	}
 }
 

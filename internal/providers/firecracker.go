@@ -37,7 +37,7 @@ type FirecrackerProvider struct {
 
 // snapshotInfo holds paths to a base snapshot's files.
 type snapshotInfo struct {
-	dir        string // snapshot directory
+	dir         string // snapshot directory
 	vmstatePath string // CPU/device state
 	memoryPath  string // full RAM snapshot
 	rootfsPath  string // clean baseline rootfs
@@ -489,7 +489,7 @@ func (p *FirecrackerProvider) Spawn(ctx context.Context, opts SpawnOptions) (str
 
 	// Machine config.
 	if err := api.put(ctx, "/machine-config", map[string]any{
-		"vcpu_count":  vcpus,
+		"vcpu_count":   vcpus,
 		"mem_size_mib": memMB,
 	}); err != nil {
 		cmd.Process.Kill()
@@ -595,7 +595,7 @@ func (p *FirecrackerProvider) getVM(sandboxID string) (*vmInstance, error) {
 	defer p.mu.RUnlock()
 	vm, ok := p.vms[sandboxID]
 	if !ok {
-		return nil, fmt.Errorf("sandbox %q not found", sandboxID)
+		return nil, SandboxNotFoundError(sandboxID)
 	}
 	return vm, nil
 }
@@ -609,6 +609,7 @@ func (p *FirecrackerProvider) Exec(ctx context.Context, sandboxID string, opts E
 	params, _ := agentproto.MarshalParams(&agentproto.ExecParams{
 		Command: opts.Command,
 		Args:    opts.Args,
+		Mode:    opts.Mode,
 		WorkDir: opts.WorkDir,
 		Env:     opts.Env,
 	})
@@ -646,6 +647,7 @@ func (p *FirecrackerProvider) ExecStream(ctx context.Context, sandboxID string, 
 	params, _ := agentproto.MarshalParams(&agentproto.ExecParams{
 		Command: opts.Command,
 		Args:    opts.Args,
+		Mode:    opts.Mode,
 		WorkDir: opts.WorkDir,
 		Env:     opts.Env,
 	})
@@ -665,13 +667,33 @@ func (p *FirecrackerProvider) ExecStream(ctx context.Context, sandboxID string, 
 	go func() {
 		defer vm.connMu.Unlock()
 		defer close(ch)
+		defer vm.conn.SetReadDeadline(time.Time{}) //nolint:errcheck
 		for {
+			if deadline, ok := ctx.Deadline(); ok {
+				_ = vm.conn.SetReadDeadline(deadline)
+			}
 			sresp, err := agentproto.ReadStreamResponse(vm.conn)
 			if err != nil {
+				if ctx.Err() == context.DeadlineExceeded {
+					select {
+					case ch <- StreamChunk{Stream: "stderr", Data: ExecTimeoutError(sandboxID).Error()}:
+					default:
+					}
+				}
 				return
 			}
 			if sresp.Data != "" {
-				ch <- StreamChunk{Stream: sresp.Stream, Data: sresp.Data}
+				select {
+				case ch <- StreamChunk{Stream: sresp.Stream, Data: sresp.Data}:
+				case <-ctx.Done():
+					if ctx.Err() == context.DeadlineExceeded {
+						select {
+						case ch <- StreamChunk{Stream: "stderr", Data: ExecTimeoutError(sandboxID).Error()}:
+						default:
+						}
+					}
+					return
+				}
 			}
 			if sresp.Done {
 				return
@@ -928,7 +950,7 @@ func (p *FirecrackerProvider) Destroy(ctx context.Context, sandboxID string) err
 	vm, ok := p.vms[sandboxID]
 	if !ok {
 		p.mu.Unlock()
-		return fmt.Errorf("sandbox %q not found", sandboxID)
+		return SandboxNotFoundError(sandboxID)
 	}
 	delete(p.vms, sandboxID)
 	p.mu.Unlock()
@@ -962,7 +984,7 @@ func (p *FirecrackerProvider) ConsoleLog(ctx context.Context, sandboxID string, 
 	vm, ok := p.vms[sandboxID]
 	p.mu.RUnlock()
 	if !ok {
-		return nil, fmt.Errorf("sandbox %q not found", sandboxID)
+		return nil, SandboxNotFoundError(sandboxID)
 	}
 	return vm.consoleBuf.Lines(lines), nil
 }
@@ -1067,7 +1089,7 @@ var syscall0 = os.Signal(signalZero(0))
 
 type signalZero int
 
-func (signalZero) Signal() {}
+func (signalZero) Signal()        {}
 func (signalZero) String() string { return "signal 0" }
 
 func generateRequestID() string {

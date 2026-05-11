@@ -1,6 +1,7 @@
 .PHONY: build build-agent build-android build-agent-arm64 test lint clean serve dev release-build release-build-all
 
 VERSION ?= $(shell git describe --tags --always 2>/dev/null || echo dev)
+DIST_DIR ?= dist
 
 # Build the server/CLI binary
 build:
@@ -37,10 +38,14 @@ web:
 serve: build
 	./stacyvm serve
 
+# Check local prerequisites, build, and start a development server
+dev:
+	./scripts/dev.sh
+
 # Clean build artifacts
 clean:
 	rm -f stacyvm stacyvm-agent
-	rm -rf bin/ web/dist/
+	rm -rf bin/ web/dist/ $(DIST_DIR)/
 
 # Run go vet
 lint:
@@ -48,12 +53,13 @@ lint:
 
 # Build static release binaries + checksums (amd64 only)
 release-build:
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.version=$(VERSION)" -o stacyvm-linux-amd64 ./cmd/stacyvm
-	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o stacyvm-agent-linux-amd64 ./cmd/stacyvm-agent
-	sha256sum stacyvm-linux-amd64 stacyvm-agent-linux-amd64 > checksums.txt
+	mkdir -p $(DIST_DIR)
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.version=$(VERSION)" -o $(DIST_DIR)/stacyvm-linux-amd64 ./cmd/stacyvm
+	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o $(DIST_DIR)/stacyvm-agent-linux-amd64 ./cmd/stacyvm-agent
+	cd $(DIST_DIR) && sha256sum stacyvm-linux-amd64 stacyvm-agent-linux-amd64 > checksums.txt
 
 # Build release binaries for all architectures (amd64 + arm64)
 release-build-all: release-build
-	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w -X main.version=$(VERSION)" -o stacyvm-linux-arm64 ./cmd/stacyvm
-	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o stacyvm-agent-linux-arm64 ./cmd/stacyvm-agent
-	sha256sum stacyvm-linux-amd64 stacyvm-agent-linux-amd64 stacyvm-linux-arm64 stacyvm-agent-linux-arm64 > checksums.txt
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w -X main.version=$(VERSION)" -o $(DIST_DIR)/stacyvm-linux-arm64 ./cmd/stacyvm
+	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o $(DIST_DIR)/stacyvm-agent-linux-arm64 ./cmd/stacyvm-agent
+	cd $(DIST_DIR) && sha256sum stacyvm-linux-amd64 stacyvm-agent-linux-amd64 stacyvm-linux-arm64 stacyvm-agent-linux-arm64 > checksums.txt

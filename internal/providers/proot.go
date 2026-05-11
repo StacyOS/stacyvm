@@ -110,7 +110,7 @@ func (p *PRootProvider) Spawn(ctx context.Context, opts SpawnOptions) (string, e
 		}
 	}
 	if activeCount >= p.config.MaxSandboxes {
-		return "", fmt.Errorf("max sandboxes reached (%d)", p.config.MaxSandboxes)
+		return "", ResourceLimitError(fmt.Sprintf("max sandboxes reached (%d)", p.config.MaxSandboxes))
 	}
 
 	id := generatePRootSandboxID()
@@ -139,10 +139,10 @@ func (p *PRootProvider) getSandbox(id string) (*prootSandbox, error) {
 	defer p.mu.RUnlock()
 	sb, ok := p.sandboxes[id]
 	if !ok {
-		return nil, fmt.Errorf("sandbox %q not found", id)
+		return nil, SandboxNotFoundError(id)
 	}
 	if sb.state == "destroyed" {
-		return nil, fmt.Errorf("sandbox %q is destroyed", id)
+		return nil, SandboxDestroyedError(id)
 	}
 	return sb, nil
 }
@@ -169,7 +169,7 @@ func (p *PRootProvider) safePath(sb *prootSandbox, path string) (string, error) 
 
 // BuildCommand constructs the proot exec.Cmd for a sandbox and exec options.
 // Exported for testing.
-func (p *PRootProvider) BuildCommand(ctx context.Context, sb *prootSandbox, opts ExecOptions) *exec.Cmd {
+func (p *PRootProvider) BuildCommand(ctx context.Context, sb *prootSandbox, opts ExecOptions) (*exec.Cmd, error) {
 	args := []string{
 		"-0",
 		"-r", p.config.RootfsPath,
@@ -184,8 +184,14 @@ func (p *PRootProvider) BuildCommand(ctx context.Context, sb *prootSandbox, opts
 		args[len(args)-1] = opts.WorkDir
 	}
 
-	// Build the command: sh -c <command>
-	args = append(args, "/bin/sh", "-c", opts.Command)
+	execArgs, err := buildExecCommand(opts)
+	if err != nil {
+		return nil, err
+	}
+	if mode, _ := normalizeExecMode(opts.Mode); mode == ExecModeShell {
+		execArgs[0] = "/bin/sh"
+	}
+	args = append(args, execArgs...)
 
 	cmd := exec.CommandContext(ctx, p.config.PRootBinary, args...)
 
@@ -201,7 +207,7 @@ func (p *PRootProvider) BuildCommand(ctx context.Context, sb *prootSandbox, opts
 	}
 	cmd.Env = env
 
-	return cmd
+	return cmd, nil
 }
 
 func (p *PRootProvider) Exec(ctx context.Context, sandboxID string, opts ExecOptions) (*ExecResult, error) {
@@ -214,7 +220,11 @@ func (p *PRootProvider) Exec(ctx context.Context, sandboxID string, opts ExecOpt
 	execCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	cmd := p.BuildCommand(execCtx, sb, opts)
+	cmd, err := p.BuildCommand(execCtx, sb, opts)
+	if err != nil {
+		cancel()
+		return nil, err
+	}
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -223,6 +233,9 @@ func (p *PRootProvider) Exec(ctx context.Context, sandboxID string, opts ExecOpt
 	err = cmd.Run()
 	exitCode := 0
 	if err != nil {
+		if execCtx.Err() == context.DeadlineExceeded {
+			return nil, ExecTimeoutError(sandboxID)
+		}
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			exitCode = exitErr.ExitCode()
 		} else {
@@ -246,7 +259,11 @@ func (p *PRootProvider) ExecStream(ctx context.Context, sandboxID string, opts E
 	timeout := p.config.DefaultTimeout
 	execCtx, cancel := context.WithTimeout(ctx, timeout)
 
-	cmd := p.BuildCommand(execCtx, sb, opts)
+	cmd, err := p.BuildCommand(execCtx, sb, opts)
+	if err != nil {
+		cancel()
+		return nil, err
+	}
 
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
@@ -295,7 +312,12 @@ func (p *PRootProvider) ExecStream(ctx context.Context, sandboxID string, opts E
 		go readStream("stderr", stderrPipe)
 
 		wg.Wait()
-		cmd.Wait()
+		if err := cmd.Wait(); err != nil && execCtx.Err() == context.DeadlineExceeded {
+			select {
+			case ch <- StreamChunk{Stream: "stderr", Data: ExecTimeoutError(sandboxID).Error()}:
+			case <-ctx.Done():
+			}
+		}
 	}()
 
 	return ch, nil
@@ -499,7 +521,7 @@ func (p *PRootProvider) Status(ctx context.Context, sandboxID string) (*SandboxS
 	defer p.mu.RUnlock()
 	sb, ok := p.sandboxes[sandboxID]
 	if !ok {
-		return nil, fmt.Errorf("sandbox %q not found", sandboxID)
+		return nil, SandboxNotFoundError(sandboxID)
 	}
 	return &SandboxStatus{
 		ID:    sb.id,
@@ -512,7 +534,7 @@ func (p *PRootProvider) Destroy(ctx context.Context, sandboxID string) error {
 	sb, ok := p.sandboxes[sandboxID]
 	if !ok {
 		p.mu.Unlock()
-		return fmt.Errorf("sandbox %q not found", sandboxID)
+		return SandboxNotFoundError(sandboxID)
 	}
 	sb.state = "destroyed"
 	delete(p.sandboxes, sandboxID)

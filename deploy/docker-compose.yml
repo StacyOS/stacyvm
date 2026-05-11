@@ -1,0 +1,48 @@
+services:
+  stacyvm:
+    image: ${STACYVM_IMAGE:-ghcr.io/stacyos/stacyvm:latest}
+    restart: unless-stopped
+    working_dir: /etc/stacyvm
+    ports:
+      - "${STACYVM_HOST_PORT:-7423}:7423"
+    volumes:
+      - stacyvm-data:/var/lib/stacyvm
+      - ${STACYVM_DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock
+      - ./stacyvm.production.yaml:/etc/stacyvm/stacyvm.yaml:ro
+    environment:
+      STACYVM_AUTH_API_KEY: ${STACYVM_API_KEY:?set STACYVM_API_KEY}
+      STACYVM_AUTH_ADMIN_API_KEY: ${STACYVM_ADMIN_API_KEY:-}
+      STACYVM_DATABASE_PATH: ${STACYVM_DATABASE_PATH:-/var/lib/stacyvm/stacyvm.db}
+      STACYVM_LOGGING_LEVEL: ${STACYVM_LOG_LEVEL:-info}
+      STACYVM_SERVER_PREVIEW_DOMAIN: ${STACYVM_PREVIEW_DOMAIN:-localhost}
+      STACYVM_PROVIDERS_DOCKER_NETWORK_MODE: stacyvm-network
+    networks:
+      - stacyvm-network
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- --header=\"X-API-Key: $${STACYVM_AUTH_API_KEY}\" http://127.0.0.1:7423/api/v1/live >/dev/null"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  traefik:
+    image: traefik:v3.6
+    restart: unless-stopped
+    command:
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+    ports:
+      - "${STACYVM_TRAEFIK_HOST_PORT:-80}:80"
+    volumes:
+      - ${STACYVM_DOCKER_SOCKET:-/var/run/docker.sock}:/var/run/docker.sock:ro
+    networks:
+      - stacyvm-network
+
+volumes:
+  stacyvm-data:
+
+networks:
+  stacyvm-network:
+    name: stacyvm-network
+    driver: bridge

@@ -67,10 +67,13 @@ func TestPRootProvider_BuildCommand(t *testing.T) {
 		workspace: "/tmp/test-workspace",
 	}
 
-	cmd := p.BuildCommand(context.Background(), sb, ExecOptions{
+	cmd, err := p.BuildCommand(context.Background(), sb, ExecOptions{
 		Command: "echo hello",
 		Env:     map[string]string{"FOO": "bar"},
 	})
+	if err != nil {
+		t.Fatalf("build command: %v", err)
+	}
 
 	// Verify binary
 	if cmd.Path != "/usr/bin/proot" && !strings.HasSuffix(cmd.Path, "proot") {
@@ -113,14 +116,39 @@ func TestPRootProvider_BuildCommand_WorkDir(t *testing.T) {
 	p := testPRootProvider(t)
 	sb := &prootSandbox{id: "sb-test", workspace: "/tmp/ws"}
 
-	cmd := p.BuildCommand(context.Background(), sb, ExecOptions{
+	cmd, err := p.BuildCommand(context.Background(), sb, ExecOptions{
 		Command: "ls",
 		WorkDir: "/app",
 	})
+	if err != nil {
+		t.Fatalf("build command: %v", err)
+	}
 
 	args := strings.Join(cmd.Args, " ")
 	if !strings.Contains(args, "-w /app") {
 		t.Fatalf("expected -w /app, got args: %s", args)
+	}
+}
+
+func TestPRootProvider_BuildCommandArgvMode(t *testing.T) {
+	p := testPRootProvider(t)
+	sb := &prootSandbox{id: "sb-test", workspace: "/tmp/ws"}
+
+	cmd, err := p.BuildCommand(context.Background(), sb, ExecOptions{
+		Mode:    ExecModeArgv,
+		Command: "printf",
+		Args:    []string{"%s", "$HOME"},
+	})
+	if err != nil {
+		t.Fatalf("build command: %v", err)
+	}
+
+	args := strings.Join(cmd.Args, " ")
+	if strings.Contains(args, "/bin/sh -c") {
+		t.Fatalf("argv mode should not use shell, got args: %s", args)
+	}
+	if !strings.Contains(args, "printf %s $HOME") {
+		t.Fatalf("expected direct argv payload, got args: %s", args)
 	}
 }
 
@@ -536,6 +564,21 @@ func TestPRootProvider_Integration_Exec(t *testing.T) {
 	if strings.TrimSpace(result.Stdout) != "proot_test" {
 		t.Fatalf("expected 'proot_test', got %q", result.Stdout)
 	}
+}
+
+func TestPRootProvider_Integration_Conformance(t *testing.T) {
+	prootPath := skipIfNoPRoot(t)
+	runProviderConformance(t, func(t *testing.T) Provider {
+		t.Helper()
+		tmpDir := t.TempDir()
+		return NewPRootProvider(PRootProviderConfig{
+			RootfsPath:     "/",
+			PRootBinary:    prootPath,
+			WorkspaceBase:  filepath.Join(tmpDir, "workspaces"),
+			DefaultTimeout: 30 * time.Second,
+			MaxSandboxes:   5,
+		}, testPRootLogger())
+	})
 }
 
 func TestPRootProvider_Integration_ExecStream(t *testing.T) {

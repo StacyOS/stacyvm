@@ -97,6 +97,7 @@ sandbox = client.spawn(
     memory_mb=1024,
     vcpus=2,
     ttl="1h",                   # "30s", "5m", "2h" — Go duration syntax
+    owner_id="team-a",          # optional per-owner quota identity
     metadata={"user": "alice", "task": "data-analysis"},
 )
 ```
@@ -110,6 +111,7 @@ All parameters are optional. Server defaults apply when omitted.
 | `memory_mb` | `int \| None` | RAM in MB |
 | `vcpus` | `int \| None` | Virtual CPUs |
 | `ttl` | `str \| None` | Auto-destroy after this duration |
+| `owner_id` | `str \| None` | Owner ID for per-owner quotas when no `user_id` header is set |
 | `template` | `str \| None` | Spawn from a server-side template by name |
 | `metadata` | `dict[str, str] \| None` | Free-form labels |
 
@@ -117,6 +119,14 @@ Spawn from a template directly:
 
 ```python
 sandbox = client.spawn_template("python-dev")
+```
+
+Preflight quota and scheduler admission without creating a sandbox:
+
+```python
+decision = client.admission(image="python:3.12", ttl="1h")
+if not decision.allowed and decision.queueable:
+    print(f"Request would queue because {decision.reason}")
 ```
 
 ---
@@ -349,6 +359,7 @@ Behavioural notes:
 client.health()             # {"status": "ok", "version": "0.5.1", "uptime": "2h13m"}
 client.list()               # list[SandboxInfo] — all active sandboxes
 client.pool_status()        # pool VM and user counts
+client.quota_summary()      # QuotaSummary — redacted owner quota policy counts
 client.prune()              # int — count of expired sandboxes destroyed
 ```
 
@@ -401,7 +412,9 @@ from stacyvm import (
     TemplateManager,
     # Models
     ExecResult,
+    QuotaSummary,
     SandboxInfo,
+    SpawnAdmissionDecision,
     StreamChunk,
     # Exceptions
     ForgevmError,

@@ -2,10 +2,14 @@ package store
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	_ "modernc.org/sqlite"
 )
 
 func testStore(t *testing.T) *SQLiteStore {
@@ -43,6 +47,227 @@ func TestMigrations(t *testing.T) {
 	}
 }
 
+func TestSQLiteStoreMigratesLegacyDatabase(t *testing.T) {
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "legacy.db")
+
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("open legacy db: %v", err)
+	}
+	if _, err := db.Exec(migrations[0].sql); err != nil {
+		t.Fatalf("create v1 schema: %v", err)
+	}
+	if _, err := db.Exec("INSERT INTO schema_migrations (version) VALUES (1)"); err != nil {
+		t.Fatalf("record v1 migration: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("close legacy db: %v", err)
+	}
+
+	s, err := NewSQLiteStore(dbPath)
+	if err != nil {
+		t.Fatalf("migrate legacy db: %v", err)
+	}
+
+	var migrated int
+	if err := s.db.QueryRow("SELECT COUNT(*) FROM schema_migrations").Scan(&migrated); err != nil {
+		t.Fatalf("count migrations: %v", err)
+	}
+	if migrated != len(migrations) {
+		t.Fatalf("migration count = %d, want %d", migrated, len(migrations))
+	}
+
+	for _, col := range []string{"template", "owner_id", "vm_id", "worker_id"} {
+		if !sqliteColumnExists(t, s.db, "sandboxes", col) {
+			t.Fatalf("sandboxes missing migrated column %s", col)
+		}
+	}
+
+	for _, table := range []string{
+		"templates",
+		"environment_specs",
+		"environment_builds",
+		"environment_artifacts",
+		"registry_connections",
+		"owner_quotas",
+		"admin_audit_logs",
+		"operation_audit_logs",
+		"workers",
+		"leases",
+	} {
+		if !sqliteTableExists(t, s.db, table) {
+			t.Fatalf("missing migrated table %s", table)
+		}
+	}
+
+	if err := s.Close(); err != nil {
+		t.Fatalf("close migrated db: %v", err)
+	}
+	s, err = NewSQLiteStore(dbPath)
+	if err != nil {
+		t.Fatalf("reopen migrated db: %v", err)
+	}
+	if err := s.Close(); err != nil {
+		t.Fatalf("close reopened db: %v", err)
+	}
+}
+
+func sqliteColumnExists(t *testing.T, db *sql.DB, table, column string) bool {
+	t.Helper()
+	rows, err := db.Query("PRAGMA table_info(" + table + ")")
+	if err != nil {
+		t.Fatalf("pragma table_info(%s): %v", table, err)
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var cid int
+		var name, typ string
+		var notNull int
+		var defaultValue interface{}
+		var pk int
+		if err := rows.Scan(&cid, &name, &typ, &notNull, &defaultValue, &pk); err != nil {
+			t.Fatalf("scan column info: %v", err)
+		}
+		if name == column {
+			return true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate columns: %v", err)
+	}
+	return false
+}
+
+func sqliteTableExists(t *testing.T, db *sql.DB, table string) bool {
+	t.Helper()
+	var count int
+	if err := db.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?", table).Scan(&count); err != nil {
+		t.Fatalf("check table %s: %v", table, err)
+	}
+	return count == 1
+}
+
+func TestWorkerRegistryCRUD(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	now := time.Now().UTC().Add(-time.Minute)
+
+	rec := &WorkerRecord{
+		ID:            "worker-a",
+		Hostname:      "host-a",
+		Status:        "online",
+		Providers:     `["mock","docker"]`,
+		Capabilities:  `["spawn","exec"]`,
+		Capacity:      `{"max_sandboxes":10}`,
+		LastHeartbeat: now,
+	}
+	if err := s.SaveWorker(ctx, rec); err != nil {
+		t.Fatalf("save worker: %v", err)
+	}
+	if rec.CreatedAt.IsZero() || rec.UpdatedAt.IsZero() {
+		t.Fatalf("expected timestamps to be populated: %+v", rec)
+	}
+
+	got, err := s.GetWorker(ctx, "worker-a")
+	if err != nil {
+		t.Fatalf("get worker: %v", err)
+	}
+	if got.Hostname != "host-a" || got.Status != "online" || got.Providers != `["mock","docker"]` {
+		t.Fatalf("unexpected worker: %+v", got)
+	}
+
+	rec.Status = "draining"
+	rec.Capacity = `{"max_sandboxes":5}`
+	if err := s.SaveWorker(ctx, rec); err != nil {
+		t.Fatalf("update worker: %v", err)
+	}
+	got, err = s.GetWorker(ctx, "worker-a")
+	if err != nil {
+		t.Fatalf("get updated worker: %v", err)
+	}
+	if got.Status != "draining" || got.Capacity != `{"max_sandboxes":5}` {
+		t.Fatalf("unexpected updated worker: %+v", got)
+	}
+
+	workers, err := s.ListWorkers(ctx)
+	if err != nil {
+		t.Fatalf("list workers: %v", err)
+	}
+	if len(workers) != 1 || workers[0].ID != "worker-a" {
+		t.Fatalf("unexpected workers: %+v", workers)
+	}
+
+	if err := s.DeleteWorker(ctx, "worker-a"); err != nil {
+		t.Fatalf("delete worker: %v", err)
+	}
+	if _, err := s.GetWorker(ctx, "worker-a"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("get deleted worker err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestLeaseLifecycle(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	lease, err := s.AcquireLease(ctx, "sb-lease", "sandbox", "worker-a", time.Minute)
+	if err != nil {
+		t.Fatalf("acquire lease: %v", err)
+	}
+	if lease.ResourceID != "sb-lease" || lease.HolderID != "worker-a" || lease.Generation != 1 {
+		t.Fatalf("unexpected lease: %+v", lease)
+	}
+
+	if _, err := s.AcquireLease(ctx, "sb-lease", "sandbox", "worker-b", time.Minute); !errors.Is(err, ErrConflict) {
+		t.Fatalf("competing acquire err = %v, want ErrConflict", err)
+	}
+
+	renewed, err := s.RenewLease(ctx, "sb-lease", "worker-a", 2*time.Minute)
+	if err != nil {
+		t.Fatalf("renew lease: %v", err)
+	}
+	if renewed.Generation <= lease.Generation || !renewed.ExpiresAt.After(lease.ExpiresAt) {
+		t.Fatalf("expected renewed generation and expiry: old=%+v new=%+v", lease, renewed)
+	}
+
+	leases, err := s.ListLeases(ctx)
+	if err != nil {
+		t.Fatalf("list leases: %v", err)
+	}
+	if len(leases) != 1 || leases[0].ResourceID != "sb-lease" {
+		t.Fatalf("unexpected leases: %+v", leases)
+	}
+
+	if err := s.ReleaseLease(ctx, "sb-lease", "worker-b"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("wrong holder release err = %v, want ErrNotFound", err)
+	}
+	if err := s.ReleaseLease(ctx, "sb-lease", "worker-a"); err != nil {
+		t.Fatalf("release lease: %v", err)
+	}
+	if _, err := s.GetLease(ctx, "sb-lease"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("get released lease err = %v, want ErrNotFound", err)
+	}
+}
+
+func TestLeaseAcquireAfterExpiry(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	if _, err := s.AcquireLease(ctx, "sb-expired", "sandbox", "worker-a", time.Nanosecond); err != nil {
+		t.Fatalf("acquire lease: %v", err)
+	}
+	time.Sleep(time.Millisecond)
+
+	lease, err := s.AcquireLease(ctx, "sb-expired", "sandbox", "worker-b", time.Minute)
+	if err != nil {
+		t.Fatalf("acquire expired lease: %v", err)
+	}
+	if lease.HolderID != "worker-b" || lease.Generation != 2 {
+		t.Fatalf("unexpected reacquired lease: %+v", lease)
+	}
+}
+
 func TestSandboxCRUD(t *testing.T) {
 	s := testStore(t)
 	ctx := context.Background()
@@ -56,6 +281,7 @@ func TestSandboxCRUD(t *testing.T) {
 		MemoryMB:  512,
 		VCPUs:     1,
 		Metadata:  `{"env":"test"}`,
+		WorkerID:  "worker-a",
 		CreatedAt: now,
 		ExpiresAt: now.Add(30 * time.Minute),
 		UpdatedAt: now,
@@ -76,6 +302,9 @@ func TestSandboxCRUD(t *testing.T) {
 	}
 	if got.Image != "alpine:latest" {
 		t.Fatalf("expected alpine:latest, got %s", got.Image)
+	}
+	if got.WorkerID != "worker-a" {
+		t.Fatalf("expected worker-a, got %s", got.WorkerID)
 	}
 
 	// List
@@ -141,6 +370,111 @@ func TestExecLogs(t *testing.T) {
 	}
 	if logs[0].Command != "echo hello" {
 		t.Fatalf("expected 'echo hello', got %q", logs[0].Command)
+	}
+}
+
+func TestAdminAuditLogs(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	if err := s.CreateAdminAudit(ctx, &AdminAuditRecord{
+		Actor:      "operator-a",
+		Method:     "PUT",
+		Path:       "/api/v1/admin/quotas/owner-a",
+		Status:     200,
+		DurationMS: 7,
+		RequestID:  "req-a",
+		RemoteAddr: "127.0.0.1",
+		UserAgent:  "test-agent",
+		CreatedAt:  now,
+	}); err != nil {
+		t.Fatalf("create admin audit: %v", err)
+	}
+
+	if err := s.CreateAdminAudit(ctx, &AdminAuditRecord{
+		Actor:     "operator-b",
+		Method:    "GET",
+		Path:      "/api/v1/admin/diagnostics",
+		Status:    200,
+		CreatedAt: now.Add(time.Second),
+	}); err != nil {
+		t.Fatalf("create second admin audit: %v", err)
+	}
+
+	records, err := s.ListAdminAudit(ctx, AdminAuditQuery{Limit: 1})
+	if err != nil {
+		t.Fatalf("list admin audit: %v", err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("expected 1 record, got %d", len(records))
+	}
+	if records[0].Actor != "operator-b" || records[0].Path != "/api/v1/admin/diagnostics" {
+		t.Fatalf("unexpected latest audit record: %+v", records[0])
+	}
+
+	records, err = s.ListAdminAudit(ctx, AdminAuditQuery{Actor: "operator-a", Method: "PUT", Status: 200, PathLike: "quotas"})
+	if err != nil {
+		t.Fatalf("filter admin audit: %v", err)
+	}
+	if len(records) != 1 || records[0].Actor != "operator-a" {
+		t.Fatalf("unexpected filtered audit records: %+v", records)
+	}
+
+	deleted, err := s.DeleteAdminAuditBefore(ctx, now.Add(500*time.Millisecond))
+	if err != nil {
+		t.Fatalf("delete old admin audit: %v", err)
+	}
+	if deleted != 1 {
+		t.Fatalf("deleted = %d, want 1", deleted)
+	}
+	records, err = s.ListAdminAudit(ctx, AdminAuditQuery{Limit: 10})
+	if err != nil {
+		t.Fatalf("list remaining admin audit: %v", err)
+	}
+	if len(records) != 1 || records[0].Actor != "operator-b" {
+		t.Fatalf("unexpected remaining audit records: %+v", records)
+	}
+}
+
+func TestOperationAuditLogs(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+	now := time.Now().UTC()
+
+	if err := s.CreateOperationAudit(ctx, &OperationAuditRecord{
+		Actor:     "owner-a",
+		Action:    "file.write",
+		SandboxID: "sb-00000003",
+		Resource:  "/workspace/app.py",
+		Provider:  "mock",
+		Status:    "success",
+		Detail:    "mode=0644",
+		CreatedAt: now,
+	}); err != nil {
+		t.Fatalf("create operation audit: %v", err)
+	}
+	if err := s.CreateOperationAudit(ctx, &OperationAuditRecord{
+		Actor:     "owner-b",
+		Action:    "exec",
+		SandboxID: "sb-00000004",
+		Provider:  "mock",
+		Status:    "failure",
+		Detail:    "exit=1",
+		CreatedAt: now.Add(time.Second),
+	}); err != nil {
+		t.Fatalf("create second operation audit: %v", err)
+	}
+
+	records, err := s.ListOperationAudit(ctx, OperationAuditQuery{Limit: 10, Action: "file.write", SandboxID: "sb-00000003"})
+	if err != nil {
+		t.Fatalf("list operation audit: %v", err)
+	}
+	if len(records) != 1 {
+		t.Fatalf("expected 1 operation audit record, got %d", len(records))
+	}
+	if records[0].Actor != "owner-a" || records[0].Resource != "/workspace/app.py" {
+		t.Fatalf("unexpected operation audit record: %+v", records[0])
 	}
 }
 
@@ -247,6 +581,9 @@ func TestUpdateSandboxExpiresAt_Destroyed(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error extending destroyed sandbox")
 	}
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
 }
 
 func TestUpdateSandboxExpiresAt_NotFound(t *testing.T) {
@@ -255,6 +592,9 @@ func TestUpdateSandboxExpiresAt_NotFound(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error for nonexistent sandbox")
 	}
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
+	}
 }
 
 func TestGetSandboxNotFound(t *testing.T) {
@@ -262,6 +602,9 @@ func TestGetSandboxNotFound(t *testing.T) {
 	_, err := s.GetSandbox(context.Background(), "sb-nope")
 	if err == nil {
 		t.Fatal("expected error for nonexistent sandbox")
+	}
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound, got %v", err)
 	}
 }
 
@@ -284,6 +627,11 @@ func TestEnvironmentSpecCRUD(t *testing.T) {
 
 	if err := s.CreateEnvironmentSpec(ctx, spec); err != nil {
 		t.Fatalf("create spec: %v", err)
+	}
+	conflicting := *spec
+	conflicting.ID = "envspec-conflict"
+	if err := s.CreateEnvironmentSpec(ctx, &conflicting); !errors.Is(err, ErrConflict) {
+		t.Fatalf("expected ErrConflict for duplicate owner/name, got %v", err)
 	}
 
 	got, err := s.GetEnvironmentSpec(ctx, spec.ID)
@@ -313,6 +661,8 @@ func TestEnvironmentSpecCRUD(t *testing.T) {
 	}
 	if _, err := s.GetEnvironmentSpec(ctx, spec.ID); err == nil {
 		t.Fatal("expected get to fail after delete")
+	} else if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound after delete, got %v", err)
 	}
 }
 
@@ -411,5 +761,48 @@ func TestEnvironmentBuildArtifactAndRegistryCRUD(t *testing.T) {
 
 	if err := s.DeleteRegistryConnection(ctx, conn.ID); err != nil {
 		t.Fatalf("delete registry connection: %v", err)
+	}
+}
+
+func TestOwnerQuotaStore(t *testing.T) {
+	s := testStore(t)
+	ctx := context.Background()
+
+	quota := &OwnerQuotaRecord{
+		OwnerID:               "owner-1",
+		MaxSandboxes:          3,
+		MaxTTLSeconds:         3600,
+		MaxExecTimeoutSeconds: 60,
+	}
+	if err := s.SaveOwnerQuota(ctx, quota); err != nil {
+		t.Fatalf("save quota: %v", err)
+	}
+
+	got, err := s.GetOwnerQuota(ctx, "owner-1")
+	if err != nil {
+		t.Fatalf("get quota: %v", err)
+	}
+	if got.MaxSandboxes != 3 || got.MaxTTLSeconds != 3600 || got.MaxExecTimeoutSeconds != 60 {
+		t.Fatalf("unexpected quota: %+v", got)
+	}
+
+	quota.MaxSandboxes = 5
+	if err := s.SaveOwnerQuota(ctx, quota); err != nil {
+		t.Fatalf("update quota: %v", err)
+	}
+
+	quotas, err := s.ListOwnerQuotas(ctx)
+	if err != nil {
+		t.Fatalf("list quotas: %v", err)
+	}
+	if len(quotas) != 1 || quotas[0].MaxSandboxes != 5 {
+		t.Fatalf("unexpected quotas: %+v", quotas)
+	}
+
+	if err := s.DeleteOwnerQuota(ctx, "owner-1"); err != nil {
+		t.Fatalf("delete quota: %v", err)
+	}
+	if _, err := s.GetOwnerQuota(ctx, "owner-1"); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("expected ErrNotFound after delete, got %v", err)
 	}
 }

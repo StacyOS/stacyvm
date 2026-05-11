@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"encoding/json"
+	"strconv"
 	"sync"
 	"time"
 )
@@ -9,14 +10,25 @@ import (
 type EventType string
 
 const (
-	EventSandboxCreated   EventType = "sandbox.created"
-	EventSandboxRunning   EventType = "sandbox.running"
-	EventSandboxDestroyed EventType = "sandbox.destroyed"
-	EventSandboxError     EventType = "sandbox.error"
-	EventExecStarted      EventType = "exec.started"
-	EventExecCompleted    EventType = "exec.completed"
-	EventFileWritten      EventType = "file.written"
-	EventFileRead         EventType = "file.read"
+	EventSandboxCreated    EventType = "sandbox.created"
+	EventSandboxRunning    EventType = "sandbox.running"
+	EventSandboxDestroyed  EventType = "sandbox.destroyed"
+	EventSandboxError      EventType = "sandbox.error"
+	EventExecStarted       EventType = "exec.started"
+	EventExecCompleted     EventType = "exec.completed"
+	EventExecFailed        EventType = "exec.failed"
+	EventExecTimeout       EventType = "exec.timeout"
+	EventFileWritten       EventType = "file.written"
+	EventFileRead          EventType = "file.read"
+	EventOperationFailed   EventType = "operation.failed"
+	EventResourceLimit     EventType = "resource.limit"
+	EventProviderFailed    EventType = "provider.failed"
+	EventReconcileAction   EventType = "reconcile.action"
+	EventSpawnQueued       EventType = "spawn.queued"
+	EventSpawnDequeued     EventType = "spawn.dequeued"
+	EventSpawnQueueTimeout EventType = "spawn.queue_timeout"
+	EventQuotaSaved        EventType = "quota.saved"
+	EventQuotaDeleted      EventType = "quota.deleted"
 )
 
 type Event struct {
@@ -33,12 +45,26 @@ const (
 )
 
 // EventBus is an in-process pub/sub system with ring buffer history.
+// For single-node deployments this is sufficient.
+// For HA deployments with multiple control-plane replicas, attach a Postgres
+// LISTEN/NOTIFY bridge via AttachDurableBridge so cross-replica events are
+// delivered to local subscribers.
 type EventBus struct {
 	mu          sync.RWMutex
 	subscribers map[string]chan Event
 	history     []Event
 	historySize int
 	nextID      int
+
+	// onPublish is called after every local Publish. Used by the durable bridge
+	// to forward events to Postgres NOTIFY. Must be set before any Publish call.
+	onPublish func(Event)
+}
+
+type EventBusStats struct {
+	Subscribers int `json:"subscribers"`
+	HistorySize int `json:"history_size"`
+	EventsTotal int `json:"events_total"`
 }
 
 func NewEventBus() *EventBus {
@@ -58,6 +84,9 @@ func (eb *EventBus) Publish(evt Event) {
 		evt.Timestamp = time.Now()
 	}
 	eb.nextID++
+	if evt.ID == "" {
+		evt.ID = stringID(eb.nextID)
+	}
 
 	// Ring buffer: append or overwrite oldest
 	if len(eb.history) < eb.historySize {
@@ -73,6 +102,52 @@ func (eb *EventBus) Publish(evt Event) {
 			// Drop if subscriber is slow — non-blocking
 		}
 	}
+
+	// Fire the durable bridge hook outside the lock to avoid deadlock.
+	hook := eb.onPublish
+	if hook != nil {
+		go hook(evt)
+	}
+}
+
+// publishLocal delivers an event to local subscribers without firing the
+// durable bridge hook. Used by the LISTEN goroutine to inject remote events
+// received from Postgres NOTIFY.
+func (eb *EventBus) publishLocal(evt Event) {
+	eb.mu.Lock()
+	defer eb.mu.Unlock()
+
+	if evt.Timestamp.IsZero() {
+		evt.Timestamp = time.Now()
+	}
+	eb.nextID++
+	if evt.ID == "" {
+		evt.ID = stringID(eb.nextID)
+	}
+	if len(eb.history) < eb.historySize {
+		eb.history = append(eb.history, evt)
+	} else {
+		eb.history[eb.nextID%eb.historySize] = evt
+	}
+	for _, ch := range eb.subscribers {
+		select {
+		case ch <- evt:
+		default:
+		}
+	}
+}
+
+// AttachDurableBridge wires an onPublish hook into this bus. Call once before
+// the bus is used. The hook runs in a goroutine per publish so it must be
+// safe to call concurrently.
+func (eb *EventBus) AttachDurableBridge(hook func(Event)) {
+	eb.mu.Lock()
+	defer eb.mu.Unlock()
+	eb.onPublish = hook
+}
+
+func stringID(id int) string {
+	return "evt-" + strconv.Itoa(id)
 }
 
 // Subscribe creates a new subscription and returns a channel + unsubscribe key.
@@ -112,4 +187,15 @@ func (eb *EventBus) History(limit int) []Event {
 	result := make([]Event, limit)
 	copy(result, eb.history[start:])
 	return result
+}
+
+func (eb *EventBus) Stats() EventBusStats {
+	eb.mu.RLock()
+	defer eb.mu.RUnlock()
+
+	return EventBusStats{
+		Subscribers: len(eb.subscribers),
+		HistorySize: len(eb.history),
+		EventsTotal: eb.nextID,
+	}
 }

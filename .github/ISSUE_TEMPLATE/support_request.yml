@@ -1,0 +1,63 @@
+name: Production support request
+description: Ask for help with a public self-serve or production-style StacyVM install.
+title: "[Support]: "
+labels: ["support", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for install, upgrade, runtime certification, and production-readiness help. The public support matrix explains which modes are supported, host-certified, preview, experimental, or planned.
+  - type: dropdown
+    id: support_level
+    attributes:
+      label: Runtime or deployment mode
+      options:
+        - Single-node Docker/runc
+        - Docker with gVisor
+        - Docker with Kata
+        - Firecracker
+        - PRoot
+        - E2B/custom provider
+        - Multi-worker/enterprise prototype
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: goal
+    attributes:
+      label: What are you trying to do?
+      description: Describe the target setup, workload, and what production-ready means for your environment.
+    validations:
+      required: true
+  - type: checkboxes
+    id: evidence_checklist
+    attributes:
+      label: Evidence checklist
+      options:
+        - label: I ran release or installer verification.
+        - label: I ran production config lint with the same environment the service uses.
+        - label: I ran upgrade rehearsal before changing binaries or images.
+        - label: I ran `stacyvm doctor --production` on the target host.
+        - label: I generated a redacted support bundle.
+        - label: I generated runtime certification output for host-certified runtimes.
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence output
+      description: Paste or attach redacted output for every checked item above.
+      value: |
+        - Release/install verification:
+        - Config lint:
+        - Upgrade rehearsal:
+        - Doctor:
+        - Support bundle:
+        - Runtime certification:
+    validations:
+      required: true
+  - type: textarea
+    id: blocker
+    attributes:
+      label: Current blocker
+      description: What is preventing you from proceeding?
+    validations:
+      required: true

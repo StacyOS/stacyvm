@@ -50,7 +50,7 @@ func (r *Registry) Get(name string) (Provider, error) {
 
 	p, ok := r.providers[name]
 	if !ok {
-		return nil, fmt.Errorf("provider %q not found", name)
+		return nil, ProviderNotFoundError(name)
 	}
 	return p, nil
 }

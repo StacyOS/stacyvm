@@ -1,0 +1,154 @@
+# Phase 4 Production Deployment Release Notes
+
+Date: 2026-05-08
+Branch: `phase-4-production-deployment`
+
+## Summary
+
+Phase 4 starts turning the production control-plane work from earlier phases into repeatable shipping and deployment workflows. This checkpoint adds GitHub Actions CI coverage plus operator-facing deployment templates and runbooks for single-node production installations.
+
+The goal of this phase is to make StacyVM easier to validate, release, and run outside a developer laptop while keeping host-specific runtime conformance explicit.
+
+## What Changed
+
+### Continuous Integration
+
+- Added a GitHub Actions workflow for core project verification.
+- CI now validates:
+  - Go tests across the repository.
+  - CLI build.
+  - Swagger/OpenAPI drift.
+  - Web dashboard production build.
+  - TypeScript SDK build.
+  - Python SDK package install, compile, and import.
+- Stabilized the Swagger drift check for cold CI runners by downloading Go modules before invoking `swag`.
+
+### Production Deployment Templates
+
+- Added `deploy/docker-compose.yml` for a production-oriented Docker provider deployment with Traefik live-preview routing.
+- Added `deploy/stacyvm.production.yaml` with production defaults for:
+  - API auth.
+  - API rate limiting.
+  - sandbox caps and queue backpressure.
+  - JSON logging.
+  - persistent SQLite state.
+  - Docker as the default provider.
+- Added Compose and systemd environment templates:
+  - `deploy/.env.example`
+  - `deploy/stacyvm.env.example`
+- Added `deploy/stacyvm.service` for binary-based Linux/systemd installs.
+
+### Release Automation
+
+- Added a release workflow for tag-driven and manually-dispatched releases.
+- Release automation builds static Linux binary artifacts for `amd64` and `arm64`.
+- Release automation publishes multi-arch container images to `ghcr.io/stacyos/stacyvm`.
+- Docker image builds now accept an explicit `VERSION` build argument.
+- Release artifacts now build into `dist/` instead of the repository root.
+- Added `.dockerignore` to keep local build outputs and dependency directories out of release image contexts.
+
+### Deployment Runbook
+
+- Added `docs/deployment.md` covering:
+  - host requirements.
+  - Docker Compose deployment.
+  - systemd deployment.
+  - health, readiness, liveness, and Prometheus endpoints.
+  - reverse proxy expectations.
+  - SQLite backup and restore basics.
+  - upgrade procedure.
+  - Docker, Firecracker, and PRoot provider notes.
+- Linked the deployment guide from the README.
+- Added `scripts/smoke-deployment.sh` for liveness, health, readiness, and Prometheus deployment probes.
+- Added `docs/runtime-conformance.md` with host requirements and signoff checks for Docker, gVisor, Kata, Firecracker, PRoot, E2B, and custom providers.
+- Registered the mock provider in `stacyvm serve` when `providers.mock.enabled` is set, giving operators and CI a no-Docker smoke path.
+- Validated the production Compose template with StacyVM, Traefik, Docker provider readiness, API smoke probes, and a port `3000` live-preview route.
+
+## Code Changes By Area
+
+### CI
+
+- `.github/workflows/ci.yml`
+  - Adds repository verification jobs for Go, Swagger, web, and SDKs.
+  - Opts into Node 24-based JavaScript actions to address the GitHub Actions Node 20 deprecation warning.
+  - Runs a mock-provider deployment smoke job against the production smoke script.
+- `.github/workflows/release.yml`
+  - Adds binary and container image release automation.
+- `scripts/check-swagger.sh`
+  - Downloads modules before generating docs in a temporary workspace.
+- `scripts/ci-smoke-deployment.sh`
+  - Starts StacyVM with the mock provider and runs deployment smoke probes in CI.
+- `cmd/stacyvm/cmd_serve.go`
+  - Registers the mock provider when enabled in config.
+
+### Deployment
+
+- `deploy/docker-compose.yml`
+  - Adds a reusable production Compose template.
+  - Allows the Traefik host port to be overridden for smoke runs.
+- `deploy/stacyvm.production.yaml`
+  - Adds a production baseline config.
+- `deploy/stacyvm.service`
+  - Adds a systemd unit for running the StacyVM binary.
+- `deploy/.env.example` and `deploy/stacyvm.env.example`
+  - Add environment templates for Compose and systemd.
+- `Dockerfile`
+  - Adds BuildKit platform args and explicit version injection for release image publishing.
+- `Makefile`
+  - Moves release artifacts into `dist/` and keeps checksums with the artifacts.
+- `.dockerignore`
+  - Excludes build outputs, local dependency directories, and local state files from Docker build contexts.
+- `scripts/smoke-deployment.sh`
+  - Adds a portable post-deploy smoke test for live, health, readiness, and Prometheus metrics endpoints.
+
+### Docs
+
+- `docs/deployment.md`
+  - Adds the deployment guide and operator runbook.
+- `docs/releasing.md`
+  - Adds release workflow and GHCR publishing instructions.
+- `docs/runtime-conformance.md`
+  - Adds provider/runtime production signoff expectations.
+- `README.md`
+  - Links the deployment guide from navigation and configuration docs.
+- `CHANGELOG.md`
+  - Adds this Phase 4 checkpoint entry.
+
+## Verification
+
+The following checks passed during this checkpoint:
+
+```sh
+docker compose --env-file deploy/.env.example -f deploy/docker-compose.yml config
+ruby -e 'require "yaml"; YAML.load_file("deploy/docker-compose.yml"); YAML.load_file("deploy/stacyvm.production.yaml")'
+git diff --check
+go test ./...
+cd web && npm run build
+scripts/check-swagger.sh
+make release-build-all VERSION=phase-4-test
+scripts/smoke-deployment.sh http://127.0.0.1:7423
+scripts/ci-smoke-deployment.sh
+docker build --build-arg VERSION=phase-4-compose -t stacyvm:phase-4-compose .
+docker compose -p stacyvm-phase4-smoke -f deploy/docker-compose.yml up -d
+scripts/smoke-deployment.sh http://127.0.0.1:17426 phase4-compose-key
+curl -H 'Host: 3000-<sandbox-id>.localhost' http://127.0.0.1:18080/
+```
+
+GitHub Actions has also passed for the initial Phase 4 CI workflow after the Swagger drift check stabilization.
+
+## Platform Notes
+
+- Docker Compose validation does not require daemon access, but runtime sandbox conformance still requires Docker daemon access on the host.
+- Firecracker remains Linux/KVM-gated and should be rolled out only after host conformance checks pass.
+- PRoot remains gated on a real `proot` binary and a rootfs with the expected sandbox tooling.
+
+## Phase 4 Closeout
+
+Phase 4 implementation is complete. Release automation, container publishing workflow, deployment smoke testing, production deployment templates, CI coverage, and runtime conformance documentation are in place.
+
+The remaining work is external release/platform operation:
+
+- Trigger a real versioned release run when the project is ready to publish binaries and the GHCR image.
+- Collect real-host runtime signoffs for optional host-gated runtimes such as gVisor, Kata, Firecracker, and PRoot.
+
+Phase 5 can proceed from this branch without more Phase 4 code work.

@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -76,11 +77,14 @@ func (s *SQLiteStore) migrate() error {
 // --- Sandbox CRUD ---
 
 func (s *SQLiteStore) CreateSandbox(ctx context.Context, sb *SandboxRecord) error {
+	if strings.TrimSpace(sb.WorkerID) == "" {
+		sb.WorkerID = "local"
+	}
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO sandboxes (id, state, provider, image, memory_mb, vcpus, metadata, owner_id, vm_id, created_at, expires_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		INSERT INTO sandboxes (id, state, provider, image, memory_mb, vcpus, metadata, owner_id, tenant_id, vm_id, worker_id, created_at, expires_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		sb.ID, sb.State, sb.Provider, sb.Image, sb.MemoryMB, sb.VCPUs, sb.Metadata,
-		sb.OwnerID, sb.VMID,
+		sb.OwnerID, sb.TenantID, sb.VMID, sb.WorkerID,
 		sb.CreatedAt.UTC(), sb.ExpiresAt.UTC(), sb.UpdatedAt.UTC(),
 	)
 	return err
@@ -89,19 +93,19 @@ func (s *SQLiteStore) CreateSandbox(ctx context.Context, sb *SandboxRecord) erro
 func (s *SQLiteStore) GetSandbox(ctx context.Context, id string) (*SandboxRecord, error) {
 	sb := &SandboxRecord{}
 	err := s.db.QueryRowContext(ctx, `
-		SELECT id, state, provider, image, memory_mb, vcpus, metadata, owner_id, vm_id, created_at, expires_at, updated_at
+		SELECT id, state, provider, image, memory_mb, vcpus, metadata, owner_id, tenant_id, vm_id, worker_id, created_at, expires_at, updated_at
 		FROM sandboxes WHERE id = ?`, id,
 	).Scan(&sb.ID, &sb.State, &sb.Provider, &sb.Image, &sb.MemoryMB, &sb.VCPUs,
-		&sb.Metadata, &sb.OwnerID, &sb.VMID, &sb.CreatedAt, &sb.ExpiresAt, &sb.UpdatedAt)
+		&sb.Metadata, &sb.OwnerID, &sb.TenantID, &sb.VMID, &sb.WorkerID, &sb.CreatedAt, &sb.ExpiresAt, &sb.UpdatedAt)
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("sandbox %q not found", id)
+		return nil, NotFoundError("sandbox", id)
 	}
 	return sb, err
 }
 
 func (s *SQLiteStore) ListSandboxes(ctx context.Context) ([]*SandboxRecord, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, state, provider, image, memory_mb, vcpus, metadata, owner_id, vm_id, created_at, expires_at, updated_at
+		SELECT id, state, provider, image, memory_mb, vcpus, metadata, owner_id, tenant_id, vm_id, worker_id, created_at, expires_at, updated_at
 		FROM sandboxes WHERE state != 'destroyed' ORDER BY created_at DESC`)
 	if err != nil {
 		return nil, err
@@ -112,7 +116,7 @@ func (s *SQLiteStore) ListSandboxes(ctx context.Context) ([]*SandboxRecord, erro
 	for rows.Next() {
 		sb := &SandboxRecord{}
 		if err := rows.Scan(&sb.ID, &sb.State, &sb.Provider, &sb.Image, &sb.MemoryMB, &sb.VCPUs,
-			&sb.Metadata, &sb.OwnerID, &sb.VMID, &sb.CreatedAt, &sb.ExpiresAt, &sb.UpdatedAt); err != nil {
+			&sb.Metadata, &sb.OwnerID, &sb.TenantID, &sb.VMID, &sb.WorkerID, &sb.CreatedAt, &sb.ExpiresAt, &sb.UpdatedAt); err != nil {
 			return nil, err
 		}
 		sandboxes = append(sandboxes, sb)
@@ -130,7 +134,7 @@ func (s *SQLiteStore) UpdateSandboxState(ctx context.Context, id string, state s
 	}
 	n, _ := res.RowsAffected()
 	if n == 0 {
-		return fmt.Errorf("sandbox %q not found", id)
+		return NotFoundError("sandbox", id)
 	}
 	return nil
 }
@@ -145,7 +149,7 @@ func (s *SQLiteStore) UpdateSandboxExpiresAt(ctx context.Context, id string, exp
 	}
 	n, _ := res.RowsAffected()
 	if n == 0 {
-		return fmt.Errorf("sandbox %q not found or already destroyed", id)
+		return NotFoundError("sandbox", id)
 	}
 	return nil
 }
@@ -156,7 +160,7 @@ func (s *SQLiteStore) DeleteSandbox(ctx context.Context, id string) error {
 
 func (s *SQLiteStore) ListExpiredSandboxes(ctx context.Context, before time.Time) ([]*SandboxRecord, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, state, provider, image, memory_mb, vcpus, metadata, owner_id, vm_id, created_at, expires_at, updated_at
+		SELECT id, state, provider, image, memory_mb, vcpus, metadata, owner_id, tenant_id, vm_id, worker_id, created_at, expires_at, updated_at
 		FROM sandboxes WHERE state NOT IN ('destroyed') AND expires_at < ?`,
 		before.UTC(),
 	)
@@ -169,7 +173,7 @@ func (s *SQLiteStore) ListExpiredSandboxes(ctx context.Context, before time.Time
 	for rows.Next() {
 		sb := &SandboxRecord{}
 		if err := rows.Scan(&sb.ID, &sb.State, &sb.Provider, &sb.Image, &sb.MemoryMB, &sb.VCPUs,
-			&sb.Metadata, &sb.OwnerID, &sb.VMID, &sb.CreatedAt, &sb.ExpiresAt, &sb.UpdatedAt); err != nil {
+			&sb.Metadata, &sb.OwnerID, &sb.TenantID, &sb.VMID, &sb.WorkerID, &sb.CreatedAt, &sb.ExpiresAt, &sb.UpdatedAt); err != nil {
 			return nil, err
 		}
 		sandboxes = append(sandboxes, sb)
@@ -179,7 +183,7 @@ func (s *SQLiteStore) ListExpiredSandboxes(ctx context.Context, before time.Time
 
 func (s *SQLiteStore) ListSandboxesByOwner(ctx context.Context, ownerID string) ([]*SandboxRecord, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT id, state, provider, image, memory_mb, vcpus, metadata, owner_id, vm_id, created_at, expires_at, updated_at
+		SELECT id, state, provider, image, memory_mb, vcpus, metadata, owner_id, tenant_id, vm_id, worker_id, created_at, expires_at, updated_at
 		FROM sandboxes WHERE state != 'destroyed' AND owner_id = ? ORDER BY created_at DESC`, ownerID)
 	if err != nil {
 		return nil, err
@@ -190,7 +194,7 @@ func (s *SQLiteStore) ListSandboxesByOwner(ctx context.Context, ownerID string) 
 	for rows.Next() {
 		sb := &SandboxRecord{}
 		if err := rows.Scan(&sb.ID, &sb.State, &sb.Provider, &sb.Image, &sb.MemoryMB, &sb.VCPUs,
-			&sb.Metadata, &sb.OwnerID, &sb.VMID, &sb.CreatedAt, &sb.ExpiresAt, &sb.UpdatedAt); err != nil {
+			&sb.Metadata, &sb.OwnerID, &sb.TenantID, &sb.VMID, &sb.WorkerID, &sb.CreatedAt, &sb.ExpiresAt, &sb.UpdatedAt); err != nil {
 			return nil, err
 		}
 		sandboxes = append(sandboxes, sb)
@@ -203,6 +207,397 @@ func (s *SQLiteStore) CountSandboxesByVM(ctx context.Context, vmID string) (int,
 	err := s.db.QueryRowContext(ctx, `
 		SELECT COUNT(*) FROM sandboxes WHERE state != 'destroyed' AND vm_id = ?`, vmID).Scan(&count)
 	return count, err
+}
+
+func (s *SQLiteStore) SaveOwnerQuota(ctx context.Context, quota *OwnerQuotaRecord) error {
+	now := time.Now().UTC()
+	if quota.CreatedAt.IsZero() {
+		quota.CreatedAt = now
+	}
+	quota.UpdatedAt = now
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO owner_quotas (owner_id, max_sandboxes, max_ttl_seconds, max_exec_timeout_seconds, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?)
+		ON CONFLICT(owner_id) DO UPDATE SET
+			max_sandboxes = excluded.max_sandboxes,
+			max_ttl_seconds = excluded.max_ttl_seconds,
+			max_exec_timeout_seconds = excluded.max_exec_timeout_seconds,
+			updated_at = excluded.updated_at`,
+		quota.OwnerID, quota.MaxSandboxes, quota.MaxTTLSeconds, quota.MaxExecTimeoutSeconds,
+		quota.CreatedAt.UTC(), quota.UpdatedAt.UTC(),
+	)
+	return err
+}
+
+func (s *SQLiteStore) GetOwnerQuota(ctx context.Context, ownerID string) (*OwnerQuotaRecord, error) {
+	quota := &OwnerQuotaRecord{}
+	err := s.db.QueryRowContext(ctx, `
+		SELECT owner_id, max_sandboxes, max_ttl_seconds, max_exec_timeout_seconds, created_at, updated_at
+		FROM owner_quotas WHERE owner_id = ?`, ownerID,
+	).Scan(&quota.OwnerID, &quota.MaxSandboxes, &quota.MaxTTLSeconds, &quota.MaxExecTimeoutSeconds, &quota.CreatedAt, &quota.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, NotFoundError("owner_quota", ownerID)
+	}
+	return quota, err
+}
+
+func (s *SQLiteStore) ListOwnerQuotas(ctx context.Context) ([]*OwnerQuotaRecord, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT owner_id, max_sandboxes, max_ttl_seconds, max_exec_timeout_seconds, created_at, updated_at
+		FROM owner_quotas ORDER BY owner_id ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var quotas []*OwnerQuotaRecord
+	for rows.Next() {
+		quota := &OwnerQuotaRecord{}
+		if err := rows.Scan(&quota.OwnerID, &quota.MaxSandboxes, &quota.MaxTTLSeconds,
+			&quota.MaxExecTimeoutSeconds, &quota.CreatedAt, &quota.UpdatedAt); err != nil {
+			return nil, err
+		}
+		quotas = append(quotas, quota)
+	}
+	return quotas, rows.Err()
+}
+
+func (s *SQLiteStore) DeleteOwnerQuota(ctx context.Context, ownerID string) error {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM owner_quotas WHERE owner_id = ?`, ownerID)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return NotFoundError("owner_quota", ownerID)
+	}
+	return nil
+}
+
+func (s *SQLiteStore) CreateAdminAudit(ctx context.Context, rec *AdminAuditRecord) error {
+	if rec.CreatedAt.IsZero() {
+		rec.CreatedAt = time.Now().UTC()
+	}
+	res, err := s.db.ExecContext(ctx, `
+		INSERT INTO admin_audit_logs (actor, method, path, status, duration_ms, request_id, remote_addr, user_agent, tenant_id, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		rec.Actor, rec.Method, rec.Path, rec.Status, rec.DurationMS, rec.RequestID,
+		rec.RemoteAddr, rec.UserAgent, rec.TenantID, rec.CreatedAt.UTC(),
+	)
+	if err != nil {
+		return err
+	}
+	rec.ID, _ = res.LastInsertId()
+	return nil
+}
+
+func (s *SQLiteStore) ListAdminAudit(ctx context.Context, query AdminAuditQuery) ([]*AdminAuditRecord, error) {
+	if query.Limit <= 0 {
+		query.Limit = 100
+	}
+	if query.Limit > 500 {
+		query.Limit = 500
+	}
+
+	clauses := []string{"1=1"}
+	args := make([]interface{}, 0, 6)
+	if query.Actor != "" {
+		clauses = append(clauses, "actor = ?")
+		args = append(args, query.Actor)
+	}
+	if query.Method != "" {
+		clauses = append(clauses, "method = ?")
+		args = append(args, query.Method)
+	}
+	if query.Status > 0 {
+		clauses = append(clauses, "status = ?")
+		args = append(args, query.Status)
+	}
+	if query.PathLike != "" {
+		clauses = append(clauses, "path LIKE ?")
+		args = append(args, "%"+query.PathLike+"%")
+	}
+	if query.TenantID != "" {
+		clauses = append(clauses, "tenant_id = ?")
+		args = append(args, query.TenantID)
+	}
+	args = append(args, query.Limit)
+
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, actor, method, path, status, duration_ms, request_id, remote_addr, user_agent, tenant_id, created_at
+		FROM admin_audit_logs WHERE `+strings.Join(clauses, " AND ")+`
+		ORDER BY created_at DESC, id DESC LIMIT ?`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var records []*AdminAuditRecord
+	for rows.Next() {
+		rec := &AdminAuditRecord{}
+		if err := rows.Scan(&rec.ID, &rec.Actor, &rec.Method, &rec.Path, &rec.Status,
+			&rec.DurationMS, &rec.RequestID, &rec.RemoteAddr, &rec.UserAgent, &rec.TenantID, &rec.CreatedAt); err != nil {
+			return nil, err
+		}
+		records = append(records, rec)
+	}
+	return records, rows.Err()
+}
+
+func (s *SQLiteStore) DeleteAdminAuditBefore(ctx context.Context, before time.Time) (int64, error) {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM admin_audit_logs WHERE created_at < ?`, before.UTC())
+	if err != nil {
+		return 0, err
+	}
+	return res.RowsAffected()
+}
+
+func (s *SQLiteStore) CreateOperationAudit(ctx context.Context, rec *OperationAuditRecord) error {
+	if rec.CreatedAt.IsZero() {
+		rec.CreatedAt = time.Now().UTC()
+	}
+	res, err := s.db.ExecContext(ctx, `
+		INSERT INTO operation_audit_logs (actor, action, sandbox_id, resource, provider, status, detail, tenant_id, created_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		rec.Actor, rec.Action, rec.SandboxID, rec.Resource, rec.Provider, rec.Status, rec.Detail, rec.TenantID, rec.CreatedAt.UTC(),
+	)
+	if err != nil {
+		return err
+	}
+	rec.ID, _ = res.LastInsertId()
+	return nil
+}
+
+func (s *SQLiteStore) ListOperationAudit(ctx context.Context, query OperationAuditQuery) ([]*OperationAuditRecord, error) {
+	if query.Limit <= 0 {
+		query.Limit = 100
+	}
+	if query.Limit > 500 {
+		query.Limit = 500
+	}
+
+	clauses := []string{"1=1"}
+	args := make([]interface{}, 0, 8)
+	if query.Actor != "" {
+		clauses = append(clauses, "actor = ?")
+		args = append(args, query.Actor)
+	}
+	if query.Action != "" {
+		clauses = append(clauses, "action = ?")
+		args = append(args, query.Action)
+	}
+	if query.SandboxID != "" {
+		clauses = append(clauses, "sandbox_id = ?")
+		args = append(args, query.SandboxID)
+	}
+	if query.Resource != "" {
+		clauses = append(clauses, "resource = ?")
+		args = append(args, query.Resource)
+	}
+	if query.Status != "" {
+		clauses = append(clauses, "status = ?")
+		args = append(args, query.Status)
+	}
+	if query.TenantID != "" {
+		clauses = append(clauses, "tenant_id = ?")
+		args = append(args, query.TenantID)
+	}
+	args = append(args, query.Limit)
+
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, actor, action, sandbox_id, resource, provider, status, detail, tenant_id, created_at
+		FROM operation_audit_logs WHERE `+strings.Join(clauses, " AND ")+`
+		ORDER BY created_at DESC, id DESC LIMIT ?`, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var records []*OperationAuditRecord
+	for rows.Next() {
+		rec := &OperationAuditRecord{}
+		if err := rows.Scan(&rec.ID, &rec.Actor, &rec.Action, &rec.SandboxID, &rec.Resource,
+			&rec.Provider, &rec.Status, &rec.Detail, &rec.TenantID, &rec.CreatedAt); err != nil {
+			return nil, err
+		}
+		records = append(records, rec)
+	}
+	return records, rows.Err()
+}
+
+// --- Workers ---
+
+func (s *SQLiteStore) SaveWorker(ctx context.Context, rec *WorkerRecord) error {
+	now := time.Now().UTC()
+	if rec.CreatedAt.IsZero() {
+		rec.CreatedAt = now
+	}
+	if rec.LastHeartbeat.IsZero() {
+		rec.LastHeartbeat = now
+	}
+	rec.UpdatedAt = now
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO workers (id, hostname, status, providers, capabilities, capacity, last_heartbeat, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			hostname = excluded.hostname,
+			status = excluded.status,
+			providers = excluded.providers,
+			capabilities = excluded.capabilities,
+			capacity = excluded.capacity,
+			last_heartbeat = excluded.last_heartbeat,
+			updated_at = excluded.updated_at`,
+		rec.ID, rec.Hostname, rec.Status, rec.Providers, rec.Capabilities, rec.Capacity,
+		rec.LastHeartbeat.UTC(), rec.CreatedAt.UTC(), rec.UpdatedAt.UTC(),
+	)
+	return err
+}
+
+func (s *SQLiteStore) GetWorker(ctx context.Context, id string) (*WorkerRecord, error) {
+	rec := &WorkerRecord{}
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id, hostname, status, providers, capabilities, capacity, last_heartbeat, created_at, updated_at
+		FROM workers WHERE id = ?`, id,
+	).Scan(&rec.ID, &rec.Hostname, &rec.Status, &rec.Providers, &rec.Capabilities, &rec.Capacity,
+		&rec.LastHeartbeat, &rec.CreatedAt, &rec.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, NotFoundError("worker", id)
+	}
+	return rec, err
+}
+
+func (s *SQLiteStore) ListWorkers(ctx context.Context) ([]*WorkerRecord, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, hostname, status, providers, capabilities, capacity, last_heartbeat, created_at, updated_at
+		FROM workers ORDER BY id ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var records []*WorkerRecord
+	for rows.Next() {
+		rec := &WorkerRecord{}
+		if err := rows.Scan(&rec.ID, &rec.Hostname, &rec.Status, &rec.Providers, &rec.Capabilities,
+			&rec.Capacity, &rec.LastHeartbeat, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
+			return nil, err
+		}
+		records = append(records, rec)
+	}
+	return records, rows.Err()
+}
+
+func (s *SQLiteStore) DeleteWorker(ctx context.Context, id string) error {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM workers WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return NotFoundError("worker", id)
+	}
+	return nil
+}
+
+// --- Leases ---
+
+func (s *SQLiteStore) AcquireLease(ctx context.Context, resourceID, resourceType, holderID string, ttl time.Duration) (*LeaseRecord, error) {
+	if strings.TrimSpace(resourceID) == "" {
+		return nil, ConflictError("lease resource id is required")
+	}
+	if strings.TrimSpace(holderID) == "" {
+		return nil, ConflictError("lease holder id is required")
+	}
+	if ttl <= 0 {
+		return nil, ConflictError("lease ttl must be positive")
+	}
+	now := time.Now().UTC()
+	expiresAt := now.Add(ttl)
+	res, err := s.db.ExecContext(ctx, `
+		INSERT INTO leases (resource_id, resource_type, holder_id, generation, expires_at, created_at, updated_at)
+		VALUES (?, ?, ?, 1, ?, ?, ?)
+		ON CONFLICT(resource_id) DO UPDATE SET
+			resource_type = excluded.resource_type,
+			holder_id = excluded.holder_id,
+			generation = leases.generation + 1,
+			expires_at = excluded.expires_at,
+			updated_at = excluded.updated_at
+		WHERE leases.expires_at <= ? OR leases.holder_id = excluded.holder_id`,
+		resourceID, resourceType, holderID, expiresAt, now, now, now,
+	)
+	if err != nil {
+		return nil, err
+	}
+	rows, _ := res.RowsAffected()
+	if rows == 0 {
+		return nil, ConflictError("lease is held by another worker")
+	}
+	return s.GetLease(ctx, resourceID)
+}
+
+func (s *SQLiteStore) RenewLease(ctx context.Context, resourceID, holderID string, ttl time.Duration) (*LeaseRecord, error) {
+	if ttl <= 0 {
+		return nil, ConflictError("lease ttl must be positive")
+	}
+	now := time.Now().UTC()
+	res, err := s.db.ExecContext(ctx, `
+		UPDATE leases
+		SET generation = generation + 1, expires_at = ?, updated_at = ?
+		WHERE resource_id = ? AND holder_id = ? AND expires_at > ?`,
+		now.Add(ttl), now, resourceID, holderID, now,
+	)
+	if err != nil {
+		return nil, err
+	}
+	rows, _ := res.RowsAffected()
+	if rows == 0 {
+		return nil, ConflictError("lease is not held by worker or has expired")
+	}
+	return s.GetLease(ctx, resourceID)
+}
+
+func (s *SQLiteStore) GetLease(ctx context.Context, resourceID string) (*LeaseRecord, error) {
+	rec := &LeaseRecord{}
+	err := s.db.QueryRowContext(ctx, `
+		SELECT resource_id, resource_type, holder_id, generation, expires_at, created_at, updated_at
+		FROM leases WHERE resource_id = ?`, resourceID,
+	).Scan(&rec.ResourceID, &rec.ResourceType, &rec.HolderID, &rec.Generation, &rec.ExpiresAt, &rec.CreatedAt, &rec.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, NotFoundError("lease", resourceID)
+	}
+	return rec, err
+}
+
+func (s *SQLiteStore) ListLeases(ctx context.Context) ([]*LeaseRecord, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT resource_id, resource_type, holder_id, generation, expires_at, created_at, updated_at
+		FROM leases ORDER BY resource_id ASC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var records []*LeaseRecord
+	for rows.Next() {
+		rec := &LeaseRecord{}
+		if err := rows.Scan(&rec.ResourceID, &rec.ResourceType, &rec.HolderID, &rec.Generation, &rec.ExpiresAt, &rec.CreatedAt, &rec.UpdatedAt); err != nil {
+			return nil, err
+		}
+		records = append(records, rec)
+	}
+	return records, rows.Err()
+}
+
+func (s *SQLiteStore) ReleaseLease(ctx context.Context, resourceID, holderID string) error {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM leases WHERE resource_id = ? AND holder_id = ?`, resourceID, holderID)
+	if err != nil {
+		return err
+	}
+	rows, _ := res.RowsAffected()
+	if rows == 0 {
+		return NotFoundError("lease", resourceID)
+	}
+	return nil
 }
 
 // --- Exec Logs ---
@@ -245,7 +640,7 @@ func (s *SQLiteStore) GetProviderConfig(ctx context.Context, name string) (*Prov
 		SELECT name, config, enabled, updated_at FROM provider_configs WHERE name = ?`, name,
 	).Scan(&cfg.Name, &cfg.Config, &cfg.Enabled, &cfg.UpdatedAt)
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("provider config %q not found", name)
+		return nil, NotFoundError("provider config", name)
 	}
 	return cfg, err
 }
@@ -287,6 +682,9 @@ func (s *SQLiteStore) CreateTemplate(ctx context.Context, t *TemplateRecord) err
 		t.MemoryMB, t.CPUCores, t.TTLSeconds, t.Env, t.Secrets, t.PoolSize,
 		t.CreatedAt.UTC(), t.UpdatedAt.UTC(),
 	)
+	if IsConstraintError(err) {
+		return ConflictError("template already exists")
+	}
 	return err
 }
 
@@ -299,7 +697,7 @@ func (s *SQLiteStore) GetTemplate(ctx context.Context, name string) (*TemplateRe
 		&t.MemoryMB, &t.CPUCores, &t.TTLSeconds, &t.Env, &t.Secrets, &t.PoolSize,
 		&t.CreatedAt, &t.UpdatedAt)
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("template %q not found", name)
+		return nil, NotFoundError("template", name)
 	}
 	return t, err
 }
@@ -340,7 +738,7 @@ func (s *SQLiteStore) UpdateTemplate(ctx context.Context, t *TemplateRecord) err
 	}
 	n, _ := res.RowsAffected()
 	if n == 0 {
-		return fmt.Errorf("template %q not found", t.Name)
+		return NotFoundError("template", t.Name)
 	}
 	return nil
 }
@@ -352,7 +750,7 @@ func (s *SQLiteStore) DeleteTemplate(ctx context.Context, name string) error {
 	}
 	n, _ := res.RowsAffected()
 	if n == 0 {
-		return fmt.Errorf("template %q not found", name)
+		return NotFoundError("template", name)
 	}
 	return nil
 }
@@ -366,6 +764,9 @@ func (s *SQLiteStore) CreateEnvironmentSpec(ctx context.Context, spec *Environme
 		spec.ID, spec.OwnerID, spec.Name, spec.BaseImage, spec.PythonPackages, spec.AptPackages, spec.PythonVersion,
 		spec.CreatedAt.UTC(), spec.UpdatedAt.UTC(),
 	)
+	if IsConstraintError(err) {
+		return ConflictError("spec name already exists for this owner")
+	}
 	return err
 }
 
@@ -379,7 +780,7 @@ func (s *SQLiteStore) GetEnvironmentSpec(ctx context.Context, id string) (*Envir
 		&spec.PythonVersion, &spec.CreatedAt, &spec.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("environment spec %q not found", id)
+		return nil, NotFoundError("environment spec", id)
 	}
 	return spec, err
 }
@@ -422,7 +823,7 @@ func (s *SQLiteStore) UpdateEnvironmentSpec(ctx context.Context, spec *Environme
 	}
 	n, _ := res.RowsAffected()
 	if n == 0 {
-		return fmt.Errorf("environment spec %q not found", spec.ID)
+		return NotFoundError("environment spec", spec.ID)
 	}
 	return nil
 }
@@ -434,7 +835,7 @@ func (s *SQLiteStore) DeleteEnvironmentSpec(ctx context.Context, id string) erro
 	}
 	n, _ := res.RowsAffected()
 	if n == 0 {
-		return fmt.Errorf("environment spec %q not found", id)
+		return NotFoundError("environment spec", id)
 	}
 	return nil
 }
@@ -464,7 +865,7 @@ func (s *SQLiteStore) GetEnvironmentBuild(ctx context.Context, id string) (*Envi
 		&build.DigestLocal, &build.Error, &build.CreatedAt, &finishedAt, &build.UpdatedAt,
 	)
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("environment build %q not found", id)
+		return nil, NotFoundError("environment build", id)
 	}
 	if err != nil {
 		return nil, err
@@ -519,7 +920,7 @@ func (s *SQLiteStore) UpdateEnvironmentBuild(ctx context.Context, build *Environ
 	}
 	n, _ := res.RowsAffected()
 	if n == 0 {
-		return fmt.Errorf("environment build %q not found", build.ID)
+		return NotFoundError("environment build", build.ID)
 	}
 	return nil
 }
@@ -583,6 +984,9 @@ func (s *SQLiteStore) SaveRegistryConnection(ctx context.Context, conn *Registry
 		conn.ID, conn.OwnerID, conn.Provider, conn.Username, conn.SecretRef, conn.IsDefault,
 		time.Now().UTC(), time.Now().UTC(),
 	)
+	if IsConstraintError(err) {
+		return ConflictError("registry connection already exists")
+	}
 	return err
 }
 
@@ -594,7 +998,7 @@ func (s *SQLiteStore) GetRegistryConnection(ctx context.Context, id string) (*Re
 		WHERE id = ?`, id,
 	).Scan(&conn.ID, &conn.OwnerID, &conn.Provider, &conn.Username, &conn.SecretRef, &conn.IsDefault, &conn.CreatedAt, &conn.UpdatedAt)
 	if err == sql.ErrNoRows {
-		return nil, fmt.Errorf("registry connection %q not found", id)
+		return nil, NotFoundError("registry connection", id)
 	}
 	return conn, err
 }
@@ -630,7 +1034,7 @@ func (s *SQLiteStore) DeleteRegistryConnection(ctx context.Context, id string) e
 	}
 	n, _ := res.RowsAffected()
 	if n == 0 {
-		return fmt.Errorf("registry connection %q not found", id)
+		return NotFoundError("registry connection", id)
 	}
 	return nil
 }
@@ -640,6 +1044,213 @@ func nullableTime(t *time.Time) any {
 		return nil
 	}
 	return t.UTC()
+}
+
+// --- Tenants ---
+
+func (s *SQLiteStore) CreateTenant(ctx context.Context, t *TenantRecord) error {
+	now := time.Now().UTC()
+	if t.CreatedAt.IsZero() {
+		t.CreatedAt = now
+	}
+	t.UpdatedAt = now
+	if t.Settings == "" {
+		t.Settings = "{}"
+	}
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO tenants (id, name, owner_id, settings, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)`,
+		t.ID, t.Name, t.OwnerID, t.Settings, t.CreatedAt.UTC(), t.UpdatedAt.UTC(),
+	)
+	return err
+}
+
+func (s *SQLiteStore) GetTenant(ctx context.Context, id string) (*TenantRecord, error) {
+	t := &TenantRecord{}
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id, name, owner_id, settings, created_at, updated_at FROM tenants WHERE id = ?`, id,
+	).Scan(&t.ID, &t.Name, &t.OwnerID, &t.Settings, &t.CreatedAt, &t.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, NotFoundError("tenant", id)
+	}
+	return t, err
+}
+
+func (s *SQLiteStore) ListTenants(ctx context.Context) ([]*TenantRecord, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT id, name, owner_id, settings, created_at, updated_at FROM tenants ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var tenants []*TenantRecord
+	for rows.Next() {
+		t := &TenantRecord{}
+		if err := rows.Scan(&t.ID, &t.Name, &t.OwnerID, &t.Settings, &t.CreatedAt, &t.UpdatedAt); err != nil {
+			return nil, err
+		}
+		tenants = append(tenants, t)
+	}
+	return tenants, rows.Err()
+}
+
+func (s *SQLiteStore) UpdateTenant(ctx context.Context, t *TenantRecord) error {
+	t.UpdatedAt = time.Now().UTC()
+	res, err := s.db.ExecContext(ctx,
+		`UPDATE tenants SET name = ?, owner_id = ?, settings = ?, updated_at = ? WHERE id = ?`,
+		t.Name, t.OwnerID, t.Settings, t.UpdatedAt.UTC(), t.ID,
+	)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return NotFoundError("tenant", t.ID)
+	}
+	return nil
+}
+
+func (s *SQLiteStore) DeleteTenant(ctx context.Context, id string) error {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM tenants WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return NotFoundError("tenant", id)
+	}
+	return nil
+}
+
+// --- Tenant members ---
+
+func (s *SQLiteStore) SaveTenantMember(ctx context.Context, m *TenantMemberRecord) error {
+	now := time.Now().UTC()
+	if m.CreatedAt.IsZero() {
+		m.CreatedAt = now
+	}
+	m.UpdatedAt = now
+	_, err := s.db.ExecContext(ctx, `
+		INSERT INTO tenant_members (tenant_id, user_id, role, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(tenant_id, user_id) DO UPDATE SET role = excluded.role, updated_at = excluded.updated_at`,
+		m.TenantID, m.UserID, m.Role, m.CreatedAt.UTC(), m.UpdatedAt.UTC(),
+	)
+	return err
+}
+
+func (s *SQLiteStore) GetTenantMember(ctx context.Context, tenantID, userID string) (*TenantMemberRecord, error) {
+	m := &TenantMemberRecord{}
+	err := s.db.QueryRowContext(ctx,
+		`SELECT tenant_id, user_id, role, created_at, updated_at FROM tenant_members WHERE tenant_id = ? AND user_id = ?`,
+		tenantID, userID,
+	).Scan(&m.TenantID, &m.UserID, &m.Role, &m.CreatedAt, &m.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, NotFoundError("tenant_member", tenantID+"/"+userID)
+	}
+	return m, err
+}
+
+func (s *SQLiteStore) ListTenantMembers(ctx context.Context, tenantID string) ([]*TenantMemberRecord, error) {
+	rows, err := s.db.QueryContext(ctx,
+		`SELECT tenant_id, user_id, role, created_at, updated_at FROM tenant_members WHERE tenant_id = ? ORDER BY created_at ASC`,
+		tenantID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var members []*TenantMemberRecord
+	for rows.Next() {
+		m := &TenantMemberRecord{}
+		if err := rows.Scan(&m.TenantID, &m.UserID, &m.Role, &m.CreatedAt, &m.UpdatedAt); err != nil {
+			return nil, err
+		}
+		members = append(members, m)
+	}
+	return members, rows.Err()
+}
+
+func (s *SQLiteStore) DeleteTenantMember(ctx context.Context, tenantID, userID string) error {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM tenant_members WHERE tenant_id = ? AND user_id = ?`, tenantID, userID)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return NotFoundError("tenant_member", tenantID+"/"+userID)
+	}
+	return nil
+}
+
+// --- Policies ---
+
+func (s *SQLiteStore) CreatePolicy(ctx context.Context, p *PolicyRecord) error {
+	now := time.Now().UTC()
+	if p.CreatedAt.IsZero() {
+		p.CreatedAt = now
+	}
+	p.UpdatedAt = now
+	_, err := s.db.ExecContext(ctx,
+		`INSERT INTO policies (id, tenant_id, resource_type, effect, pattern, priority, created_at, updated_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		p.ID, p.TenantID, p.ResourceType, p.Effect, p.Pattern, p.Priority, p.CreatedAt.UTC(), p.UpdatedAt.UTC(),
+	)
+	return err
+}
+
+func (s *SQLiteStore) GetPolicy(ctx context.Context, id string) (*PolicyRecord, error) {
+	p := &PolicyRecord{}
+	err := s.db.QueryRowContext(ctx,
+		`SELECT id, tenant_id, resource_type, effect, pattern, priority, created_at, updated_at FROM policies WHERE id = ?`, id,
+	).Scan(&p.ID, &p.TenantID, &p.ResourceType, &p.Effect, &p.Pattern, &p.Priority, &p.CreatedAt, &p.UpdatedAt)
+	if err == sql.ErrNoRows {
+		return nil, NotFoundError("policy", id)
+	}
+	return p, err
+}
+
+func (s *SQLiteStore) ListPolicies(ctx context.Context, query PolicyQuery) ([]*PolicyRecord, error) {
+	q := `SELECT id, tenant_id, resource_type, effect, pattern, priority, created_at, updated_at FROM policies WHERE 1=1`
+	var args []any
+	if query.TenantID != "" {
+		// Return tenant-specific policies plus global (empty tenant_id) policies.
+		q += " AND (tenant_id = ? OR tenant_id = '')"
+		args = append(args, query.TenantID)
+	} else {
+		// No tenant filter: return only global policies.
+		q += " AND tenant_id = ''"
+	}
+	if query.ResourceType != "" {
+		q += " AND resource_type = ?"
+		args = append(args, query.ResourceType)
+	}
+	q += " ORDER BY priority ASC, created_at ASC"
+	rows, err := s.db.QueryContext(ctx, q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var policies []*PolicyRecord
+	for rows.Next() {
+		p := &PolicyRecord{}
+		if err := rows.Scan(&p.ID, &p.TenantID, &p.ResourceType, &p.Effect, &p.Pattern, &p.Priority, &p.CreatedAt, &p.UpdatedAt); err != nil {
+			return nil, err
+		}
+		policies = append(policies, p)
+	}
+	return policies, rows.Err()
+}
+
+func (s *SQLiteStore) DeletePolicy(ctx context.Context, id string) error {
+	res, err := s.db.ExecContext(ctx, `DELETE FROM policies WHERE id = ?`, id)
+	if err != nil {
+		return err
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return NotFoundError("policy", id)
+	}
+	return nil
 }
 
 func (s *SQLiteStore) Close() error {

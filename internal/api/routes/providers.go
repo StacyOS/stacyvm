@@ -4,9 +4,9 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/StacyOs/stacyvm/internal/httputil"
 	"github.com/StacyOs/stacyvm/internal/providers"
+	"github.com/go-chi/chi/v5"
 )
 
 type sandboxCounter interface {
@@ -32,9 +32,14 @@ func (p *ProviderRoutes) Routes() chi.Router {
 
 // ProviderInfo is the summary info for a provider.
 type ProviderInfo struct {
-	Name    string `json:"name" example:"firecracker"`
-	Healthy bool   `json:"healthy" example:"true"`
-	Default bool   `json:"default" example:"true"`
+	Name         string   `json:"name" example:"firecracker"`
+	Healthy      bool     `json:"healthy" example:"true"`
+	Default      bool     `json:"default" example:"true"`
+	LatencyMS    int64    `json:"latency_ms" example:"3"`
+	LastChecked  string   `json:"last_checked" example:"2026-05-08T10:30:00Z"`
+	Error        string   `json:"error,omitempty" example:"health check returned false"`
+	Capabilities []string `json:"capabilities"`
+	RuntimeCount *int     `json:"runtime_count,omitempty" example:"2"`
 }
 
 // ProviderDetail is the detailed info for a provider.
@@ -43,6 +48,7 @@ type ProviderDetail struct {
 	Healthy      bool              `json:"healthy" example:"true"`
 	Default      bool              `json:"default" example:"true"`
 	SandboxCount int               `json:"sandbox_count" example:"3"`
+	Health       ProviderHealth    `json:"health"`
 	Config       map[string]string `json:"config"`
 }
 
@@ -56,19 +62,18 @@ type ProviderDetail struct {
 //	@Security		ApiKeyAuth
 //	@Router			/providers [get]
 func (p *ProviderRoutes) List(w http.ResponseWriter, r *http.Request) {
-	names := p.registry.List()
-	infos := make([]ProviderInfo, 0, len(names))
-	dflt := p.registry.Default()
-
-	for _, name := range names {
-		prov, err := p.registry.Get(name)
-		if err != nil {
-			continue
-		}
+	health := collectProviderHealth(r.Context(), p.registry)
+	infos := make([]ProviderInfo, 0, len(health))
+	for _, item := range health {
 		infos = append(infos, ProviderInfo{
-			Name:    name,
-			Healthy: prov.Healthy(r.Context()),
-			Default: name == dflt,
+			Name:         item.Name,
+			Healthy:      item.Healthy,
+			Default:      item.Default,
+			LatencyMS:    item.LatencyMS,
+			LastChecked:  item.LastChecked,
+			Error:        item.Error,
+			Capabilities: item.Capabilities,
+			RuntimeCount: item.RuntimeCount,
 		})
 	}
 
@@ -117,7 +122,7 @@ func (p *ProviderRoutes) Detail(w http.ResponseWriter, r *http.Request) {
 
 	prov, err := p.registry.Get(name)
 	if err != nil {
-		httputil.WriteError(w, http.StatusNotFound, httputil.CodeNotFound, "provider not found")
+		writeRouteError(w, err)
 		return
 	}
 
@@ -149,12 +154,20 @@ func (p *ProviderRoutes) Detail(w http.ResponseWriter, r *http.Request) {
 	if p.counter != nil {
 		count = p.counter.CountByProvider(r.Context(), name)
 	}
+	health := ProviderHealth{Name: name, Healthy: prov.Healthy(r.Context()), Default: name == dflt}
+	for _, item := range collectProviderHealth(r.Context(), p.registry) {
+		if item.Name == name {
+			health = item
+			break
+		}
+	}
 
 	httputil.WriteJSON(w, http.StatusOK, ProviderDetail{
 		Name:         name,
-		Healthy:      prov.Healthy(r.Context()),
+		Healthy:      health.Healthy,
 		Default:      name == dflt,
 		SandboxCount: count,
+		Health:       health,
 		Config:       cfg,
 	})
 }

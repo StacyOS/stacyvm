@@ -1,3 +1,5 @@
+//go:build linux
+
 // stacyvm-agent runs inside a Firecracker VM and serves exec/file requests
 // over vsock. Build with: GOOS=linux GOARCH=amd64 CGO_ENABLED=0 go build -ldflags="-s -w" -o bin/stacyvm-agent ./cmd/stacyvm-agent
 package main
@@ -173,6 +175,24 @@ func shellQuote(s string) string {
 	return "'" + strings.ReplaceAll(s, "'", "'\"'\"'") + "'"
 }
 
+func buildExecCommand(params agentproto.ExecParams) ([]string, error) {
+	switch strings.TrimSpace(params.Mode) {
+	case "", "shell":
+		shellCmd := params.Command
+		for _, arg := range params.Args {
+			shellCmd += " " + shellQuote(arg)
+		}
+		return []string{"/bin/sh", "-c", shellCmd}, nil
+	case "argv":
+		if strings.TrimSpace(params.Command) == "" {
+			return nil, fmt.Errorf("argv exec mode requires command")
+		}
+		return append([]string{params.Command}, params.Args...), nil
+	default:
+		return nil, fmt.Errorf("unsupported exec mode %q", params.Mode)
+	}
+}
+
 func handleExec(w io.Writer, req *agentproto.Request) {
 	var params agentproto.ExecParams
 	if err := agentproto.UnmarshalParams(req.Params, &params); err != nil {
@@ -183,15 +203,13 @@ func handleExec(w io.Writer, req *agentproto.Request) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	// Build full shell command: if args provided, shell-quote and append them
-	shellCmd := params.Command
-	if len(params.Args) > 0 {
-		for _, a := range params.Args {
-			shellCmd += " " + shellQuote(a)
-		}
+	args, err := buildExecCommand(params)
+	if err != nil {
+		sendError(w, req.ID, err.Error())
+		return
 	}
 
-	cmd := exec.CommandContext(ctx, "/bin/sh", "-c", shellCmd)
+	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 	if params.WorkDir != "" {
 		cmd.Dir = params.WorkDir
 	}
@@ -206,7 +224,7 @@ func handleExec(w io.Writer, req *agentproto.Request) {
 	cmd.Stdout = &stdoutBuf
 	cmd.Stderr = &stderrBuf
 
-	err := cmd.Run()
+	err = cmd.Run()
 	exitCode := 0
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
@@ -238,15 +256,15 @@ func handleExecStream(w io.Writer, req *agentproto.Request) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 	defer cancel()
 
-	// Build full shell command: if args provided, shell-quote and append them
-	shellCmd := params.Command
-	if len(params.Args) > 0 {
-		for _, a := range params.Args {
-			shellCmd += " " + shellQuote(a)
-		}
+	args, err := buildExecCommand(params)
+	if err != nil {
+		agentproto.SendStreamResponse(w, &agentproto.StreamResponse{
+			ID: req.ID, Error: err.Error(), Done: true,
+		})
+		return
 	}
 
-	cmd := exec.CommandContext(ctx, "/bin/sh", "-c", shellCmd)
+	cmd := exec.CommandContext(ctx, args[0], args[1:]...)
 	if params.WorkDir != "" {
 		cmd.Dir = params.WorkDir
 	}

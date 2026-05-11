@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Public support matrix
+    url: https://github.com/StacyOS/stacyvm/blob/main/docs/public-support-matrix.md
+    about: Check supported install modes and required support evidence before opening an issue.
+  - name: Production readiness checklist
+    url: https://github.com/StacyOS/stacyvm/blob/main/docs/production-readiness.md
+    about: Review the current production-readiness gates and known platform requirements.

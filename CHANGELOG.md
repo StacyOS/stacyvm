@@ -1,0 +1,509 @@
+# Changelog
+
+## Phase 14 Public-Readiness Repair - 2026-05-10
+
+Security fixes required before public launch. No new features.
+
+### Fixed (security)
+
+- **RS256 JWT verification used `hash=0` instead of `crypto.SHA256`** — tokens from real OIDC providers (Google Workspace, Okta, Azure AD, Cloudflare Access) were rejected because they sign with SHA256, but verification was using `rsa.VerifyPKCS1v15(key, 0, ...)`. Fixed to `rsa.VerifyPKCS1v15(key, crypto.SHA256, ...)`. Tests updated to sign with `crypto.SHA256` and a new regression test `TestVerifyJWT_RS256UsesSHA256` proves hash=0 signatures are rejected.
+- **Admin routes unprotected in OIDC-only mode** — when no `auth.admin_api_key` was configured and only OIDC was set, `AdminAuth` passed anonymous requests through silently (the `adminAPIKey == ""` branch fell through) and `RequireScope(ScopeAdmin)` was not applied. Fixed: `RequireScope(ScopeAdmin)` now fires whenever any auth is configured (`authConfigured`), not just when API keys are set. `AdminAuth` now correctly passes through only OIDC-established identities (Bearer token header) so API-key role promotion still works.
+- **`AuthAny` rejected valid OIDC tokens in mixed mode** — when both OIDC and API keys were configured, a valid Bearer token was accepted by `OIDCAuth` but then rejected by `AuthAny` (which always looked for an API key header). Fixed: `AuthAny` now skips its check when OIDC already set an identity via `Authorization` header.
+- **`PolicyEnforcer` was never mounted** — policy CRUD routes existed and policies could be created, but they were never evaluated on sandbox creation. Fixed: `PolicyEnforcer(st)` is now applied around `POST /api/v1/sandboxes` when a policy store is wired in.
+- **Worker token issuer accepted non-worker scopes** — a caller could request `admin:*` in a worker token. The scope was silently filtered at verification, but the issuer should reject it outright. Fixed: `POST /api/v1/admin/worker-tokens` now explicitly validates that all requested scopes begin with `worker:` and returns 400 if any non-worker scope is present.
+
+### Added
+
+- **Auth matrix regression tests** (`internal/api/auth_matrix_test.go`) — 7 tests covering API-key only, OIDC only (normal route, viewer-cannot-spawn, admin route blocked for anonymous/non-admin/admin), mixed OIDC+API-key, worker token not treated as Bearer, and token issuer scope rejection.
+- `TestVerifyJWT_RS256UsesSHA256` — explicitly proves the verifier uses `crypto.SHA256` and rejects hash=0 signatures.
+
+---
+
+## Phase 14 Enterprise Governance - 2026-05-10
+
+This release closes the enterprise production readiness gates: OIDC/SSO, RBAC, multi-tenancy, policy controls, and HA event durability.
+
+### Added
+
+- **OIDC/JWT authentication** — RS256 and ES256/ES384/ES512 Bearer token validation with configurable JWKS URL, static PEM public key (RSA or EC), issuer, audience, and clock-skew tolerance. Config keys: `auth.oidc_enabled`, `auth.oidc_issuer`, `auth.oidc_jwks_url`, `auth.oidc_public_key_file`.
+- **RBAC roles** — `viewer` (read-only), `operator` (spawn/exec/files), `tenant_admin` (per-tenant admin) beyond existing `api` and `admin`. OIDC group-to-role mapping via `auth.oidc_admin_groups`, `auth.oidc_operator_groups`, `auth.oidc_viewer_groups`.
+- **RBAC scope enforcement on sandbox routes** — read operations require `read:*`, mutating operations require `api:*`. Viewer-role users cannot spawn, exec, or destroy sandboxes.
+- **Tenant/project model** — `tenants`, `tenant_members`, `policies` tables (migration 11). `tenant_id` on sandboxes, admin audit logs, and operation audit logs. Tenant CRUD, per-tenant member RBAC, per-tenant audit export, and per-tenant policy management via `/api/v1/admin/tenants`.
+- **Policy controls** — per-tenant allow/deny rules for `image`, `provider`, and `network` resources with glob pattern matching and priority ordering. Policy enforcement runs at spawn time without consuming the request body.
+- **Sandbox tenant scoping** — List, Get, Destroy, Exec, file, and log operations enforce tenant boundaries for OIDC-authenticated callers.
+- **Centralized worker token issuer** — `POST /api/v1/admin/worker-tokens` mints short-lived signed worker tokens so workers do not need direct access to `auth.worker_signing_key`. Workers can call the issuer via `--bootstrap-admin-key`.
+- **Durable EventBus (HA)** — When `database.driver` is `postgres`, a Postgres LISTEN/NOTIFY bridge propagates lifecycle events across control-plane replicas. Each bridge stamps events with an instance UUID to prevent double-delivery on the originating replica.
+- **Postgres backup and rehearsal** — `stacyvm db pg-backup <output>` wraps `pg_dump`. `stacyvm db pg-rehearse` verifies schema state and checks all expected tables exist before upgrades.
+- **Admin UI tenant management** — Tenants page in the web dashboard with tenant lifecycle, member RBAC, policy management, and one-click per-tenant audit export.
+- **Config lint for OIDC** — `stacyvm config lint --production` validates OIDC issuer, JWKS URL, audience, and group-to-role mappings.
+- **Worker RPC mTLS smoke** — `scripts/smoke-remote-worker.sh --mtls` generates an ephemeral CA + TLS certs and runs the full remote-worker smoke over HTTPS with mutual TLS auth.
+- **Runtime certification integration smoke** — `scripts/certify-runtime.sh --stacyvm-bin` auto-starts a local StacyVM server, spawns a sandbox with the target runtime, execs a command, and destroys it to prove end-to-end functionality.
+
+### Fixed
+
+- Worker heartbeat now advertises `https://` RPC URL when `worker.rpc_tls.enabled = true`.
+- Policy enforcement middleware buffers request body before inspection so downstream handlers can still decode it.
+- Durable bridge no longer delivers events twice to local subscribers on the publishing instance.
+- `stacyvm config lint` markdown output `printf` usage fixed for portability.
+
+### Security
+
+- RBAC scopes enforced: viewer tokens cannot reach any mutating sandbox route.
+- Tenant isolation enforced across all sandbox operations: List, Get, Destroy, Exec, file reads/writes/deletes, and console logs.
+- ES256 JWT support added — required for Google Workspace, Cloudflare Access, and Azure AD OIDC integrations.
+
+---
+
+## Phase 14 Worker Identity Hardening - 2026-05-09
+
+This checkpoint starts hardening remote worker identity for public and enterprise multi-worker deployments.
+
+### Added
+
+- HMAC-SHA256 signed worker token format with `stacyvm-worker-v1` prefix.
+- Signed worker token claims for `worker_id`, `jti`, `aud`, optional worker scopes, `iat`, `nbf`, and `exp`.
+- Worker auth verification for signed tokens through `auth.worker_signing_key`.
+- Additional signed-token verification keys through `auth.worker_signing_keys` for no-downtime key rotation.
+- Emergency signed-token revocation through `auth.worker_revoked_token_ids`.
+- Worker token issuer JSON output, explicit token IDs, and delayed-validity `nbf` support.
+- `stacyvm worker token inspect <token>` for unverified signed-token metadata and `jti` recovery during incident response.
+- `stacyvm worker token verify <token>` for signature, rotation-key, audience, worker ID, and revocation validation.
+- `stacyvm worker token rotation-plan` for no-secret signing-key rotation checklists and validation commands.
+- Worker secret file flags for runtime worker tokens, runtime signing keys, token issuance signing keys, and verification rotation keys.
+- Signed-token worker ID matching and expiry enforcement.
+- Signed-token not-before, future issued-at, clock-skew, and max-lifetime enforcement.
+- Signed-token audience separation for worker-to-control-plane and control-plane-to-worker RPC calls.
+- Worker scope filtering so signed tokens cannot grant non-worker scopes.
+- Worker runtime token derivation for heartbeat and lease-renewal calls when `auth.worker_signing_key` is configured and no static worker token is provided.
+- Worker token-file reload support so sidecar-issued short-lived worker tokens can rotate without restarting workers.
+- Signed control-plane-to-worker RPC tokens for remote worker calls when no shared `auth.worker_token` is configured.
+- `stacyvm worker token <worker-id>` for issuing signed worker tokens.
+- Config loading and defaults for `auth.worker_signing_key` and `auth.worker_signing_keys`.
+- Config lint awareness for signed worker credentials.
+- Config lint warnings for shared worker tokens left enabled beside signed worker tokens and invalid signing-key rotation state.
+- Worker RPC mTLS config under `worker.rpc_tls`.
+- TLS server support for inbound worker RPC.
+- TLS client support for control-plane calls to remote worker RPC.
+- Config-level worker secret file support through `auth.worker_token_file` and `auth.worker_signing_key_file`.
+- Worker RPC mTLS conformance test with generated CA, server, and client certificates.
+- Config lint checks for worker RPC TLS certificate and CA settings.
+- Config lint source checks for file-backed versus inline worker token and signing-key secrets.
+- Cluster conformance coverage for signed-token migration lint warnings.
+- `scripts/certify-worker-identity.sh` for signed-token lifecycle certification reports on target hosts.
+- Cluster conformance coverage for worker identity certification report generation.
+- Phase 14 release notes under `docs/releases/phase-14-worker-identity-hardening.md`.
+
+### Changed
+
+- Worker auth now accepts signed tokens, per-worker static tokens, or the shared staging token while preserving existing compatibility.
+- Config lint now warns when revoked signed-token IDs are configured without signed worker-token verification.
+- Worker RPC docs now include an issue, inspect, verify, and revoke runbook for signed worker tokens.
+- Worker RPC docs now include a generated no-secret rotation-plan workflow for signed worker token keys.
+- Worker token runbooks now prefer secret-mounted files over shell history or environment variables for long-lived worker secrets.
+- Production readiness notes now reflect signed worker identity certification and the remaining target-network/runtime signoff gates.
+- Public support matrix now describes multi-worker as preview with signed identity, worker RPC routing, mTLS wiring, and explicit certification evidence.
+- Cluster conformance documentation now treats signed worker tokens as the production-aligned worker identity path.
+- API and worker RPC docs now describe signed worker token behavior, signing-key rotation, and worker RPC mTLS.
+- Threat model and remote-worker staging docs now treat signed worker tokens as implemented Phase 14 identity controls instead of future work.
+- Runtime certification and public support guidance now document reloadable worker token files for external issuer handoff.
+- Config examples now prefer secret-mounted worker credential files for production services.
+- Worker identity config lint now reports file-backed worker credential sources so inline secrets are visible during production review.
+
+## Phase 13 Cluster Store And Worker Identity - 2026-05-09
+
+This checkpoint starts the enterprise multi-worker production track after Phase 12 completed remote sandbox I/O routing.
+
+### Added
+
+- Driver-based store factory through `store.Open`.
+- `database.driver` config with SQLite as the default.
+- `database.dsn` config for Postgres-backed cluster storage.
+- Linked Postgres store implementation through the pgx stdlib driver.
+- Config validation for database driver selection and required Postgres DSN.
+- Reusable store contract test harness wired to SQLite.
+- Cross-store contract coverage for sandbox lifecycle, workers, leases, audits, exec logs, quotas, provider configs, templates, environment builds, artifacts, and registry connections.
+- Per-worker token map support through `auth.worker_tokens`.
+- Worker auth scopes for heartbeat, spawn, destroy, status, exec, files, logs, and leases.
+- Config linting guidance for staging shared worker tokens versus production per-worker credentials.
+- Cluster conformance CI script and workflow job.
+- Cluster conformance matrix documenting store, worker identity, runtime, and promotion gates.
+- Postgres-native migration definitions matching the current SQLite schema version cadence.
+- Store migration tests that keep Postgres schema coverage aligned with SQLite migrations.
+- Live Postgres store contract path through `STACYVM_POSTGRES_TEST_DSN`.
+- Live Postgres lease race/concurrency coverage.
+- Live Postgres migration rehearsal coverage.
+- Remote worker smoke support for Postgres-backed control planes.
+- Phase 13 release notes under `docs/releases/phase-13-cluster-store-and-worker-identity.md`.
+
+### Changed
+
+- `stacyvm serve` now opens persistence through the driver-based store factory.
+- `stacyvm config lint` now passes Postgres configs with a valid DSN.
+- Worker lease renewal now checks the dedicated `worker:lease` scope instead of reusing heartbeat-only authorization.
+
+## Phase 12 Remote Sandbox I/O Routing - 2026-05-09
+
+This checkpoint starts extending remote worker routing beyond sandbox lifecycle operations.
+
+### Added
+
+- `worker.exec` in the worker RPC contract.
+- Worker protocol exec request and result payloads.
+- `worker:exec` scope constant for future worker token scoping.
+- Worker-side non-streaming exec handling through the provider registry.
+- Worker-side live NDJSON streaming exec handling through the provider registry.
+- Typed worker RPC client support for exec calls.
+- Typed worker RPC client support for live exec-stream calls.
+- Worker RPC contract and client support for file write, read, list, delete, move, chmod, stat, and glob.
+- Worker RPC contract and client support for remote console logs.
+- Worker preview domain advertisement through heartbeat capacity.
+- Remote worker drain/offline reconciliation policy for owned sandboxes.
+- Control-plane routing for non-streaming exec on remote-owned sandboxes.
+- Control-plane routing for exec-stream calls on remote-owned sandboxes.
+- Control-plane routing for remote-owned sandbox file APIs.
+- Control-plane routing for remote-owned sandbox console logs.
+- Control-plane preview-domain routing for remote-owned sandboxes.
+- Phase 12 release notes under `docs/releases/phase-12-remote-sandbox-io-routing.md`.
+
+### Changed
+
+- Remote-owned sandbox exec now uses persisted worker ownership and provider runtime ID instead of the local provider.
+- Remote exec preserves existing event, audit, metric, timeout, and exec-log behavior.
+- Remote exec-stream keeps the manager streaming API shape while forwarding live NDJSON chunks over worker RPC.
+- Remote file APIs now use persisted worker ownership and provider runtime ID instead of local provider state.
+- Remote console logs now use persisted worker ownership and provider runtime ID instead of local provider state.
+- Remote-owned sandbox responses now use the owning worker's preview domain when the worker advertises one.
+- Remote-owned sandboxes on stale/offline workers are marked `unhealthy`; expired remote-owned sandboxes are marked `expired` and release their lease.
+- Draining workers keep existing ownership but stay out of new placement.
+- Pool-mode default workdir is no longer applied to remote sandboxes just because their provider runtime ID is stored in `VMID`.
+
+## Phase 11 Remote Worker Runtime - 2026-05-09
+
+This checkpoint starts the remote worker runtime track on top of the Phase 10 worker registry, lease, and RPC contract foundation.
+
+### Added
+
+- `stacyvm worker` command for running a remote worker process.
+- Worker command flags for ID, control-plane URL, worker token, heartbeat interval, and one-shot heartbeat smoke tests.
+- Worker RPC listen flag for inbound control-plane-to-worker calls.
+- `worker.id`, `worker.control_plane_url`, `worker.listen_addr`, `worker.heartbeat_interval`, and `worker.shutdown_timeout` config.
+- `auth.worker_token` for worker-to-control-plane authentication.
+- Dedicated worker auth role with `worker:heartbeat` scope.
+- Worker-only heartbeat endpoint at `POST /api/v1/worker/{workerID}/heartbeat`.
+- `internal/worker` heartbeat client and runtime loop.
+- Worker-side `/rpc` handler for `workerproto.Request` envelopes.
+- Worker RPC status handling through `worker.status`.
+- Worker-authenticated lease renewal endpoint for durable control-plane leases.
+- Worker RPC lease renewal handling through `worker.renew_lease`.
+- Worker-side spawn RPC handling through `worker.spawn`.
+- Typed worker RPC client methods for spawn and status calls.
+- Control-plane remote spawn assignment for scheduler-selected workers that advertise an RPC URL.
+- Remote-owned sandbox status refresh through `worker.status`.
+- Worker-side destroy RPC handling through `worker.destroy`.
+- Control-plane remote destroy routing for remote-owned sandboxes.
+- Two-process remote worker staging guide and mock smoke script.
+- Worker shutdown drain state that rejects new spawn assignments and reports `draining` heartbeats.
+- Phase 11 release notes under `docs/releases/phase-11-remote-worker-runtime.md`.
+
+### Changed
+
+- Worker heartbeats can now be submitted without reusing API/admin keys.
+- Worker heartbeat requests are rejected when the authenticated worker ID does not match the requested worker path.
+- Worker lease renewal validates resource, holder, and expiry before renewing durable control-plane leases.
+- Worker spawn validates lease ownership before creating a provider runtime and returns both control-plane sandbox ID and provider runtime ID.
+- Remote spawn persists selected `worker_id` and provider runtime ID for later status/destroy routing.
+- Sandbox reads refresh and persist state changes reported by the owning remote worker.
+- Remote destroy validates worker lease ownership, tears down the provider runtime, marks the sandbox destroyed, and releases the durable lease.
+- Production readiness documentation now reflects the Phase 11 remote spawn/status/destroy transport state.
+- Scheduler placement avoids draining workers because they no longer report `online`.
+- Config validation now covers worker heartbeat and shutdown durations.
+
+## Phase 10 Multi-Worker Foundation - 2026-05-09
+
+This checkpoint starts the enterprise and multi-worker readiness track.
+
+### Added
+
+- SQLite-backed worker registry storage with heartbeat, provider, capability, and capacity fields.
+- Store-level worker CRUD methods for future scheduler and worker ownership work.
+- Local worker registration on API server startup so single-node deployments report as a worker.
+- Worker registry API:
+  - `GET /api/v1/workers`
+  - `GET /api/v1/workers/{workerID}`
+  - `POST /api/v1/admin/workers/{workerID}/heartbeat`
+  - `DELETE /api/v1/admin/workers/{workerID}`
+- Worker ownership on sandbox records through persisted `worker_id`.
+- Worker-aware spawn admission that evaluates eligible workers by status, heartbeat freshness, provider support, capacity, and active sandbox count.
+- Durable lease storage with acquire, renew, release, get, and list semantics for future distributed sandbox ownership.
+- Lease enforcement around local spawn/adopt/destroy lifecycle paths.
+- Periodic local worker heartbeat refresh while the API server is running.
+- Worker RPC contract types under `internal/workerproto`.
+- Worker authentication scopes and cluster store semantics documentation.
+- Diagnostics worker summary with online, stale, unhealthy, and total counts.
+- Diagnostics lease summary with active, expired, total, and per-holder counts.
+- Diagnostics sandbox summaries grouped by worker ID.
+- Prometheus worker count metrics by status.
+- Prometheus sandbox ownership metrics by worker ID.
+- Prometheus lease count metrics by status.
+- Phase 10 release notes under `docs/releases/phase-10-multi-worker-foundation.md`.
+
+### Changed
+
+- Diagnostics now include worker registry state alongside provider, sandbox, scheduler, quota, rate-limit, and operation data.
+- The public API exposes read-only worker discovery while heartbeat and delete operations live under the admin namespace.
+- Scheduler status now reports the active local worker ID.
+- Scheduler status now reports the selected worker and eligible worker count while remote execution remains gated on worker RPC.
+- Lease acquisition is holder-checked and expiry-aware so later workers can safely fence lifecycle ownership.
+- Destroy now requires the local worker to acquire or hold the sandbox lease before mutating provider or store state.
+- Worker placement now treats stale local worker records the same as stale remote workers; the heartbeat loop keeps the local worker fresh in real server runs.
+- Remote worker execution remains gated until a network transport enforces the worker RPC contract.
+
+## Phase 9 Public Self-Serve Release Trust - 2026-05-08
+
+This checkpoint starts the Phase 9 public self-serve production readiness track.
+
+### Added
+
+- Sigstore keyless signing for release binaries and `checksums.txt`.
+- Sigstore signing for published GHCR image digests.
+- `scripts/verify-release.sh` for public release signature and checksum verification.
+- Installer Sigstore verification when `cosign` is available.
+- `STACYVM_REQUIRE_SIGNATURES=true` installer mode for fail-closed public installs.
+- Phase 9 acceptance criteria in the production readiness checklist.
+- Upgrade and SQLite migration checks in CI through `scripts/ci-upgrade-migration.sh`.
+- Diagnostics remediation links for production readiness, runtime certification, release verification, support bundles, and upgrade rollback.
+- Public self-serve limitations and support matrix under `docs/public-support-matrix.md`.
+- Public release sanity checks in CI for installer/verifier shell syntax, release builds, and checksum validation.
+- `scripts/post-release-validate.sh` for post-tag release asset, signature, checksum, and installer verify-only validation.
+- Mock-based TypeScript and Python SDK parity smoke tests in CI.
+- GitHub bug and production support issue templates that request support bundle, config lint, upgrade rehearsal, runtime certification, and release verification evidence.
+
+### Changed
+
+- Release documentation now explains binary, checksum, and container signature verification.
+- Production readiness documentation now marks Phase 9 upgrade/migration CI and public limitation docs as complete.
+- Docker integration tests are opt-in with `STACYVM_DOCKER_INTEGRATION=1` so default CI remains independent of Docker Hub and host daemon state.
+- TypeScript SDK spawn options now include `template`, matching Python spawn behavior.
+- Python SDK now exposes `templates` and `providers()` helpers for closer TypeScript parity.
+- `scripts/install.sh` supports `STACYVM_VERIFY_ONLY=true` for release validation without installing binaries or touching host setup.
+
+## Phase 8 Single-Node Production - 2026-05-08
+
+This checkpoint starts the Phase 8 single-node production readiness track.
+
+### Added
+
+- `stacyvm db backup` for consistent SQLite backups with integrity validation.
+- `stacyvm db restore` with explicit confirmation, backup validation, pre-restore safety copy, and stale WAL/SHM cleanup.
+- `stacyvm config lint --production` for deterministic single-node production config validation.
+- `stacyvm upgrade rehearse` for pre-upgrade config, database, backup path, live-check, and rollback guidance.
+- `stacyvm support bundle` for redacted operator diagnostics.
+- Runtime certification reports through `scripts/certify-runtime.sh --format json|markdown --output <path>`.
+- Phase 8 release notes under `docs/releases/phase-8-single-node-production.md`.
+
+### Changed
+
+- Deployment and release docs now include production config linting before upgrades and release tags.
+- Deployment docs now cover upgrade rehearsal, rollback, and support bundle generation.
+- Runtime certification docs now require host-generated certification artifacts for runtime signoff.
+
+## Phase 7 Release Candidate Hardening - 2026-05-08
+
+This checkpoint starts the Phase 7 release-candidate hardening track.
+
+### Added
+
+- Initial `stacyvm doctor` command with local and production diagnostic modes.
+- Production readiness checklist under `docs/production-readiness.md`.
+- Threat model under `docs/threat-model.md`.
+- Phase 7 release notes under `docs/releases/phase-7-release-candidate-hardening.md`.
+
+### Changed
+
+- Made exec command mode explicit with backwards-compatible `shell` mode and safer `argv` mode.
+- Added operation audit persistence for sandbox lifecycle, exec, and file operations.
+- Tightened pooled file path traversal handling and expanded traversal tests across file operations.
+- Added runtime host certification script and documentation.
+- Added remediation guidance to `stacyvm doctor` output.
+
+## Phase 6 Security Governance - 2026-05-08
+
+This checkpoint starts the Phase 6 security and governance work on top of the Phase 5 admin control plane.
+
+### Added
+
+- Request-scoped authentication identities with `api` and `admin` roles.
+- Initial scope metadata for authenticated requests: `api:*` and `admin:*`.
+- Route-level scope enforcement for authenticated admin routes.
+- Admin audit fallback attribution now includes the authenticated role and key header when no explicit actor header is supplied.
+- Configurable admin fallback through `auth.admin_fallback_enabled`.
+- Production security governance guide with admin hardening, key handling, audit retention, and OIDC/SSO design groundwork.
+- Phase 6 release notes under `docs/releases/phase-6-security-governance.md`.
+
+## Phase 5 Admin Control Plane - 2026-05-08
+
+This checkpoint starts the Phase 5 operator control plane by separating admin access from regular API usage.
+
+### Added
+
+- Optional `auth.admin_api_key` / `STACYVM_AUTH_ADMIN_API_KEY` configuration.
+- `X-Admin-API-Key` support for admin requests.
+- `/api/v1/admin/*` route aliases for providers, quotas, diagnostics, JSON metrics, and Prometheus metrics.
+- Admin key examples in deployment templates and docs.
+- Dashboard settings for separate regular and admin API keys.
+- Operations dashboard page for admin quota controls and diagnostics.
+- Persisted admin audit log storage and `/api/v1/admin/audit`.
+- Admin control-plane operator guide under `docs/admin-control-plane.md`.
+- Config-driven admin audit retention through `auth.admin_audit_retention`.
+
+### Changed
+
+- Normal API and admin API keys can both authenticate regular API requests.
+- Admin routes require the admin key when configured, with fallback to the regular API key only when no admin key is set.
+- Dashboard provider and metrics calls now use the admin namespace.
+- Provider health checks in the dashboard now call `/api/v1/admin/providers/test`.
+- Owner quota list, save, delete, summary, usage, and diagnostics workflows are available from the dashboard.
+- Admin route access is recorded with redacted request metadata and shown in the Operations dashboard.
+- Admin audit history can be filtered by actor, method, status, and path, then exported as CSV.
+- Admin audit pruning removes records older than the configured retention window after successful admin audit writes.
+
+### Verified
+
+- `go test ./internal/api/middleware ./internal/config ./cmd/stacyvm`
+- `npm run build`
+
+## Phase 4 Production Deployment - 2026-05-08
+
+This checkpoint adds the first production deployment and verification surface for Phase 4: GitHub Actions CI, deployment templates, and an operator runbook.
+
+### Added
+
+- GitHub Actions workflow for Go tests/build, Swagger drift, web build, TypeScript SDK build, and Python SDK import checks.
+- Production Docker Compose template with StacyVM and Traefik for live previews.
+- Production baseline config with auth, rate limiting, sandbox caps, queueing, JSON logs, and persistent SQLite state.
+- systemd unit and environment template for binary-based Linux installs.
+- Deployment guide covering host requirements, health probes, Prometheus metrics, reverse proxy setup, backups, upgrades, and provider notes.
+- Release workflow for GitHub releases and GHCR container image publishing.
+- Release runbook documenting tags, manual dispatch, binary artifacts, image tags, and preflight checks.
+- `.dockerignore` for smaller and safer Docker build contexts.
+- Deployment smoke script for live, health, readiness, and Prometheus probes.
+- CI deployment smoke job using the mock provider.
+- Runtime conformance matrix for Docker, gVisor, Kata, Firecracker, PRoot, E2B, and custom providers.
+- Phase 4 release notes under `docs/releases/phase-4-production-deployment.md`.
+
+### Changed
+
+- Swagger drift checks now download Go modules before invoking `swag`, which makes cold CI runners reliable.
+- CI opts into Node 24-based JavaScript actions to address the GitHub Actions Node 20 deprecation warning.
+- Docker image builds now accept an explicit `VERSION` build argument and BuildKit target platform args.
+- Release artifacts now build into `dist/` with checksums instead of the repository root.
+- `stacyvm serve` now registers the mock provider when `providers.mock.enabled` is true.
+- Production Compose now allows the Traefik host port to be overridden for smoke runs.
+- Production Compose has been runtime-smoked with StacyVM, Traefik, Docker provider readiness, API probes, and live-preview routing.
+- README navigation now links to the production deployment guide.
+
+### Verified
+
+- `docker compose --env-file deploy/.env.example -f deploy/docker-compose.yml config`
+- YAML parsing for deployment templates
+- `git diff --check`
+- `go test ./...`
+- `cd web && npm run build`
+- `scripts/check-swagger.sh`
+- `make release-build-all VERSION=phase-4-test`
+
+## Phase 3 Quotas And Scheduling - 2026-05-08
+
+This checkpoint adds the first production multi-tenant control plane: persisted owner quotas, API rate limiting, spawn backpressure, scheduler visibility, admission preflight, and SDK helpers.
+
+### Added
+
+- Persisted owner quota policies for max sandboxes, max TTL, and max exec timeout.
+- Owner quota APIs, including usage and redacted summary endpoints.
+- Spawn admission decisions and `POST /api/v1/sandboxes/admission`.
+- Configurable spawn overflow queue with queue timeout and maximum queue depth.
+- Optional API rate limiting by owner, API key, or IP address.
+- Scheduler, quota, and rate-limit metrics in JSON diagnostics/metrics and Prometheus output.
+- TypeScript and Python SDK helpers for admission preflight and quota summary.
+
+### Changed
+
+- Spawn admission is serialized to avoid concurrent over-admission.
+- Queued spawns wake when capacity opens or owner quotas change.
+- Rate-limit bucket keys are hashed before storage.
+- Streaming exec cancellation is no longer reported as a timeout.
+- Streaming exec preflight errors now use the same API error mapping as non-streaming exec.
+- OpenAPI docs were regenerated for the Phase 3 API surface.
+
+### Verified
+
+- `go test ./internal/api/routes ./internal/orchestrator`
+- `make build`
+- `cd web && npm run build`
+- `make test`
+
+## Phase 2 Observability And Ops - 2026-05-08
+
+This checkpoint adds production operations surfaces for health checks, diagnostics, metrics, audit events, and runtime limits.
+
+### Added
+
+- Liveness endpoint at `/api/v1/live`.
+- Readiness endpoint at `/api/v1/ready` with detailed provider health.
+- Redacted diagnostics endpoint at `/api/v1/diagnostics`.
+- Structured JSON operation metrics on `/api/v1/metrics`.
+- Prometheus-compatible metrics endpoint at `/api/v1/metrics/prometheus`.
+- Provider health detail with latency, last checked time, capabilities, error reason, and runtime inventory count when supported.
+- Operational audit events for exec failures, exec timeouts, provider failures, resource limits, and reconciliation actions.
+- Configurable operational limits for max TTL, default/max exec timeout, max sandboxes, and max sandboxes per owner.
+
+### Changed
+
+- `/api/v1/metrics` now includes sandbox state/provider breakdown, provider health, event bus stats, and operation metrics.
+- `/api/v1/providers` and `/api/v1/providers/{name}` now expose richer provider health details.
+- Diagnostics include store health, build/runtime data, sandbox counts, provider health, event stats, operation metrics, and explicit redaction categories.
+- Manager-level spawn and exec flows now enforce configured operational limits centrally.
+
+### Verified
+
+- `make test`
+- `make build`
+- `cd web && npm run build`
+
+## Phase 1 Foundation Hardening - 2026-05-08
+
+This checkpoint closes the Phase 1 reliability and production-readiness foundation.
+
+### Added
+
+- Provider contract documentation in `docs/provider-contract.md`.
+- Typed provider errors for sandbox lifecycle, provider availability, exec timeout, and resource-limit failures.
+- Typed store errors for not-found and conflict cases.
+- Shared API route error mapping with explicit `404`, `408`, `429`, and `503` responses.
+- Provider conformance harness covering lifecycle, exec, streaming exec, and file operations.
+- Mock, Docker, Custom, PRoot, and Firecracker conformance coverage, with PRoot and Firecracker gated on platform dependencies.
+- Startup reconciliation that refreshes persisted sandbox state from provider runtime state.
+- Docker runtime inventory and adoption for StacyVM containers missing from SQLite after process restart.
+- Streaming exec timeout handling that emits an explicit stderr timeout chunk.
+- Non-Linux `stacyvm-agent` stub so repository builds work on macOS while the real agent remains Linux-only.
+
+### Changed
+
+- Sandbox, template, environment, and provider routes now use typed errors instead of string matching.
+- Docker sandboxes now include richer `stacyvm.*` labels for reconciliation and metadata recovery.
+- Docker missing-container paths now map to `ErrSandboxNotFound`.
+- Manager `Exec` and `ExecStream` now consistently honor caller-supplied timeouts.
+- Provider comments now point implementers to the documented contract and conformance tests.
+
+### Verified
+
+- `make test`
+- `make build`
+- `cd web && npm run build`
+- Docker provider conformance and runtime inventory tests with Docker daemon access
+
+### Platform Notes
+
+- Firecracker conformance is available on Linux hosts with `/dev/kvm`, Firecracker, kernel, rootfs, and agent paths configured.
+- PRoot conformance is available when `proot` and a usable rootfs are installed.
+- Local sandboxed test runs still need permission to bind `httptest` sockets for the full integration suite.

@@ -1,0 +1,214 @@
+---
+title: "Sandboxes API"
+description: "Create sandboxes, execute commands, manage files, and destroy runtime instances through the StacyVM REST API."
+---
+
+Use the sandboxes API when you want direct HTTP access or when you are building your own SDK.
+
+## Prerequisites
+
+- A running StacyVM server.
+- `X-API-Key` when auth is enabled.
+- `X-User-ID` when you want explicit tenant attribution.
+
+## Create A Sandbox
+
+<CodeGroup>
+```bash cURL
+curl -sS -X POST http://localhost:7423/api/v1/sandboxes \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: sk_test_YOUR_API_KEY" \
+  -H "X-User-ID: user_123" \
+  -d '{
+    "image": "python:3.12",
+    "provider": "docker",
+    "memory_mb": 512,
+    "vcpus": 1,
+    "ttl": "10m",
+    "metadata": {"purpose": "quickstart"}
+  }'
+```
+
+```javascript JavaScript
+const response = await fetch("http://localhost:7423/api/v1/sandboxes", {
+  method: "POST",
+  headers: {
+    "Content-Type": "application/json",
+    "X-API-Key": "sk_test_YOUR_API_KEY",
+    "X-User-ID": "user_123",
+  },
+  body: JSON.stringify({
+    image: "python:3.12",
+    provider: "docker",
+    memory_mb: 512,
+    vcpus: 1,
+    ttl: "10m",
+    metadata: { purpose: "quickstart" },
+  }),
+});
+
+if (!response.ok) {
+  throw new Error(await response.text());
+}
+
+const sandbox = await response.json();
+console.log(sandbox.id);
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    "http://localhost:7423/api/v1/sandboxes",
+    headers={
+        "Content-Type": "application/json",
+        "X-API-Key": "sk_test_YOUR_API_KEY",
+        "X-User-ID": "user_123",
+    },
+    json={
+        "image": "python:3.12",
+        "provider": "docker",
+        "memory_mb": 512,
+        "vcpus": 1,
+        "ttl": "10m",
+        "metadata": {"purpose": "quickstart"},
+    },
+    timeout=30,
+)
+response.raise_for_status()
+print(response.json()["id"])
+```
+</CodeGroup>
+
+<ParamField body="image" type="string">
+  Runtime image to start, such as `python:3.12` for Docker.
+</ParamField>
+
+<ParamField body="provider" type="string">
+  Provider override. Omit this to use the server default.
+</ParamField>
+
+<ParamField body="memory_mb" type="integer">
+  Requested memory limit in megabytes.
+</ParamField>
+
+<ParamField body="vcpus" type="integer">
+  Requested virtual CPU count.
+</ParamField>
+
+<ParamField body="ttl" type="string">
+  Auto-destroy duration using Go duration syntax, such as `10m` or `1h30m`.
+</ParamField>
+
+<ParamField body="metadata" type="object">
+  String key-value labels stored with the sandbox.
+</ParamField>
+
+## Success Response
+
+```json
+{
+  "id": "sb_a1b2c3d4",
+  "state": "running",
+  "provider": "docker",
+  "image": "python:3.12",
+  "memory_mb": 512,
+  "vcpus": 1,
+  "created_at": "2026-05-10T10:00:00Z",
+  "expires_at": "2026-05-10T10:10:00Z",
+  "metadata": {
+    "purpose": "quickstart"
+  }
+}
+```
+
+<ResponseField name="id" type="string">
+  Unique sandbox ID used by exec, file, preview, and destroy endpoints.
+</ResponseField>
+
+<ResponseField name="state" type="string">
+  Current lifecycle state, usually `running` after a successful create.
+</ResponseField>
+
+<ResponseField name="expires_at" type="string">
+  UTC timestamp when TTL cleanup should destroy the sandbox.
+</ResponseField>
+
+## Execute A Command
+
+<CodeGroup>
+```bash cURL
+curl -sS -X POST http://localhost:7423/api/v1/sandboxes/sb_a1b2c3d4/exec \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: sk_test_YOUR_API_KEY" \
+  -d '{"command":"python3 -c \"print(40 + 2)\"","timeout":"10s"}'
+```
+
+```javascript JavaScript
+const response = await fetch(
+  "http://localhost:7423/api/v1/sandboxes/sb_a1b2c3d4/exec",
+  {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-API-Key": "sk_test_YOUR_API_KEY",
+    },
+    body: JSON.stringify({
+      command: 'python3 -c "print(40 + 2)"',
+      timeout: "10s",
+    }),
+  },
+);
+
+if (!response.ok) {
+  throw new Error(await response.text());
+}
+
+console.log(await response.json());
+```
+
+```python Python
+import requests
+
+response = requests.post(
+    "http://localhost:7423/api/v1/sandboxes/sb_a1b2c3d4/exec",
+    headers={
+        "Content-Type": "application/json",
+        "X-API-Key": "sk_test_YOUR_API_KEY",
+    },
+    json={
+        "command": 'python3 -c "print(40 + 2)"',
+        "timeout": "10s",
+    },
+    timeout=30,
+)
+response.raise_for_status()
+print(response.json()["stdout"])
+```
+</CodeGroup>
+
+## Common Error
+
+```json
+{
+  "code": "not_found",
+  "message": "sandbox sb_a1b2c3d4 not found"
+}
+```
+
+The most common causes are an expired TTL, a sandbox that was already destroyed, or an ID from another environment.
+
+## Destroy A Sandbox
+
+```bash
+curl -sS -X DELETE http://localhost:7423/api/v1/sandboxes/sb_a1b2c3d4 \
+  -H "X-API-Key: sk_test_YOUR_API_KEY"
+```
+
+Destroy is idempotent. It is safe to call during cleanup even if TTL cleanup already ran.
+
+## Related
+
+- [Quickstart](/docs/getting-started/quickstart)
+- [Full REST API reference](/docs/rest-api)
+- [Core concepts](/docs/getting-started/core-concepts)

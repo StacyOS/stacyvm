@@ -26,6 +26,7 @@ func main() {
 
 	root.AddCommand(
 		newServeCmd(),
+		newWorkerCmd(),
 		newSpawnCmd(),
 		newExecCmd(),
 		newKillCmd(),
@@ -33,6 +34,11 @@ func main() {
 		newVersionCmd(),
 		newTUICmd(),
 		newBuildImageCmd(),
+		newDoctorCmd(),
+		newConfigCmd(),
+		newDBCmd(),
+		newUpgradeCmd(),
+		newSupportCmd(),
 	)
 
 	if err := root.Execute(); err != nil {

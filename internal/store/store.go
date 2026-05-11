@@ -14,7 +14,9 @@ type SandboxRecord struct {
 	VCPUs     int
 	Metadata  string // JSON
 	OwnerID   string
+	TenantID  string
 	VMID      string
+	WorkerID  string
 	CreatedAt time.Time
 	ExpiresAt time.Time
 	UpdatedAt time.Time
@@ -104,6 +106,120 @@ type RegistryConnectionRecord struct {
 	UpdatedAt time.Time
 }
 
+type OwnerQuotaRecord struct {
+	OwnerID               string
+	MaxSandboxes          int
+	MaxTTLSeconds         int64
+	MaxExecTimeoutSeconds int64
+	CreatedAt             time.Time
+	UpdatedAt             time.Time
+}
+
+type AdminAuditRecord struct {
+	ID         int64     `json:"id" example:"42"`
+	Actor      string    `json:"actor" example:"admin"`
+	Method     string    `json:"method" example:"PUT"`
+	Path       string    `json:"path" example:"/api/v1/admin/quotas/owner-a"`
+	Status     int       `json:"status" example:"200"`
+	DurationMS int64     `json:"duration_ms" example:"4"`
+	RequestID  string    `json:"request_id" example:"req-abc123"`
+	RemoteAddr string    `json:"remote_addr" example:"127.0.0.1"`
+	UserAgent  string    `json:"user_agent" example:"stacyvm-web"`
+	TenantID   string    `json:"tenant_id" example:"tenant-acme"`
+	CreatedAt  time.Time `json:"created_at" example:"2026-05-08T10:30:00Z"`
+}
+
+type AdminAuditQuery struct {
+	Limit    int
+	Actor    string
+	Method   string
+	Status   int
+	PathLike string
+	TenantID string
+}
+
+type OperationAuditRecord struct {
+	ID        int64     `json:"id"`
+	Actor     string    `json:"actor"`
+	Action    string    `json:"action"`
+	SandboxID string    `json:"sandbox_id"`
+	Resource  string    `json:"resource"`
+	Provider  string    `json:"provider"`
+	Status    string    `json:"status"`
+	Detail    string    `json:"detail"`
+	TenantID  string    `json:"tenant_id"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+type OperationAuditQuery struct {
+	Limit     int
+	Actor     string
+	Action    string
+	SandboxID string
+	Resource  string
+	Status    string
+	TenantID  string
+}
+
+type WorkerRecord struct {
+	ID            string    `json:"id" example:"worker-local"`
+	Hostname      string    `json:"hostname" example:"stacyvm-host-1"`
+	Status        string    `json:"status" example:"online"`
+	Providers     string    `json:"providers"`    // JSON array
+	Capabilities  string    `json:"capabilities"` // JSON array
+	Capacity      string    `json:"capacity"`     // JSON object
+	LastHeartbeat time.Time `json:"last_heartbeat" example:"2026-05-09T10:30:00Z"`
+	CreatedAt     time.Time `json:"created_at" example:"2026-05-09T10:00:00Z"`
+	UpdatedAt     time.Time `json:"updated_at" example:"2026-05-09T10:30:00Z"`
+}
+
+type LeaseRecord struct {
+	ResourceID   string    `json:"resource_id" example:"sb-abc123"`
+	ResourceType string    `json:"resource_type" example:"sandbox"`
+	HolderID     string    `json:"holder_id" example:"worker-local"`
+	Generation   int64     `json:"generation" example:"3"`
+	ExpiresAt    time.Time `json:"expires_at" example:"2026-05-09T10:31:00Z"`
+	CreatedAt    time.Time `json:"created_at" example:"2026-05-09T10:30:00Z"`
+	UpdatedAt    time.Time `json:"updated_at" example:"2026-05-09T10:30:30Z"`
+}
+
+// TenantRecord represents a tenant (project/organization) in the multi-tenant model.
+type TenantRecord struct {
+	ID        string    `json:"id" example:"tenant-acme"`
+	Name      string    `json:"name" example:"Acme Corp"`
+	OwnerID   string    `json:"owner_id" example:"user-alice"`
+	Settings  string    `json:"settings"` // JSON object
+	CreatedAt time.Time `json:"created_at" example:"2026-05-10T10:00:00Z"`
+	UpdatedAt time.Time `json:"updated_at" example:"2026-05-10T10:00:00Z"`
+}
+
+// TenantMemberRecord maps a user/subject to a role within a tenant.
+type TenantMemberRecord struct {
+	TenantID  string    `json:"tenant_id" example:"tenant-acme"`
+	UserID    string    `json:"user_id" example:"user-alice"`
+	Role      string    `json:"role" example:"admin"` // viewer, operator, admin
+	CreatedAt time.Time `json:"created_at" example:"2026-05-10T10:00:00Z"`
+	UpdatedAt time.Time `json:"updated_at" example:"2026-05-10T10:00:00Z"`
+}
+
+// PolicyRecord is a provider/image/network allow-deny rule scoped to a tenant or globally.
+type PolicyRecord struct {
+	ID           string    `json:"id" example:"pol-abc123"`
+	TenantID     string    `json:"tenant_id" example:"tenant-acme"` // empty = global
+	ResourceType string    `json:"resource_type" example:"image"`   // image, provider, network
+	Effect       string    `json:"effect" example:"allow"`          // allow, deny
+	Pattern      string    `json:"pattern" example:"alpine:*"`
+	Priority     int       `json:"priority" example:"10"`
+	CreatedAt    time.Time `json:"created_at" example:"2026-05-10T10:00:00Z"`
+	UpdatedAt    time.Time `json:"updated_at" example:"2026-05-10T10:00:00Z"`
+}
+
+// PolicyQuery filters for listing policies.
+type PolicyQuery struct {
+	TenantID     string
+	ResourceType string
+}
+
 // Store defines the persistence interface.
 type Store interface {
 	// Sandbox CRUD
@@ -116,6 +232,34 @@ type Store interface {
 	ListExpiredSandboxes(ctx context.Context, before time.Time) ([]*SandboxRecord, error)
 	ListSandboxesByOwner(ctx context.Context, ownerID string) ([]*SandboxRecord, error)
 	CountSandboxesByVM(ctx context.Context, vmID string) (int, error)
+
+	// Owner quotas
+	SaveOwnerQuota(ctx context.Context, quota *OwnerQuotaRecord) error
+	GetOwnerQuota(ctx context.Context, ownerID string) (*OwnerQuotaRecord, error)
+	ListOwnerQuotas(ctx context.Context) ([]*OwnerQuotaRecord, error)
+	DeleteOwnerQuota(ctx context.Context, ownerID string) error
+
+	// Admin audit
+	CreateAdminAudit(ctx context.Context, rec *AdminAuditRecord) error
+	ListAdminAudit(ctx context.Context, query AdminAuditQuery) ([]*AdminAuditRecord, error)
+	DeleteAdminAuditBefore(ctx context.Context, before time.Time) (int64, error)
+
+	// Operation audit
+	CreateOperationAudit(ctx context.Context, rec *OperationAuditRecord) error
+	ListOperationAudit(ctx context.Context, query OperationAuditQuery) ([]*OperationAuditRecord, error)
+
+	// Workers
+	SaveWorker(ctx context.Context, rec *WorkerRecord) error
+	GetWorker(ctx context.Context, id string) (*WorkerRecord, error)
+	ListWorkers(ctx context.Context) ([]*WorkerRecord, error)
+	DeleteWorker(ctx context.Context, id string) error
+
+	// Leases
+	AcquireLease(ctx context.Context, resourceID, resourceType, holderID string, ttl time.Duration) (*LeaseRecord, error)
+	RenewLease(ctx context.Context, resourceID, holderID string, ttl time.Duration) (*LeaseRecord, error)
+	GetLease(ctx context.Context, resourceID string) (*LeaseRecord, error)
+	ListLeases(ctx context.Context) ([]*LeaseRecord, error)
+	ReleaseLease(ctx context.Context, resourceID, holderID string) error
 
 	// Exec logs
 	CreateExecLog(ctx context.Context, log *ExecLogRecord) error
@@ -155,6 +299,25 @@ type Store interface {
 	GetRegistryConnection(ctx context.Context, id string) (*RegistryConnectionRecord, error)
 	ListRegistryConnections(ctx context.Context, ownerID string) ([]*RegistryConnectionRecord, error)
 	DeleteRegistryConnection(ctx context.Context, id string) error
+
+	// Tenants
+	CreateTenant(ctx context.Context, t *TenantRecord) error
+	GetTenant(ctx context.Context, id string) (*TenantRecord, error)
+	ListTenants(ctx context.Context) ([]*TenantRecord, error)
+	UpdateTenant(ctx context.Context, t *TenantRecord) error
+	DeleteTenant(ctx context.Context, id string) error
+
+	// Tenant members (RBAC)
+	SaveTenantMember(ctx context.Context, m *TenantMemberRecord) error
+	GetTenantMember(ctx context.Context, tenantID, userID string) (*TenantMemberRecord, error)
+	ListTenantMembers(ctx context.Context, tenantID string) ([]*TenantMemberRecord, error)
+	DeleteTenantMember(ctx context.Context, tenantID, userID string) error
+
+	// Policies
+	CreatePolicy(ctx context.Context, p *PolicyRecord) error
+	GetPolicy(ctx context.Context, id string) (*PolicyRecord, error)
+	ListPolicies(ctx context.Context, query PolicyQuery) ([]*PolicyRecord, error)
+	DeletePolicy(ctx context.Context, id string) error
 
 	// Lifecycle
 	Close() error

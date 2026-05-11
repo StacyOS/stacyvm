@@ -2,6 +2,7 @@ package routes
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -9,14 +10,24 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/StacyOs/stacyvm/internal/orchestrator"
 	"github.com/StacyOs/stacyvm/internal/providers"
 	"github.com/StacyOs/stacyvm/internal/store"
+	"github.com/go-chi/chi/v5"
 	"github.com/rs/zerolog"
 )
 
 func setupTestRouter(t *testing.T) (chi.Router, *orchestrator.Manager) {
+	t.Helper()
+	return setupTestRouterWithConfig(t, orchestrator.ManagerConfig{
+		DefaultTTL:    5 * time.Minute,
+		DefaultImage:  "alpine:latest",
+		DefaultMemory: 512,
+		DefaultVCPUs:  1,
+	})
+}
+
+func setupTestRouterWithConfig(t *testing.T, cfg orchestrator.ManagerConfig) (chi.Router, *orchestrator.Manager) {
 	t.Helper()
 	dir := t.TempDir()
 	st, err := store.NewSQLiteStore(filepath.Join(dir, "test.db"))
@@ -33,12 +44,7 @@ func setupTestRouter(t *testing.T) (chi.Router, *orchestrator.Manager) {
 	events := orchestrator.NewEventBus()
 	logger := zerolog.Nop()
 
-	mgr := orchestrator.NewManager(reg, st, events, logger, orchestrator.ManagerConfig{
-		DefaultTTL:    5 * time.Minute,
-		DefaultImage:  "alpine:latest",
-		DefaultMemory: 512,
-		DefaultVCPUs:  1,
-	})
+	mgr := orchestrator.NewManager(reg, st, events, logger, cfg)
 	mgr.Start()
 	t.Cleanup(func() { mgr.Stop() })
 
@@ -68,6 +74,98 @@ func TestCreateSandbox(t *testing.T) {
 	}
 	if sb.State != orchestrator.StateRunning {
 		t.Fatalf("expected running, got %s", sb.State)
+	}
+}
+
+func TestSpawnAdmissionRoute(t *testing.T) {
+	r, _ := setupTestRouterWithConfig(t, orchestrator.ManagerConfig{
+		DefaultTTL:    5 * time.Minute,
+		DefaultImage:  "alpine:latest",
+		DefaultMemory: 512,
+		DefaultVCPUs:  1,
+		Limits: orchestrator.OperationalLimits{
+			MaxSandboxes:      1,
+			SpawnOverflow:     "queue",
+			SpawnQueueTimeout: time.Second,
+			MaxSpawnQueue:     2,
+		},
+	})
+
+	body := `{"image":"alpine:latest","owner_id":"owner-a"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sandboxes", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create status = %d: %s", w.Code, w.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/sandboxes/admission", bytes.NewBufferString(`{"ttl":"1m","owner_id":"owner-b"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("admission status = %d: %s", w.Code, w.Body.String())
+	}
+
+	var decision orchestrator.SpawnAdmissionDecision
+	if err := json.NewDecoder(w.Body).Decode(&decision); err != nil {
+		t.Fatalf("decode admission: %v", err)
+	}
+	if decision.Allowed || !decision.Queueable || decision.Reason != "max_sandboxes" {
+		t.Fatalf("unexpected admission decision: %+v", decision)
+	}
+	if decision.ActiveSandboxes != 1 || decision.MaxSandboxes != 1 {
+		t.Fatalf("unexpected admission counts: %+v", decision)
+	}
+}
+
+func TestSpawnAdmissionRouteRejectModeNotQueueable(t *testing.T) {
+	r, _ := setupTestRouterWithConfig(t, orchestrator.ManagerConfig{
+		DefaultTTL:    5 * time.Minute,
+		DefaultImage:  "alpine:latest",
+		DefaultMemory: 512,
+		DefaultVCPUs:  1,
+		Limits: orchestrator.OperationalLimits{
+			MaxSandboxes: 1,
+		},
+	})
+
+	body := `{"image":"alpine:latest","owner_id":"owner-a"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sandboxes", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create status = %d: %s", w.Code, w.Body.String())
+	}
+
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/sandboxes/admission", bytes.NewBufferString(`{"owner_id":"owner-b"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("admission status = %d: %s", w.Code, w.Body.String())
+	}
+
+	var decision orchestrator.SpawnAdmissionDecision
+	if err := json.NewDecoder(w.Body).Decode(&decision); err != nil {
+		t.Fatalf("decode admission: %v", err)
+	}
+	if decision.Allowed || decision.Queueable || decision.Reason != "max_sandboxes" {
+		t.Fatalf("unexpected admission decision: %+v", decision)
+	}
+}
+
+func TestSpawnAdmissionRouteInvalidTTL(t *testing.T) {
+	r, _ := setupTestRouter(t)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sandboxes/admission", bytes.NewBufferString(`{"ttl":"not-a-duration"}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
 	}
 }
 
@@ -125,6 +223,54 @@ func TestExecInSandbox(t *testing.T) {
 	json.NewDecoder(w.Body).Decode(&result)
 	if result.ExitCode != 0 {
 		t.Fatalf("expected exit 0, got %d", result.ExitCode)
+	}
+}
+
+func TestExecInSandbox_Timeout(t *testing.T) {
+	r, _ := setupTestRouter(t)
+
+	sbID := createTestSandbox(t, r)
+	execBody := `{"command":"sleep 1","timeout":"1ms"}`
+	req := httptest.NewRequest("POST", "/api/v1/sandboxes/"+sbID+"/exec", bytes.NewBufferString(execBody))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusRequestTimeout {
+		t.Fatalf("expected 408, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestExecStream_MaxTimeoutLimit(t *testing.T) {
+	r, mgr := setupTestRouter(t)
+	if _, err := mgr.SaveOwnerQuota(context.Background(), orchestrator.OwnerQuota{
+		OwnerID:        "owner-a",
+		MaxExecTimeout: "1s",
+	}); err != nil {
+		t.Fatalf("save owner quota: %v", err)
+	}
+
+	body := `{"image":"alpine:latest","owner_id":"owner-a"}`
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/sandboxes", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusCreated {
+		t.Fatalf("create status = %d: %s", w.Code, w.Body.String())
+	}
+	var sb orchestrator.Sandbox
+	if err := json.NewDecoder(w.Body).Decode(&sb); err != nil {
+		t.Fatalf("decode sandbox: %v", err)
+	}
+
+	execBody := `{"command":"echo hello","timeout":"2s","stream":true}`
+	req = httptest.NewRequest(http.MethodPost, "/api/v1/sandboxes/"+sb.ID+"/exec", bytes.NewBufferString(execBody))
+	req.Header.Set("Content-Type", "application/json")
+	w = httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 429, got %d: %s", w.Code, w.Body.String())
 	}
 }
 
@@ -503,6 +649,21 @@ func TestCreateSandbox_WithOwnerID(t *testing.T) {
 	json.NewDecoder(w.Body).Decode(&sb)
 	if sb.OwnerID != "alice" {
 		t.Fatalf("expected owner_id 'alice', got %q", sb.OwnerID)
+	}
+}
+
+func TestCreateSandbox_InvalidOwnerID(t *testing.T) {
+	r, _ := setupTestRouter(t)
+
+	body := `{"image":"alpine:latest"}`
+	req := httptest.NewRequest("POST", "/api/v1/sandboxes", bytes.NewBufferString(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-User-ID", "alice smith")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", w.Code, w.Body.String())
 	}
 }
 

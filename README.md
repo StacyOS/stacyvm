@@ -15,7 +15,7 @@ On bare metal? Firecracker microVMs in ~28ms.<br>
 On Kubernetes? gVisor or Kata containers.<br>
 Need 100 sandboxes but only have 20 VMs? Pool mode.<br>
 Need to expose <code>localhost:3000</code> from inside the sandbox? Live preview, one method call.<br><br>
-Self-hosted. Single binary. Python &amp; TypeScript SDKs. MIT licensed. No cloud required.
+Self-hosted. Single binary. Python &amp; TypeScript SDKs. Apache 2.0 licensed. No cloud required.
 </p>
 
 <p align="center">
@@ -23,7 +23,7 @@ Self-hosted. Single binary. Python &amp; TypeScript SDKs. MIT licensed. No cloud
   <a href="https://github.com/StacyOs/stacyvm/network/members"><img src="https://img.shields.io/github/forks/StacyOs/stacyvm?style=flat-square" alt="Forks"/></a>
   <a href="https://github.com/StacyOs/stacyvm/issues"><img src="https://img.shields.io/github/issues/StacyOs/stacyvm?style=flat-square" alt="Issues"/></a>
   <img src="https://img.shields.io/badge/go-1.25+-00ADD8?style=flat-square&logo=go&logoColor=white" alt="Go"/>
-  <img src="https://img.shields.io/badge/license-MIT-green?style=flat-square" alt="MIT"/>
+  <img src="https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square" alt="Apache 2.0"/>
   <img src="https://img.shields.io/badge/platform-linux%20%7C%20mac%20%7C%20windows-blue?style=flat-square" alt="Platform"/>
 </p>
 
@@ -33,7 +33,8 @@ Self-hosted. Single binary. Python &amp; TypeScript SDKs. MIT licensed. No cloud
   <a href="#pick-your-isolation-level">Providers</a> •
   <a href="#live-preview">Live Preview</a> •
   <a href="#pool-mode">Pool Mode</a> •
-  <a href="docs/api.md">API Reference</a> •
+  <a href="docs/deployment.md">Deployment</a> •
+  <a href="docs/rest-api.md">API Reference</a> •
   <a href="CONTRIBUTING.md">Contributing</a>
 </p>
 
@@ -56,6 +57,11 @@ Self-hosted. Single binary. Python &amp; TypeScript SDKs. MIT licensed. No cloud
   - [Providers, pool, system](#providers-pool-system)
 - [CLI](#cli)
 - [Configuration](#configuration)
+- [Enterprise / Multi-worker](#enterprise--multi-worker)
+  - [OIDC & RBAC](#oidc--rbac)
+  - [Multi-tenancy & policy controls](#multi-tenancy--policy-controls)
+  - [Remote workers & mTLS](#remote-workers--mtls)
+- [Production deployment](#production-deployment)
 - [Templates](#templates-1)
 - [Security defaults](#security-defaults)
 - [Architecture](#architecture)
@@ -130,7 +136,7 @@ You're building an AI agent. It generates code. That code needs to run somewhere
 | File API (read/write/glob) | ✅ 9 methods | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Python + TS SDKs | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ |
 | Your data stays local | ✅ | ❌ | ✅ | ✅ | ❌ | ✅ |
-| License | MIT | Partial | Apache 2.0 | Apache 2.0 | Proprietary | N/A |
+| License | Apache 2.0 | Partial | Apache 2.0 | Apache 2.0 | Proprietary | N/A |
 
 > **On speed:** Zeroboot's 0.8ms is real — they bypass Firecracker's VMM entirely and `mmap(MAP_PRIVATE)` the snapshot memory as copy-on-write. But there's no disk, no network, and I/O is serial UART only. StacyVM's 28ms gives you a full sandbox with networking, file system, virtio, and multi-vCPU. Different tools for different jobs.
 
@@ -260,6 +266,8 @@ client = Client("http://localhost:7423", user_id="alice@example.com")
 const client = new Client({ baseUrl: "http://localhost:7423", userId: "alice@example.com" });
 ```
 
+User IDs are trimmed by the server. They must be 128 characters or fewer and cannot contain whitespace, control characters, or path separators.
+
 Hardening knobs (Docker provider):
 
 ```yaml
@@ -373,6 +381,7 @@ Auth: pass `X-API-Key: <your-key>` if `auth.enabled: true`. For pool mode, also 
 | Method | Endpoint | Description |
 |---|---|---|
 | `POST` | `/sandboxes` | Spawn a sandbox |
+| `POST` | `/sandboxes/admission` | Preflight quota and scheduler admission |
 | `GET` | `/sandboxes` | List active sandboxes |
 | `DELETE` | `/sandboxes` | Prune expired sandboxes |
 | `GET` | `/sandboxes/{id}` | Get sandbox details |
@@ -381,6 +390,8 @@ Auth: pass `X-API-Key: <your-key>` if `auth.enabled: true`. For pool mode, also 
 | `POST` | `/sandboxes/{id}/exec` | Execute a command (sync or NDJSON stream) |
 | `GET` | `/sandboxes/{id}/exec/ws` | Execute over WebSocket |
 | `GET` | `/sandboxes/{id}/logs` | Console logs |
+
+Exec requests default to backwards-compatible shell mode. Set `mode: "argv"` with `args` to run direct process arguments without shell interpolation.
 
 ### Files (per sandbox)
 
@@ -413,13 +424,27 @@ Auth: pass `X-API-Key: <your-key>` if `auth.enabled: true`. For pool mode, also 
 | `GET` | `/providers` | List configured providers |
 | `GET` | `/providers/{name}` | Provider details + sandbox count |
 | `POST` | `/providers/test` | Health-check all providers |
+| `GET` | `/quotas` | List owner quota overrides |
+| `GET` | `/quotas/summary` | Redacted owner quota policy counts |
+| `PUT` | `/quotas/{ownerID}` | Create or update owner quota |
+| `GET` | `/quotas/{ownerID}/usage` | Owner usage against effective quota |
+| `GET` | `/workers` | List registered workers and heartbeat state |
+| `GET` | `/workers/{workerID}` | Get one worker registry record |
+| `POST` | `/worker/{workerID}/heartbeat` | Remote worker heartbeat with worker token |
+| `POST` | `/worker/{workerID}/leases/{resourceID}/renew` | Remote worker lease renewal |
 | `GET` | `/pool/status` | Pool VM and user counts |
 | `GET` | `/snapshots` | Available VM snapshots |
 | `GET` | `/health` | Health check |
+| `GET` | `/ready` | Readiness check |
+| `GET` | `/diagnostics` | Redacted operational diagnostics |
 | `GET` | `/metrics` | Runtime metrics (goroutines, alloc, sandbox counts) |
+| `GET` | `/metrics/prometheus` | Prometheus-compatible metrics |
 | `GET` | `/events` | Server-sent events stream |
 
-Full schemas, request/response examples, and error codes: **[docs/api.md](docs/api.md)**.
+Admin aliases for providers, quotas, workers, diagnostics, and metrics are available under `/admin/*` and can be protected with `auth.admin_api_key`. Worker registry deletion remains admin-only under `/admin/workers/*`; remote worker heartbeat and lease renewal use worker-only `/worker/*` endpoints.
+For the operator dashboard, quota workflows, diagnostics, and persisted admin audit history, see [docs/admin-control-plane.md](docs/admin-control-plane.md).
+
+Full schemas, request/response examples, and error codes: **[docs/rest-api.md](docs/rest-api.md)**.
 OpenAPI spec: [docs/swagger.yaml](docs/swagger.yaml).
 
 ---
@@ -428,11 +453,18 @@ OpenAPI spec: [docs/swagger.yaml](docs/swagger.yaml).
 
 ```bash
 stacyvm serve                                  # start the API server
+stacyvm worker --once                          # send one remote-worker heartbeat
+stacyvm worker --listen 127.0.0.1:7430         # heartbeat + worker RPC server
 stacyvm spawn --image python:3.12 --ttl 1h     # spawn
-stacyvm exec sb-a1b2c3d4 -- python3 app.py     # run a command in a sandbox
+stacyvm exec sb-a1b2c3d4 -- python3 app.py     # run argv mode in a sandbox
+stacyvm exec sb-a1b2c3d4 --shell -- "echo $HOME && pwd"
 stacyvm list                                    # list active sandboxes
 stacyvm kill sb-a1b2c3d4                        # destroy
 stacyvm build-image python:3.12                 # pre-build rootfs (Firecracker)
+stacyvm config lint --production                # production config lint gate
+stacyvm db backup /backup/stacyvm.db            # consistent SQLite backup
+stacyvm upgrade rehearse --database stacyvm.db  # rehearse single-node upgrade
+stacyvm support bundle support.json             # redacted support diagnostics
 stacyvm tui                                     # interactive dashboard
 stacyvm version                                 # version info
 ```
@@ -451,6 +483,24 @@ server:
   host: "0.0.0.0"
   port: 7423
   preview_domain: "localhost"   # used to build live-preview URLs
+  cors_allowed_origins: ["*"]    # set explicit https:// origins in production
+
+worker:
+  id: ""                         # defaults to hostname
+  control_plane_url: "http://localhost:7423"
+  listen_addr: ""                 # set to enable inbound worker RPC
+  heartbeat_interval: "30s"
+  shutdown_timeout: "10s"
+  rpc_tls:
+    enabled: false
+    server_cert_file: ""
+    server_key_file: ""
+    client_ca_file: ""
+    ca_file: ""
+    client_cert_file: ""
+    client_key_file: ""
+    server_name: ""
+    insecure_skip_verify: false
 
 providers:
   default: "docker"
@@ -497,13 +547,53 @@ defaults:
   image: "alpine:latest"
   memory_mb: 1024
   vcpus: 1
+  max_ttl: "24h"
+  default_exec_timeout: "0s"    # disabled unless set
+  max_exec_timeout: "10m"
+  max_sandboxes: 0              # 0 = unlimited
+  max_sandboxes_per_owner: 0    # 0 = unlimited
+  spawn_overflow: "reject"       # reject or queue when sandbox capacity is full
+  spawn_queue_timeout: "30s"
+  max_spawn_queue: 100
 
 auth:
   enabled: false
   api_key: ""
+  admin_api_key: ""             # optional separate key for /api/v1/admin/*
+  worker_token: ""               # shared staging worker token
+  worker_token_file: ""          # file containing shared worker token
+  worker_tokens: {}              # production map of worker_id: token
+  worker_signing_key: ""         # production signed worker token verification key
+  worker_signing_key_file: ""    # file containing active worker signing key
+  worker_signing_keys: []        # old verification keys accepted during rotation
+  worker_revoked_token_ids: []   # signed worker token jti values rejected during incidents
+  admin_fallback_enabled: true   # false requires admin_api_key for admin routes
+  admin_audit_retention: "0s"    # 0s disables native audit pruning
+
+  # OIDC/SSO — enterprise single sign-on (RS256 and ES256/ES384/ES512)
+  oidc_enabled: false
+  oidc_issuer: ""                # e.g. https://accounts.google.com
+  oidc_audience: ""              # your application's client ID / audience
+  oidc_jwks_url: ""              # IdP's JWKS endpoint for key verification
+  oidc_public_key_file: ""       # alternative: static PEM public key file
+  oidc_groups_claim: "groups"    # JWT claim containing group memberships
+  oidc_tenant_claim: "tenant_id" # JWT claim containing tenant identifier
+  oidc_admin_groups: []          # groups that receive the admin role
+  oidc_operator_groups: []       # groups that receive the operator role
+  oidc_viewer_groups: []         # groups that receive the read-only viewer role
+
+rate_limit:
+  enabled: false
+  requests_per_minute: 120
+  burst: 60
+  key_by: "owner"        # owner, api_key, or ip
+  bucket_ttl: "15m"
+  cleanup_interval: "1m"
 
 database:
+  driver: "sqlite"        # sqlite; postgres config is reserved for cluster builds
   path: "stacyvm.db"
+  dsn: ""                 # required for future postgres-backed cluster mode
 
 logging:
   level: "info"           # debug | info | warn | error
@@ -526,8 +616,113 @@ pool:
 STACYVM_SERVER_PORT=8080
 STACYVM_PROVIDERS_DEFAULT=firecracker
 STACYVM_AUTH_API_KEY=sk-xyz123
+STACYVM_AUTH_ADMIN_API_KEY=sk-admin-xyz123
+STACYVM_AUTH_ADMIN_FALLBACK_ENABLED=false
+STACYVM_RATE_LIMIT_ENABLED=true
 STACYVM_LOGGING_LEVEL=debug
 ```
+
+---
+
+## Enterprise / Multi-worker
+
+StacyVM ships everything you need to run as multi-tenant infrastructure. All features below are stable and covered by CI.
+
+### OIDC & RBAC
+
+Enable enterprise SSO by pointing StacyVM at any RFC 7517-compliant identity provider:
+
+```yaml
+auth:
+  enabled: true
+  oidc_enabled: true
+  oidc_issuer: "https://accounts.google.com"      # or Okta, Cloudflare, Azure AD
+  oidc_audience: "my-stacyvm"
+  oidc_jwks_url: "https://www.googleapis.com/oauth2/v3/certs"
+  oidc_admin_groups: ["stacyvm-admins"]
+  oidc_operator_groups: ["stacyvm-operators"]
+  oidc_viewer_groups: ["stacyvm-viewers"]
+```
+
+Callers send a standard Bearer token. StacyVM validates it (RS256 and ES256/ES384/ES512 are both supported) and maps IdP group membership to one of four roles:
+
+| Role | Can do |
+|---|---|
+| `viewer` | List and inspect sandboxes |
+| `api` / `operator` | Spawn, exec, read/write files, destroy |
+| `admin` | Everything + quotas, workers, provider config, tenants |
+| `tenant_admin` | Admin within their own tenant |
+
+Scope enforcement is applied on every route when auth is configured. A viewer token cannot spawn or exec — it gets 403.
+
+Run `stacyvm config lint --production` to validate your OIDC config before exposing it.
+
+### Multi-tenancy & policy controls
+
+Create isolated tenants and restrict what each one can use:
+
+```bash
+# Create a tenant
+curl -X POST /api/v1/admin/tenants \
+  -d '{"id":"acme","name":"Acme Corp","owner_id":"user-alice"}'
+
+# Add a member with operator role
+curl -X PUT /api/v1/admin/tenants/acme/members/user-bob \
+  -d '{"role":"operator"}'
+
+# Allow only trusted images
+curl -X POST /api/v1/admin/tenants/acme/policies \
+  -d '{"resource_type":"image","effect":"allow","pattern":"alpine:*","priority":10}'
+
+# Block untrusted networks
+curl -X POST /api/v1/admin/tenants/acme/policies \
+  -d '{"resource_type":"network","effect":"deny","pattern":"host","priority":1}'
+
+# Export per-tenant audit log
+curl /api/v1/admin/tenants/acme/audit
+```
+
+Each tenant's sandboxes, audit logs, and policies are fully isolated. OIDC callers are automatically scoped to their tenant via the configurable `oidc_tenant_claim`.
+
+### Remote workers & mTLS
+
+Run a distributed cluster with signed worker tokens and mutual TLS on the RPC channel:
+
+```yaml
+# Control plane
+auth:
+  worker_signing_key: "<32-byte secret>"
+worker:
+  rpc_tls:
+    enabled: true
+    ca_file: /etc/stacyvm/ca.crt
+    client_cert_file: /etc/stacyvm/cp-client.crt
+    client_key_file: /etc/stacyvm/cp-client.key
+```
+
+```bash
+# Worker — receives short-lived signed tokens from the control plane issuer
+# (no direct access to the signing key needed)
+stacyvm worker \
+  --control-plane https://cp.internal:7423 \
+  --bootstrap-admin-key "$STACYVM_ADMIN_KEY" \
+  --bootstrap-token-ttl 5m \
+  --listen 0.0.0.0:7430
+```
+
+Key rotation, token revocation, mTLS cert management, and the full enterprise signoff checklist are documented in [docs/enterprise-signoff-runbook.md](docs/enterprise-signoff-runbook.md).
+
+---
+
+## Production deployment
+
+Use [docs/deployment.md](docs/deployment.md) for production setup guidance, including Docker Compose and systemd templates, auth, explicit CORS origins, rate-limit defaults, health/readiness probes, Prometheus scraping, backup steps, and provider-specific rollout notes. Remote worker staging guidance lives in [docs/remote-worker-staging.md](docs/remote-worker-staging.md). Runtime signoff expectations live in [docs/runtime-conformance.md](docs/runtime-conformance.md), public self-serve support expectations live in [docs/public-support-matrix.md](docs/public-support-matrix.md), public announcement evidence lives in [docs/public-readiness-evidence.md](docs/public-readiness-evidence.md), and release-candidate gates live in [docs/production-readiness.md](docs/production-readiness.md). The reusable templates live under [`deploy/`](deploy/).
+
+For enterprise multi-worker deployments, follow [docs/enterprise-signoff-runbook.md](docs/enterprise-signoff-runbook.md) — it covers mTLS smoke with deployment-issued certificates, per-host runtime certification, Postgres migration rehearsal, OIDC token validation, and the full pre-go-live checklist.
+
+Run `stacyvm doctor --production` on a target host before treating it as production-ready. Runtime host certification checks live in [docs/runtime-certification.md](docs/runtime-certification.md).
+
+Release automation and GHCR publishing are documented in [docs/releasing.md](docs/releasing.md).
 
 ---
 
@@ -577,7 +772,9 @@ Every sandbox ships locked down. You opt *in* to less restriction, not out.
 
 With the Firecracker provider you also get: dedicated kernel per sandbox, vsock-only host-guest communication (no TCP between host and guest), and ephemeral rootfs destroyed on teardown.
 
-Full security model and reporting policy: [SECURITY.md](SECURITY.md).
+For enterprise deployments, OIDC/JWT authentication (RS256 + ES256) and RBAC role enforcement replace static API keys. Scope checks are applied on every sandbox route — a viewer-role token cannot spawn or exec. See the [Enterprise / Multi-worker](#enterprise--multi-worker) section above.
+
+Full security model and reporting policy: [SECURITY.md](SECURITY.md). Production admin hardening and identity-provider planning: [docs/security-governance.md](docs/security-governance.md). Release-candidate threat model: [docs/threat-model.md](docs/threat-model.md). Worker RPC and multi-worker trust boundary: [docs/worker-rpc-contract.md](docs/worker-rpc-contract.md).
 
 ---
 
@@ -641,6 +838,14 @@ curl -fsSL https://github.com/StacyOs/stacyvm/releases/latest/download/stacyvm-l
 chmod +x stacyvm && sudo mv stacyvm /usr/local/bin/
 ```
 
+For public installs, verify the release first:
+
+```bash
+scripts/verify-release.sh v0.4.0 amd64
+```
+
+The installer verifies Sigstore signatures automatically when `cosign` is installed. Set `STACYVM_REQUIRE_SIGNATURES=true` to fail closed when signature verification is unavailable.
+
 ---
 
 ## Project layout
@@ -670,6 +875,7 @@ stacyvm/
 
 ## Roadmap
 
+**Single-node & public self-serve**
 - [x] Firecracker provider (KVM microVMs, ~28ms snapshot restore)
 - [x] Docker provider (OCI containers, seccomp, no KVM needed)
 - [x] gVisor support (user-space kernel via runsc runtime)
@@ -680,11 +886,29 @@ stacyvm/
 - [x] Template system + warm pools
 - [x] PRoot provider (root-less, KVM-less)
 - [x] E2B + custom HTTP provider
+- [x] Signed release binaries + Sigstore verification
+- [x] `stacyvm doctor`, config lint, upgrade rehearsal, support bundle
+
+**Enterprise / multi-worker**
+- [x] Postgres store with durable leases and migration rehearsal
+- [x] Remote worker registry, placement, RPC routing
+- [x] Signed worker tokens (HMAC-SHA256, rotation, revocation)
+- [x] Worker RPC mutual TLS (mTLS)
+- [x] Centralized worker token issuance (no signing key on workers)
+- [x] Durable event bus (Postgres LISTEN/NOTIFY for HA replicas)
+- [x] OIDC/SSO — RS256 + ES256/ES384/ES512, JWKS, Google/Okta/Cloudflare/Azure
+- [x] RBAC roles — viewer, operator, admin, tenant_admin with scope enforcement
+- [x] Multi-tenancy — tenant model, member RBAC, per-tenant audit export
+- [x] Policy controls — image/provider/network allow-deny per tenant
+- [x] Enterprise signoff runbook + runtime certification script
+
+**Planned**
 - [ ] Live Preview for Firecracker
 - [ ] Kata Containers provider (K8s-native)
 - [ ] Persistent volumes across sandboxes
 - [ ] MCP server mode
 - [ ] GPU passthrough
+- [ ] Centralized token issuer as a standalone sidecar service
 
 ---
 
@@ -696,7 +920,7 @@ If you find a security issue, do **not** open a public issue — follow [SECURIT
 
 ## License
 
-[MIT](LICENSE) — use it however you want.
+[Apache 2.0](LICENSE) — use it however you want.
 
 ---
 

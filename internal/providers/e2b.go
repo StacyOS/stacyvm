@@ -85,8 +85,20 @@ func (p *E2BProvider) Spawn(ctx context.Context, opts SpawnOptions) (string, err
 }
 
 func (p *E2BProvider) Exec(ctx context.Context, sandboxID string, opts ExecOptions) (*ExecResult, error) {
+	mode, err := normalizeExecMode(opts.Mode)
+	if err != nil {
+		return nil, err
+	}
+	if mode == ExecModeArgv {
+		return nil, fmt.Errorf("e2b provider does not support argv exec mode")
+	}
+
+	command := opts.Command
+	for _, arg := range opts.Args {
+		command += " " + shellQuoteArg(arg)
+	}
 	body := map[string]interface{}{
-		"cmd": opts.Command,
+		"cmd": command,
 	}
 	if opts.WorkDir != "" {
 		body["cwd"] = opts.WorkDir

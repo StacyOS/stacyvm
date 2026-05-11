@@ -4,7 +4,13 @@ from stacyvm.client import Client
 from stacyvm.sandbox import Sandbox
 from stacyvm.async_client import AsyncClient
 from stacyvm.async_sandbox import AsyncSandbox
-from stacyvm.models import ExecResult, SandboxInfo, Template
+from stacyvm.models import (
+    ExecResult,
+    QuotaSummary,
+    SandboxInfo,
+    SpawnAdmissionDecision,
+    Template,
+)
 from stacyvm.exceptions import (
     ForgevmError,
     SandboxNotFound,
@@ -19,7 +25,9 @@ __all__ = [
     "AsyncClient",
     "AsyncSandbox",
     "ExecResult",
+    "QuotaSummary",
     "SandboxInfo",
+    "SpawnAdmissionDecision",
     "Template",
     "ForgevmError",
     "SandboxNotFound",

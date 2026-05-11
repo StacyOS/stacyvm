@@ -127,8 +127,8 @@ export class Sandbox {
   /**
    * Execute a command inside the sandbox and wait for the result.
    *
-   * @param command - The command string to execute (interpreted by the
-   *   sandbox's shell).
+   * @param command - The command to execute. By default this is interpreted by
+   *   the sandbox's shell; pass `mode: "argv"` to run it directly with args.
    * @param opts - Optional execution parameters.
    * @returns The execution result including exit code, stdout, stderr, and
    *   duration.
@@ -147,6 +147,7 @@ export class Sandbox {
   async exec(command: string, opts?: ExecOptions): Promise<ExecResult> {
     const body: Record<string, unknown> = { command };
     if (opts?.args) body["args"] = opts.args;
+    if (opts?.mode) body["mode"] = opts.mode;
     if (opts?.env) body["env"] = opts.env;
     if (opts?.workdir) body["workdir"] = opts.workdir;
     if (opts?.timeout) body["timeout"] = opts.timeout;
@@ -189,6 +190,7 @@ export class Sandbox {
   ): AsyncGenerator<StreamChunk, void, undefined> {
     const body: Record<string, unknown> = { command, stream: true };
     if (opts?.args) body["args"] = opts.args;
+    if (opts?.mode) body["mode"] = opts.mode;
     if (opts?.env) body["env"] = opts.env;
     if (opts?.workdir) body["workdir"] = opts.workdir;
 

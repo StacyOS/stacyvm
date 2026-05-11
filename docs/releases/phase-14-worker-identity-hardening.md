@@ -1,0 +1,158 @@
+# Phase 14 Worker Identity Hardening
+
+Phase 14 begins the worker identity hardening lane for production multi-worker StacyVM deployments. The goal of this slice is to move beyond static shared worker credentials while keeping the existing Phase 11-13 worker runtime compatible.
+
+## What Changed
+
+### Signed worker tokens
+
+- Added HMAC-SHA256 signed worker token support.
+- Added the `stacyvm-worker-v1.<payload>.<signature>` token format.
+- Added signed token claims for:
+  - `worker_id`
+  - token ID through `jti`
+  - audience through `aud`
+  - optional worker `scopes`
+  - issued-at time through `iat`
+  - optional not-before time through `nbf`
+  - expiry time through `exp`
+- Enforced signed-token expiry before accepting worker requests.
+- Enforced signed-token not-before and issued-at validation with clock-skew tolerance.
+- Enforced a 15 minute max signed worker token lifetime when `iat` is present.
+- Enforced that signed `worker_id` must match the `X-Worker-ID` request header.
+- Enforced token audience separation between worker-to-control-plane routes and control-plane-to-worker RPC.
+- Added `auth.worker_revoked_token_ids` emergency revocation for signed worker token IDs.
+- Added worker token issuer `--format json`, `--token-id`, and `--not-before` options for incident-response runbooks.
+- Added `stacyvm worker token inspect <token>` to recover unverified signed-token metadata and `jti` values during incident response.
+- Added `stacyvm worker token verify <token>` to validate signed tokens against active and rotation keys, expected worker IDs, expected audiences, and revoked token IDs.
+- Added `stacyvm worker token rotation-plan` to print a no-secret signing-key rotation checklist, config sketch, and validation commands.
+- Added worker secret file flags for token issuance, token verification, and worker runtime startup so operators can use secret-mounted files instead of command-line or environment secrets.
+- Filtered signed-token scopes so tokens cannot grant user, API, or admin scopes.
+- Added `stacyvm worker token <worker-id>` to issue signed worker tokens from the CLI.
+
+### Configuration
+
+- Added `auth.worker_signing_key`.
+- Added `auth.worker_token_file` and `auth.worker_signing_key_file` so production services can mount worker credentials from files.
+- Added `auth.worker_signing_keys` for old verification keys during rotation.
+- Kept `auth.worker_token` for shared-token staging compatibility.
+- Kept `auth.worker_tokens` for per-worker static token migration paths.
+- Updated `stacyvm config lint --production` so a strong `auth.worker_signing_key` satisfies production-aligned worker credential checks.
+- Added config lint warnings when revoked signed-token IDs are configured without signed worker-token verification.
+- Added config lint warnings for shared worker tokens left enabled beside signed worker tokens, duplicate rotation keys, and rotation keys that repeat the active signing key.
+- Config loading now rejects ambiguous inline/file worker secret pairs such as `auth.worker_signing_key` plus `auth.worker_signing_key_file`.
+- Config lint now reports whether worker token and signing-key values are file-backed or still configured inline.
+
+### Worker runtime
+
+- Added dynamic worker token generation for `stacyvm worker` heartbeat and lease-renewal calls.
+- When no static `--worker-token` or `auth.worker_token` is configured, a worker can derive short-lived signed control-plane tokens from `auth.worker_signing_key`.
+- Workers can read static worker tokens from `--worker-token-file` or signing keys from `--worker-signing-key-file`.
+- `stacyvm worker --worker-token-file` reloads the token file for each heartbeat and lease-renewal request, so a sidecar or external issuer can rotate short-lived signed tokens without restarting the worker process.
+- Worker RPC servers now accept signed control-plane-to-worker tokens.
+- Control planes can mint short-lived worker RPC tokens from `auth.worker_signing_key` when no shared `auth.worker_token` is configured.
+- Existing static token behavior is unchanged.
+
+### Rotation
+
+- New signed tokens are minted with `auth.worker_signing_key`.
+- Old tokens can continue verifying through `auth.worker_signing_keys` during a rotation window.
+- Operators can generate a concrete no-secret rollout checklist with `stacyvm worker token rotation-plan`.
+- The documented rotation sequence is:
+  - promote the new key into `auth.worker_signing_key`
+  - move the old key into `auth.worker_signing_keys`
+  - restart or reload workers
+  - wait for old token TTLs to expire
+  - remove the old key from `auth.worker_signing_keys`
+
+### Worker RPC mTLS
+
+- Added `worker.rpc_tls` configuration for enterprise worker RPC networks.
+- Added TLS server support for `stacyvm worker --listen`.
+- Added mTLS client support for control-plane calls to worker RPC.
+- Added worker RPC mTLS conformance that completes a real RPC call with generated CA, server, and client certificates.
+- Added config lint checks for worker server certificates, client CA verification, control-plane client certificates, worker CA verification, and unsafe `insecure_skip_verify`.
+- Documented how worker-side and control-plane-side certificate settings are used.
+
+### Documentation
+
+- Updated the README configuration example.
+- Updated the worker RPC contract with signed-token semantics.
+- Documented the issue, inspect, verify, and revoke operator runbook for worker tokens.
+- Updated the API docs for worker heartbeat and lease-renewal headers.
+- Updated the cluster conformance matrix to mark signed worker tokens as the public/enterprise worker identity path.
+- Added `scripts/certify-worker-identity.sh` for host-level signed-token lifecycle signoff with text, JSON, or Markdown report output.
+- Updated the public support matrix to reflect multi-worker signed identity, worker RPC routing, mTLS wiring, and worker identity certification evidence.
+- Updated production readiness notes to reflect signed worker tokens, worker identity certification reporting, worker RPC mTLS wiring, and the remaining target-network/runtime signoff work.
+- Added cluster conformance coverage for signed-token migration lint warnings.
+- Added cluster conformance coverage for worker identity certification report generation.
+- Updated the threat model and remote-worker staging guide so worker impersonation controls and staging guidance reflect the implemented signed-token and mTLS paths.
+- Documented reloadable worker token files as the handoff path for external worker-token issuers.
+- Updated deployment and configuration docs for secret-mounted worker token and signing-key files.
+- Documented production lint visibility for file-backed worker credential sources.
+
+## Code Areas Changed
+
+- `internal/api/middleware`: signed token creation, verification, worker scope filtering, and worker auth config.
+- `internal/api`: server worker auth wiring for `auth.worker_signing_key`.
+- `internal/config`: config schema and defaults for primary and rotation worker signing keys.
+- `internal/worker`: dynamic token callback support for worker heartbeat and lease renewal, plus worker RPC TLS client/server helpers.
+- `internal/orchestrator`: worker RPC client TLS wiring for remote worker calls.
+- `cmd/stacyvm`: `serve`, `worker`, `worker token`, and `config lint` wiring.
+- `scripts`: worker identity certification smoke.
+- `docs`: worker identity and conformance documentation.
+
+## Compatibility
+
+The new signed-token path is additive:
+
+- Existing `auth.worker_token` deployments continue to work.
+- Existing inline worker secrets can be moved to `auth.worker_token_file` or `auth.worker_signing_key_file` without changing runtime behavior.
+- Existing `auth.worker_tokens.<worker_id>` deployments continue to work.
+- Signed tokens can be introduced gradually by setting `auth.worker_signing_key`.
+- Workers can also consume externally issued short-lived tokens through reloadable `--worker-token-file` secrets.
+- Key rotation can be introduced gradually by adding old keys to `auth.worker_signing_keys`.
+- Worker RPC mTLS is opt-in; local HTTP worker RPC remains available for local development and internal staging.
+
+## Phase 14 Enterprise Governance (implemented)
+
+### OIDC/SSO and RBAC
+- Added RS256 JWT Bearer token validation with configurable OIDC issuer, JWKS URL, and static public key.
+- Added RBAC roles: `viewer` (read-only), `operator` (sandbox lifecycle), `tenant_admin` (per-tenant admin) beyond existing `api`/`admin`.
+- Added OIDC group-to-role mapping via `auth.oidc_admin_groups`, `auth.oidc_operator_groups`, `auth.oidc_viewer_groups`.
+- Added scopes: `read:*`, `operator:*`, `tenant:admin`.
+- API key auth and OIDC Bearer auth coexist; existing API key deployments are unaffected.
+
+### Tenant/project model
+- Added `tenants`, `tenant_members`, and `policies` tables (migration 11).
+- Added `tenant_id` to sandboxes, admin audit logs, and operation audit logs.
+- Admin routes: tenant CRUD, member RBAC (viewer/operator/admin per tenant), per-tenant audit export, per-tenant policy management.
+
+### Policy controls
+- Added `policies` store with resource_type (image/provider/network), effect (allow/deny), glob pattern, and priority.
+- Added `PolicyEnforcer` middleware that checks spawn request fields against tenant and global policies.
+
+### Centralized worker token issuer
+- Added `POST /api/v1/admin/worker-tokens` to mint signed worker tokens with configurable TTL, audience, and scopes.
+- Workers no longer need direct access to `auth.worker_signing_key` in hardened deployments.
+
+### Postgres operations
+- Added `stacyvm db pg-backup <output>` wrapping `pg_dump` for production cluster snapshots.
+- Added `stacyvm db pg-rehearse` for pre-upgrade schema state verification.
+
+### Admin UI
+- Added Tenants page with tenant lifecycle, member RBAC, policy management, and per-tenant audit export.
+
+## Public Self-Serve Hardening Follow-Up
+
+- Added configurable `server.cors_allowed_origins` so public browser/API deployments can restrict CORS to exact trusted origins instead of relying on reverse-proxy-only guidance.
+- Updated API server CORS handling to preserve the local wildcard default while rejecting disallowed browser preflights when explicit origins are configured.
+- Updated `stacyvm config lint --production` so wildcard or empty CORS fails the public production gate.
+- Updated `deploy/stacyvm.production.yaml`, deployment docs, API docs, public support matrix, and production readiness checklist with explicit CORS origin requirements.
+- Extended public release sanity CI to run production config lint with environment-provided secrets before building release artifacts.
+- Hardened the remote worker smoke harness so missing binaries, occupied ports, and failed spawns report actionable diagnostics instead of producing misleading release-gate failures.
+- Added `scripts/public-readiness-evidence.sh` and `docs/public-readiness-evidence.md` to generate a single public announcement evidence report that distinguishes branch-ready, tag-ready, runtime-certified, and target-network-certified states.
+
+## Remaining Phase 14 Direction
+
+- Run worker RPC mTLS smoke tests with deployment-issued certificates in the target enterprise network.

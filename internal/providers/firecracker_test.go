@@ -1,6 +1,9 @@
 package providers
 
 import (
+	"os"
+	"os/exec"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -108,4 +111,55 @@ func TestStatusNotFound(t *testing.T) {
 	if err == nil {
 		t.Error("Status should return error for nonexistent sandbox")
 	}
+}
+
+func TestFirecrackerProvider_Integration_Conformance(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("firecracker conformance requires Linux")
+	}
+	if _, err := os.Stat("/dev/kvm"); err != nil {
+		t.Skip("firecracker conformance requires /dev/kvm")
+	}
+
+	firecrackerPath := os.Getenv("STACYVM_FIRECRACKER_PATH")
+	if firecrackerPath == "" {
+		var err error
+		firecrackerPath, err = exec.LookPath("firecracker")
+		if err != nil {
+			t.Skip("firecracker binary not found; set STACYVM_FIRECRACKER_PATH")
+		}
+	}
+	kernelPath := os.Getenv("STACYVM_KERNEL_PATH")
+	if kernelPath == "" {
+		t.Skip("set STACYVM_KERNEL_PATH to run firecracker conformance")
+	}
+	rootfsPath := os.Getenv("STACYVM_ROOTFS_PATH")
+	if rootfsPath == "" {
+		t.Skip("set STACYVM_ROOTFS_PATH to run firecracker conformance")
+	}
+	agentPath := os.Getenv("STACYVM_AGENT_PATH")
+	if agentPath == "" {
+		agentPath = "./bin/stacyvm-agent"
+	}
+	for name, path := range map[string]string{
+		"kernel": kernelPath,
+		"rootfs": rootfsPath,
+		"agent":  agentPath,
+	} {
+		if _, err := os.Stat(path); err != nil {
+			t.Skipf("%s path %q is unavailable: %v", name, path, err)
+		}
+	}
+
+	runProviderConformance(t, func(t *testing.T) Provider {
+		t.Helper()
+		return NewFirecrackerProvider(FirecrackerProviderConfig{
+			FirecrackerPath: firecrackerPath,
+			KernelPath:      kernelPath,
+			DefaultRootfs:   rootfsPath,
+			AgentPath:       agentPath,
+			DataDir:         t.TempDir(),
+			DefaultMemoryMB: 256,
+		}, zerolog.Nop())
+	})
 }

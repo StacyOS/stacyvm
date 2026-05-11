@@ -13,6 +13,8 @@
  *
  * - `creating` -- the sandbox is being provisioned
  * - `running`  -- the sandbox is up and accepting commands
+ * - `unhealthy` -- the owning worker/runtime needs operator attention
+ * - `expired`  -- the sandbox TTL elapsed before cleanup could complete
  * - `stopped`  -- the sandbox has been gracefully stopped
  * - `destroyed` -- the sandbox has been torn down
  * - `error`    -- the sandbox encountered a fatal error
@@ -20,6 +22,8 @@
 export type SandboxState =
   | "creating"
   | "running"
+  | "unhealthy"
+  | "expired"
   | "stopped"
   | "destroyed"
   | "error";
@@ -57,8 +61,34 @@ export interface SpawnOptions {
   vcpus?: number;
   /** Time-to-live duration string. */
   ttl?: string;
+  /** Owner ID used for per-owner quotas when no X-User-ID header is set. */
+  owner_id?: string;
+  /** Template name to apply when spawning this sandbox. */
+  template?: string;
   /** Arbitrary key-value metadata. */
   metadata?: Record<string, string>;
+}
+
+/**
+ * Admission result for a spawn preflight request.
+ */
+export interface SpawnAdmissionDecision {
+  /** Whether the request can be spawned immediately. */
+  allowed: boolean;
+  /** Whether the request can wait in the spawn queue. */
+  queueable: boolean;
+  /** Denial reason, when allowed is false. */
+  reason?: string;
+  /** Current active sandbox count. */
+  active_sandboxes: number;
+  /** Configured global sandbox limit. */
+  max_sandboxes: number;
+  /** Current active sandbox count for the owner. */
+  active_owner_sandboxes?: number;
+  /** Effective sandbox limit for the owner. */
+  max_owner_sandboxes?: number;
+  /** Effective maximum TTL for the request. */
+  max_ttl?: string;
 }
 
 /**
@@ -97,6 +127,8 @@ export interface SandboxInfo {
 export interface ExecOptions {
   /** Positional arguments appended to the command. */
   args?: string[];
+  /** Execution mode. `shell` runs through /bin/sh -c; `argv` runs direct arguments. */
+  mode?: "shell" | "argv";
   /** Environment variables injected into the command. */
   env?: Record<string, string>;
   /** Working directory inside the sandbox. */
@@ -277,6 +309,11 @@ export interface ForgevmClientOptions {
 }
 
 /**
+ * Client constructor input: either a full base URL string or an options object.
+ */
+export type ForgevmClientConfig = string | ForgevmClientOptions;
+
+/**
  * VM pool status information.
  */
 export interface VMPoolStatus {
@@ -285,6 +322,16 @@ export interface VMPoolStatus {
   max_vms: number;
   total_users: number;
   max_users_per_vm: number;
+}
+
+/**
+ * Redacted quota policy coverage counts.
+ */
+export interface QuotaSummary {
+  total: number;
+  with_max_sandboxes: number;
+  with_max_ttl: number;
+  with_max_exec_timeout: number;
 }
 
 // ---------------------------------------------------------------------------

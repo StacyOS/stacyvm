@@ -1,0 +1,71 @@
+name: Bug report
+description: Report a reproducible StacyVM bug with the evidence needed for maintainers to triage it.
+title: "[Bug]: "
+labels: ["bug", "needs-triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. For public self-serve installs, attach the support evidence below whenever it applies. Redact anything you cannot share publicly.
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Describe the observed behavior and the expected behavior.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Reproduction steps
+      description: Include commands, API calls, SDK snippets, or config changes.
+      placeholder: |
+        1. Run ...
+        2. Call ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: dropdown
+    id: install_mode
+    attributes:
+      label: Install mode
+      options:
+        - Local/mock provider
+        - Single-node Docker/runc
+        - Docker with gVisor
+        - Docker with Kata
+        - Firecracker
+        - PRoot
+        - E2B/custom provider
+        - Multi-worker/enterprise prototype
+    validations:
+      required: true
+  - type: textarea
+    id: support_evidence
+    attributes:
+      label: Support evidence
+      description: Attach or paste the relevant command output. Use fenced code blocks for logs.
+      value: |
+        - `stacyvm support bundle --output support.json`:
+        - `stacyvm config lint --production --file <config>`:
+        - `stacyvm upgrade rehearse --config <config> --database <db>`:
+        - `stacyvm doctor --production`:
+        - `scripts/certify-runtime.sh <runtime> --format markdown --output <runtime>-certification.md`:
+        - `scripts/verify-release.sh <version> <arch>` or installer verification output:
+    validations:
+      required: false
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include OS, architecture, StacyVM version/commit, provider runtime version, Docker/Firecracker/gVisor/Kata/PRoot version, and whether this is CI or a host install.
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: Paste redacted server logs, SDK stack traces, or diagnostics JSON.
+      render: shell
+    validations:
+      required: false

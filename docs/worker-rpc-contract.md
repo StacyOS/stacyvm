@@ -1,0 +1,245 @@
+# Worker RPC Contract
+
+Phase 10 defined the control-plane to worker contract. Phase 11 wired that contract into a real worker runtime: `stacyvm worker` can authenticate to the control plane, submit heartbeat state through a worker-only HTTP endpoint, and expose an optional inbound RPC server with `--listen`.
+
+Phase 12 starts remote sandbox I/O routing. Remote spawn, status, destroy, lease renewal, shutdown/drain, non-streaming exec, live exec-stream calls, file APIs, and console logs now use the worker RPC transport when the scheduler selects a non-local worker that advertises `rpc_url`.
+
+## Contract Package
+
+The Go contract lives in `internal/workerproto`.
+
+Core envelope:
+
+```json
+{
+  "id": "req-123",
+  "method": "worker.spawn",
+  "worker_id": "worker-a",
+  "lease": {
+    "resource_id": "sb-abc123",
+    "holder_id": "worker-a",
+    "generation": 4,
+    "expires_at": "2026-05-09T10:31:00Z"
+  },
+  "params": {}
+}
+```
+
+Supported methods:
+
+| Method | Direction | Lease required | Purpose |
+|---|---|---:|---|
+| `worker.heartbeat` | worker to control plane | No | Report liveness, providers, capabilities, and capacity. |
+| `worker.spawn` | control plane to worker | Yes | Assign sandbox creation to the selected worker. |
+| `worker.destroy` | control plane to worker | Yes | Assign sandbox teardown to the owning worker. |
+| `worker.status` | control plane to worker | No | Ask a worker for runtime state. |
+| `worker.exec` | control plane to worker | No | Run a non-streaming command in an owned runtime. |
+| `worker.exec_stream` | control plane to worker | No | Run a command and stream stdout/stderr chunks. |
+| `worker.file_write` | control plane to worker | No | Write file content in an owned runtime. |
+| `worker.file_read` | control plane to worker | No | Read file content from an owned runtime. |
+| `worker.file_list` | control plane to worker | No | List files in an owned runtime. |
+| `worker.file_delete` | control plane to worker | No | Delete a file or directory in an owned runtime. |
+| `worker.file_move` | control plane to worker | No | Move or rename a file in an owned runtime. |
+| `worker.file_chmod` | control plane to worker | No | Change file mode in an owned runtime. |
+| `worker.file_stat` | control plane to worker | No | Stat a file in an owned runtime. |
+| `worker.file_glob` | control plane to worker | No | Evaluate a glob pattern in an owned runtime. |
+| `worker.logs` | control plane to worker | No | Return console log lines from an owned runtime. |
+| `worker.renew_lease` | control plane to worker | Yes | Confirm continued ownership and renew fencing. |
+| `worker.shutdown` | control plane to worker | No | Drain or stop a worker process. |
+
+## Lease Fencing
+
+Every mutating lifecycle assignment must include a lease token:
+
+- `resource_id` is the sandbox ID.
+- `holder_id` must match the selected worker.
+- `generation` is incremented whenever ownership is acquired or renewed.
+- `expires_at` defines when another worker may take over.
+
+Workers must reject mutating work if the lease holder does not match their own worker ID or if the lease is expired. The control plane must renew leases before long-running operations cross the expiry window.
+
+## Worker Authentication
+
+Worker identity must be separate from user and admin identity.
+
+Recommended transport headers for the future network worker:
+
+| Header | Purpose |
+|---|---|
+| `X-Worker-ID` | Stable worker ID that must match the token subject. |
+| `X-Worker-Token` or `Authorization: Bearer <token>` | Worker token signed by the control plane or trusted issuer. |
+| `X-Request-ID` | Request correlation across control plane and worker logs. |
+
+Validated worker tokens should produce `workerproto.AuthClaims`:
+
+- `worker_id`
+- `scopes`
+- `expires`
+
+Initial scopes:
+
+- `worker:heartbeat`
+- `worker:spawn`
+- `worker:destroy`
+- `worker:status`
+- `worker:exec`
+- `worker:files`
+- `worker:logs`
+- `worker:lease`
+
+Workers must not accept user API keys or admin API keys for worker RPC. Control-plane admin access and worker execution access are separate trust boundaries.
+
+Current control-plane worker authentication accepts either:
+
+- `auth.worker_token` as a shared staging token.
+- `auth.worker_token_file` as a secret-mounted file containing the shared staging token.
+- `auth.worker_tokens.<worker_id>` as a per-worker token map for production-aligned staging.
+- `auth.worker_signing_key` for HMAC-SHA256 signed worker tokens using the `stacyvm-worker-v1.<payload>.<signature>` format.
+- `auth.worker_signing_key_file` as a secret-mounted file containing the active signing key.
+- `auth.worker_signing_keys` as additional verification keys accepted during signing-key rotation.
+
+When a worker has an entry in `auth.worker_tokens`, that worker-specific token takes precedence and the shared token is rejected for that worker ID. This keeps legacy staging configs compatible while giving production deployments individually rotatable worker credentials.
+
+Signed worker token payloads are base64url JSON claims with `worker_id`, `jti`, `aud`, optional worker scopes, `iat`, optional `nbf`, and `exp`. The authenticated `X-Worker-ID` must match the signed `worker_id`, expired or not-yet-valid tokens are rejected, and any non-worker scopes are ignored. Tokens with `iat` are capped at a 15 minute lifetime with 30 seconds of clock skew tolerance. `stacyvm worker` can derive short-lived heartbeat and lease-renewal tokens with `aud=worker:control-plane` from `auth.worker_signing_key` when no static `--worker-token` or `auth.worker_token` is provided. Operators can also issue a token explicitly with `stacyvm worker token <worker-id> --ttl 5m --format json` to capture the token ID and expiry metadata.
+
+The same signed token format is accepted by worker RPC servers for control-plane-to-worker calls, but RPC tokens use `aud=worker:rpc`. When the control plane has `auth.worker_signing_key` and no shared `auth.worker_token`, it mints short-lived RPC-audience tokens for the target worker before calling `/rpc`. This lets remote spawn, status, exec, file, log, preview, and destroy routing avoid static shared worker RPC credentials.
+
+Issued tokens include a `jti` token ID. During an incident, add a compromised token ID to `auth.worker_revoked_token_ids`; both worker-to-control-plane routes and control-plane-to-worker RPC reject matching signed tokens.
+
+Token incident-response runbook:
+
+```bash
+stacyvm worker token worker-a --signing-key-file /run/secrets/stacyvm-worker-signing-key --ttl 5m --format json
+stacyvm worker token inspect '<signed-worker-token>'
+stacyvm worker token verify '<signed-worker-token>' --signing-key-file /run/secrets/stacyvm-worker-signing-key --worker-id worker-a --audience worker:control-plane
+stacyvm worker token rotation-plan --new-key-ref /run/secrets/stacyvm-worker-signing-key-new --previous-key-ref /run/secrets/stacyvm-worker-signing-key-old --ttl 5m
+```
+
+`stacyvm worker token inspect` decodes token metadata without verifying the signature. Use it to recover `worker_id`, `jti`, `aud`, and expiry metadata from an already-captured token before adding the `jti` value to `auth.worker_revoked_token_ids`; do not treat inspected claims as authenticated identity. `stacyvm worker token verify` validates the signature against `auth.worker_signing_key`, accepts `auth.worker_signing_keys` during rotation, applies optional `--worker-id` and `--audience` expectations, and rejects configured revoked token IDs.
+
+For production services, prefer `auth.worker_token_file`, `auth.worker_signing_key_file`, `--worker-token-file`, `--worker-signing-key-file`, `--signing-key-file`, and `--verification-key-file` with secret-mounted files over passing long-lived worker secrets directly in YAML, shell history, or environment variables. The config loader rejects ambiguous pairs such as `auth.worker_signing_key` plus `auth.worker_signing_key_file`, and `stacyvm config lint --production` reports whether worker token and signing-key values came from secret file references or inline config. `stacyvm worker --worker-token-file` reloads the token file for each heartbeat and lease-renewal request, so an external issuer or sidecar can rotate short-lived signed worker tokens without restarting the worker process.
+
+`stacyvm worker token rotation-plan` emits a no-secret checklist, config sketch, and validation commands for a two-key rotation window. No-downtime signing-key rotation uses this sequence:
+
+1. Set the new key as `auth.worker_signing_key`.
+2. Move the previous key into `auth.worker_signing_keys`.
+3. Restart or reload workers so they mint with the new key.
+4. Wait until all old worker tokens have expired.
+5. Remove the old key from `auth.worker_signing_keys`.
+
+`stacyvm config lint --production` warns when the active signing key is repeated in `auth.worker_signing_keys`, when duplicate rotation keys are configured, or when a shared `auth.worker_token` remains configured beside signed worker tokens.
+
+## Worker RPC mTLS
+
+Signed worker tokens authenticate the worker identity at the application layer. Enterprise deployments should also protect worker RPC transport with mTLS when worker RPC crosses a host or network boundary.
+
+Worker RPC TLS is opt-in through `worker.rpc_tls`:
+
+```yaml
+worker:
+  listen_addr: "0.0.0.0:7430"
+  rpc_tls:
+    enabled: true
+    server_cert_file: "/etc/stacyvm/tls/worker.crt"
+    server_key_file: "/etc/stacyvm/tls/worker.key"
+    client_ca_file: "/etc/stacyvm/tls/control-plane-ca.crt"
+    ca_file: "/etc/stacyvm/tls/worker-ca.crt"
+    client_cert_file: "/etc/stacyvm/tls/control-plane.crt"
+    client_key_file: "/etc/stacyvm/tls/control-plane.key"
+    server_name: "worker-a.internal"
+    insecure_skip_verify: false
+```
+
+On worker nodes, `server_cert_file` and `server_key_file` serve the inbound `/rpc` endpoint. When `client_ca_file` is set, the worker requires and verifies a client certificate from the control plane.
+
+On control-plane nodes, `ca_file` verifies worker server certificates, `client_cert_file` and `client_key_file` present the control-plane client identity, and `server_name` pins the expected worker certificate name when DNS or advertised `rpc_url` hostnames differ.
+
+`insecure_skip_verify` exists only for throwaway local tests and should fail production config lint.
+
+Current Phase 11 heartbeat endpoint:
+
+```text
+POST /api/v1/worker/{workerID}/heartbeat
+```
+
+The endpoint requires `X-Worker-ID` plus `X-Worker-Token` and rejects requests where the authenticated worker ID differs from the `{workerID}` path.
+
+Current Phase 11 worker RPC endpoint:
+
+```text
+POST /rpc
+```
+
+Run it with:
+
+```bash
+stacyvm worker --listen 127.0.0.1:7430
+```
+
+The endpoint accepts `workerproto.Request` envelopes, requires the same worker headers, and currently implements `worker.status`, `worker.exec`, `worker.exec_stream`, file operations, `worker.logs`, `worker.renew_lease`, `worker.spawn`, `worker.destroy`, and `worker.shutdown`.
+
+For `worker.spawn`, the request carries a control-plane `sandbox_id` and the response returns both that ID and the provider `runtime_id`. The control plane should persist that mapping before routing later status, exec, file, or destroy operations to the owning worker.
+
+Remote workers advertise their control-plane callback endpoint through heartbeat capacity:
+
+```json
+{
+  "capacity": {
+    "max_sandboxes": 10,
+    "rpc_url": "http://worker-a.internal:7430",
+    "preview_domain": "worker-a.preview.example.com"
+  }
+}
+```
+
+When the scheduler selects a non-local worker with `rpc_url` and signed worker RPC tokens or a static worker token are configured, the control plane acquires the sandbox lease for that worker, calls `worker.spawn`, persists the selected `worker_id`, and stores the returned provider runtime ID for later routing.
+
+Sandbox reads use the persisted `worker_id` and provider `runtime_id` to call `worker.status` on the owning worker. If the worker reports a changed state, the control plane updates its stored sandbox state. If the worker is temporarily unreachable, the control plane keeps serving the cached record and logs the refresh failure at debug level.
+
+Remote destroy uses the same persisted ownership tuple. The control plane fetches the durable sandbox lease, presents it to `worker.destroy`, updates sandbox state to `destroyed`, and releases the lease after the worker confirms teardown.
+
+Remote non-streaming exec uses the same persisted ownership tuple without acquiring a new lifecycle lease. The control plane sends command, argv mode, environment, workdir, timeout, provider, sandbox ID, and provider runtime ID to `worker.exec`. The worker runs the command against its local provider registry and returns exit code, stdout, and stderr. The control plane still writes normal exec logs and emits the same audit, event, metric, and timeout behavior used by local exec.
+
+Remote exec stream uses `worker.exec_stream` with `X-Worker-Stream: ndjson`. The worker flushes each stdout/stderr chunk as an NDJSON `workerproto.Response`, and the control plane exposes those chunks through the manager's existing stream channel API. Clients that do not request NDJSON can still receive the buffered `ExecStreamResult` response shape.
+
+Remote file APIs use the same ownership tuple. The control plane validates/scopes paths, then sends the provider runtime ID and requested file operation to the owning worker. Dedicated remote sandboxes are not treated as pool sandboxes just because `VMID` stores the provider runtime ID; pool workspace scoping remains local-pool only.
+
+Remote console logs use `worker.logs` with the persisted provider runtime ID, so workers read logs from the runtime they actually own instead of the control-plane sandbox ID.
+
+Remote preview metadata uses `capacity.preview_domain` from the owning worker. The control plane returns that domain on remote-owned sandboxes so SDKs and the dashboard build URLs for the worker or cluster ingress that can actually reach the runtime. If a worker does not advertise a preview domain, the control plane falls back to `server.preview_domain`.
+
+`worker.shutdown` is a drain signal. After receiving it, the worker rejects new `worker.spawn` assignments and reports `draining` in future heartbeats, which keeps it out of scheduler placement. Existing sandboxes keep their worker ownership while the worker is fresh and draining.
+
+Startup reconciliation applies a conservative remote ownership policy:
+
+- Fresh draining workers keep existing sandbox ownership.
+- Stale, offline, or missing workers cause non-expired remote-owned sandboxes to become `unhealthy`.
+- Expired remote-owned sandboxes become `expired` and release their durable lease.
+- The control plane does not pretend to migrate a stateful runtime to another worker. Real reassignment requires provider-level snapshot or migration support.
+
+Current Phase 11 control-plane lease renewal endpoint:
+
+```text
+POST /api/v1/worker/{workerID}/leases/{resourceID}/renew
+```
+
+The worker RPC handler validates the presented lease token before calling this endpoint. The control plane only renews unexpired leases held by the authenticated worker.
+
+## Cluster Store Semantics
+
+SQLite remains suitable for single-node and local development. Enterprise multi-worker mode should use Postgres or another store with equivalent guarantees.
+
+Required lease guarantees:
+
+- Atomic acquire by `resource_id`.
+- Acquire succeeds when no lease exists, the lease is expired, or the same holder renews ownership.
+- Acquire fails when a different holder owns an unexpired lease.
+- Renew succeeds only for the current holder and only before expiry.
+- Release succeeds only for the current holder.
+- Concurrent acquire attempts must serialize on the lease row.
+
+In Postgres terms, lease acquire should be implemented with a unique key on `resource_id`, transactional upsert semantics, and row-level contention safety. Clock skew must be bounded because expiry is time-based.
+
+## Current Limits
+
+Remote placement returns `remote_worker_rpc_unavailable` unless the selected worker advertises `rpc_url` and the control plane can authenticate to worker RPC with either short-lived signed RPC-audience tokens or a static worker token. Postgres-backed cluster storage and signed production worker identity are wired into the current transport; deployment certification still needs the target host/runtime conformance checks listed in [cluster-conformance](/docs/cluster-conformance).

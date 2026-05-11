@@ -1,0 +1,453 @@
+---
+title: "Prerequisites"
+description: "Check the operating system, runtime, SDK, network, and production requirements before you install StacyVM."
+---
+
+Use this checklist before you run StacyVM locally or deploy it for other developers.
+
+## Quick Checklist
+
+| Area | Required for local quickstart | Required for production |
+| --- | --- | --- |
+| Host OS | Linux recommended, macOS acceptable for SDK/docs work | Linux host certified for the runtime you claim |
+| Runtime | Docker for the default provider path | Docker, Firecracker, PRoot, or remote workers certified on target hosts |
+| CLI tools | `curl`, `git`, Docker CLI | `curl`, `git`, Docker CLI, service manager, backup tooling |
+| Build tools | Go only when building from source | Go only for source builds; release binaries are preferred |
+| SDK tools | Python 3.9+ or Node.js 18+ | Match your application language runtime |
+| Network | Local port `7423` available | TLS, reverse proxy, exact CORS origins, private admin access |
+| Secrets | Optional local API key | Strong API key, admin key, worker credentials where applicable |
+| Persistence | Local SQLite file is fine | Persistent data directory and backup plan |
+
+## Local Development
+
+For the simplest local path, you need:
+
+- Docker installed and reachable by the StacyVM process.
+- Port `7423` available on localhost.
+- `curl` for API smoke checks.
+- Python 3.9+ if you want to use the Python SDK or examples.
+- Node.js 18+ if you want to use the TypeScript SDK or examples.
+- Go if you want to run `make serve`, `go test ./...`, or build from source.
+
+If you do not have Go installed, use a release binary or Docker Compose instead of `make serve`.
+
+Once the repository is cloned, the one-command local setup path is:
+
+```bash
+make dev
+```
+
+`make dev` checks Go, Docker, Docker daemon access, and port `7423`, then builds StacyVM and starts `./stacyvm serve`. It does not install Docker Desktop or OS packages for you; when something is missing, it prints the right OS-specific fix.
+
+If you prefer an npm/npx-driven setup, use:
+
+```bash
+npx stacyvm-setup@latest \
+  --branch phase-14-worker-identity-hardening
+```
+
+The npm setup command can clone StacyVM, run `npm install` for the web, SDK, and TypeScript example packages, download Go modules, build the StacyVM binary, and start the server. It still expects Docker and Go to be installed on the host.
+
+To test the branch directly from GitHub instead of npm, use:
+
+```bash
+npx github:StacyOS/stacyvm#phase-14-worker-identity-hardening stacyvm-setup \
+  --branch phase-14-worker-identity-hardening
+```
+
+## OS Setup
+
+Choose the setup path for the machine where you will run StacyVM.
+
+### macOS
+
+macOS is a good local development environment for the Docker provider, SDKs, and docs. Use Docker Desktop as the runtime. Firecracker is not a macOS starter path because it requires Linux/KVM.
+
+Install tools:
+
+```bash
+brew install go git curl make
+```
+
+Install and start Docker Desktop, then verify Docker works:
+
+```bash
+docker version
+docker run --rm hello-world
+```
+
+Run StacyVM from source:
+
+```bash
+git clone https://github.com/StacyOS/stacyvm.git
+cd stacyvm
+make dev
+```
+
+Check the API:
+
+```bash
+curl http://localhost:7423/api/v1/live
+```
+
+Use multi-architecture images such as `python:3.12`, `node:20`, or `alpine:latest` on Apple Silicon.
+
+### Windows
+
+Use Windows with WSL 2. Run StacyVM commands inside Ubuntu on WSL, not in PowerShell, so paths, shell behavior, and Docker integration match Linux more closely.
+
+Install:
+
+- WSL 2 with Ubuntu.
+- Docker Desktop with WSL integration enabled for your Ubuntu distro.
+- Go, Git, curl, and make inside Ubuntu.
+
+Inside Ubuntu on WSL:
+
+```bash
+sudo apt update
+sudo apt install -y git curl make golang-go
+docker version
+docker run --rm hello-world
+```
+
+Run StacyVM:
+
+```bash
+git clone https://github.com/StacyOS/stacyvm.git
+cd stacyvm
+make dev
+```
+
+If Docker commands fail inside WSL, open Docker Desktop settings and enable WSL integration for the Ubuntu distro you are using.
+
+### Linux
+
+Linux is the recommended host family for runtime work and production certification. Docker is the easiest first provider; Firecracker and PRoot require additional host-specific setup.
+
+Install basic tools with your distribution package manager:
+
+```bash
+sudo apt update
+sudo apt install -y git curl make golang-go docker.io
+sudo systemctl enable --now docker
+sudo usermod -aG docker "$USER"
+```
+
+Log out and back in after adding your user to the Docker group, then verify:
+
+```bash
+docker run --rm hello-world
+```
+
+Run StacyVM:
+
+```bash
+git clone https://github.com/StacyOS/stacyvm.git
+cd stacyvm
+make dev
+```
+
+### Ubuntu
+
+Ubuntu is the most straightforward Linux path for individual setup and single-node staging.
+
+Install Docker and build tools:
+
+```bash
+sudo apt update
+sudo apt install -y ca-certificates curl git make golang-go
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo tee /etc/apt/keyrings/docker.asc >/dev/null
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list >/dev/null
+sudo apt update
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo usermod -aG docker "$USER"
+```
+
+Log out and back in, then verify:
+
+```bash
+docker run --rm hello-world
+docker compose version
+```
+
+Run StacyVM:
+
+```bash
+git clone https://github.com/StacyOS/stacyvm.git
+cd stacyvm
+make dev
+```
+
+For production-like Ubuntu hosts, continue with [Production Deployment](/docs/deployment) after local verification.
+
+## Runtime Requirements
+
+### Docker
+
+Docker is the recommended first runtime because it is easiest to install and validate.
+
+- Docker daemon running on the host.
+- Permission for the StacyVM process to create and destroy containers.
+- Resource limits configured for memory, CPU, TTL, and concurrent sandboxes.
+- Production config that disables unsafe Docker options.
+
+### Firecracker
+
+Use Firecracker only after host certification.
+
+- Linux host with KVM access.
+- Firecracker binary installed.
+- Kernel, rootfs, and StacyVM agent configured.
+- Networking configured for your deployment model.
+- Runtime certification evidence for the exact host class.
+
+### PRoot
+
+Use PRoot only after validating the real rootfs and binaries on the target host.
+
+- PRoot installed.
+- Rootfs path configured.
+- Required shell and runtime binaries available inside the rootfs.
+- File and exec conformance passing for your target workload.
+
+## Production Requirements
+
+Before exposing StacyVM to other users, prepare:
+
+- `auth.enabled: true` with a strong API key.
+- Separate admin API key for admin routes.
+- Exact `server.cors_allowed_origins`; do not use wildcard CORS for public browser clients.
+- Rate limits, sandbox caps, TTLs, and quotas.
+- Persistent store path with backups.
+- Health checks for `/api/v1/live`, `/api/v1/ready`, and `/api/v1/health`.
+- Metrics scraping for `/api/v1/metrics/prometheus`.
+- Audit log retention policy.
+- Runtime certification for every provider you publicly claim.
+
+## Verify Your Setup
+
+### Verify The Npm Bootstrapper
+
+Run this flow in a fresh terminal when you want to confirm the published `stacyvm-setup` package, clone path, build path, server, and sandbox execution are all working.
+
+Verify the npm package:
+
+```bash
+npm view stacyvm-setup name version bin --json
+npx stacyvm-setup@latest --help
+```
+
+Run setup without starting the server:
+
+```bash
+mkdir -p /tmp/stacyvm-npx-test
+cd /tmp/stacyvm-npx-test
+
+npx stacyvm-setup@latest \
+  --branch phase-14-worker-identity-hardening \
+  --dir ./stacyvm \
+  --no-start
+```
+
+Expected result:
+
+```bash
+./stacyvm/stacyvm
+```
+
+Start StacyVM:
+
+```bash
+cd /tmp/stacyvm-npx-test/stacyvm
+./stacyvm serve
+```
+
+In a second terminal, check health:
+
+```bash
+curl http://localhost:7423/api/v1/live
+curl http://localhost:7423/api/v1/ready
+```
+
+Create a sandbox:
+
+```bash
+curl -sS -X POST http://localhost:7423/api/v1/sandboxes \
+  -H "Content-Type: application/json" \
+  -d '{"image":"python:3.12","ttl":"10m"}'
+```
+
+Copy the returned sandbox ID, then run code inside it:
+
+```bash
+export SANDBOX_ID="PASTE_ID_HERE"
+
+curl -sS -X POST "http://localhost:7423/api/v1/sandboxes/${SANDBOX_ID}/exec" \
+  -H "Content-Type: application/json" \
+  -d '{"command":"python3 -c \"print(40 + 2)\"","timeout":"10s"}'
+```
+
+The response should include:
+
+```json
+{
+  "stdout": "42\n"
+}
+```
+
+Destroy the sandbox:
+
+```bash
+curl -sS -X DELETE "http://localhost:7423/api/v1/sandboxes/${SANDBOX_ID}"
+```
+
+After that passes, you can test the full one-command path:
+
+```bash
+cd /tmp
+npx stacyvm-setup@latest \
+  --branch phase-14-worker-identity-hardening \
+  --dir ./stacyvm-full-test
+```
+
+### Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="npm returns 404 for stacyvm-setup">
+    Make sure you are using the published package name:
+
+    ```bash
+    npm view stacyvm-setup name version bin --json
+    npx stacyvm-setup@latest --help
+    ```
+
+    If you are testing an unpublished branch, use the GitHub fallback:
+
+    ```bash
+    npx github:StacyOS/stacyvm#phase-14-worker-identity-hardening stacyvm-setup \
+      --branch phase-14-worker-identity-hardening
+    ```
+  </Accordion>
+
+  <Accordion title="Docker CLI is installed, but the daemon is not reachable">
+    On macOS, start Docker Desktop and wait until it is fully running:
+
+    ```bash
+    open -a Docker
+    docker info
+    docker run --rm hello-world
+    ```
+
+    On Windows, run setup inside WSL 2 Ubuntu and enable Docker Desktop WSL integration for that distro.
+
+    On Linux, start Docker and make sure your user can access it:
+
+    ```bash
+    sudo systemctl enable --now docker
+    sudo usermod -aG docker "$USER"
+    ```
+
+    Log out and back in after changing groups.
+  </Accordion>
+
+  <Accordion title="Go is missing">
+    Source setup requires Go because the npm bootstrapper builds the StacyVM binary.
+
+    macOS:
+
+    ```bash
+    brew install go
+    ```
+
+    Ubuntu or Debian:
+
+    ```bash
+    sudo apt update
+    sudo apt install -y golang-go
+    ```
+  </Accordion>
+
+  <Accordion title="Port 7423 is already in use">
+    Stop the process using port `7423`, then rerun setup.
+
+    macOS or Linux:
+
+    ```bash
+    lsof -iTCP:7423 -sTCP:LISTEN
+    ```
+
+    If you already have StacyVM running, use the existing server and continue with the [quickstart](/docs/getting-started/quickstart).
+  </Accordion>
+
+  <Accordion title="Setup cloned the repo but failed later">
+    Reuse the existing checkout after fixing the host issue:
+
+    ```bash
+    cd /tmp/stacyvm-npx-test
+    npx stacyvm-setup@latest \
+      --branch phase-14-worker-identity-hardening \
+      --dir ./stacyvm \
+      --no-start
+    ```
+
+    The setup command detects an existing StacyVM checkout and continues from there.
+  </Accordion>
+
+  <Accordion title="You want to test without Docker temporarily">
+    You can skip Docker daemon validation:
+
+    ```bash
+    npx stacyvm-setup@latest \
+      --branch phase-14-worker-identity-hardening \
+      --skip-docker-check \
+      --no-start
+    ```
+
+    This only verifies setup and build behavior. Docker must be running before you create real sandboxes with the Docker provider.
+  </Accordion>
+
+  <Accordion title="npm cache or auth errors">
+    Use a clean npm cache directory:
+
+    ```bash
+    npm_config_cache=/tmp/stacyvm-npm-cache npx stacyvm-setup@latest --help
+    ```
+
+    If npm asks for auth unexpectedly, verify your registry:
+
+    ```bash
+    npm config get registry
+    ```
+
+    It should usually be `https://registry.npmjs.org/`.
+  </Accordion>
+</AccordionGroup>
+
+Run config lint before production:
+
+```bash
+stacyvm config lint --production --file deploy/stacyvm.production.yaml
+```
+
+Run host diagnostics after installation:
+
+```bash
+stacyvm doctor --production
+```
+
+Run a smoke check against the deployed API:
+
+```bash
+STACYVM_SMOKE_URL=https://stacyvm.example.com \
+STACYVM_API_KEY=sk_live_REPLACE_ME \
+scripts/smoke-deployment.sh
+```
+
+## Continue
+
+- Install StacyVM with the [installation guide](/docs/getting-started/installation).
+- Create your first sandbox with the [quickstart](/docs/getting-started/quickstart).
+- Review public runtime claims in the [support matrix](/docs/public-support-matrix).

@@ -1,0 +1,42 @@
+{
+  "name": "stacyvm-setup",
+  "version": "0.14.4",
+  "private": false,
+  "description": "Command-line bootstrapper for StacyVM.",
+  "type": "module",
+  "engines": {
+    "node": ">=18"
+  },
+  "bin": {
+    "stacyvm-setup": "scripts/npm-setup.mjs"
+  },
+  "files": [
+    "scripts/npm-setup.mjs",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "setup": "node ./scripts/npm-setup.mjs",
+    "setup:check": "node ./scripts/npm-setup.mjs --check-only --skip-docker-check --skip-node-deps --no-start"
+  },
+  "keywords": [
+    "stacyvm",
+    "sandbox",
+    "agent",
+    "setup",
+    "docker",
+    "firecracker"
+  ],
+  "homepage": "https://github.com/StacyOS/stacyvm#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/StacyOS/stacyvm.git"
+  },
+  "bugs": {
+    "url": "https://github.com/StacyOS/stacyvm/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "MIT"
+}

@@ -4,10 +4,12 @@ import (
 	"context"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
 	"github.com/StacyOs/stacyvm/internal/api"
+	"github.com/StacyOs/stacyvm/internal/api/middleware"
 	"github.com/StacyOs/stacyvm/internal/config"
 	"github.com/StacyOs/stacyvm/internal/environments"
 	"github.com/StacyOs/stacyvm/internal/orchestrator"
@@ -46,17 +48,37 @@ func runServe() error {
 	}
 
 	// Store
-	st, err := store.NewSQLiteStore(cfg.Database.Path)
+	st, err := store.Open(store.Config{
+		Driver: cfg.Database.Driver,
+		Path:   cfg.Database.Path,
+		DSN:    cfg.Database.DSN,
+	})
 	if err != nil {
 		return err
 	}
 	defer st.Close()
 
-	// Event bus
+	// Event bus — attach a durable Postgres LISTEN/NOTIFY bridge when running
+	// in Postgres mode so events reach all control-plane replicas in HA setups.
 	events := orchestrator.NewEventBus()
+	if strings.EqualFold(strings.TrimSpace(cfg.Database.Driver), "postgres") ||
+		strings.EqualFold(strings.TrimSpace(cfg.Database.Driver), "postgresql") {
+		bridge, bridgeErr := orchestrator.NewDurableBridge(context.Background(), cfg.Database.DSN, events, logger)
+		if bridgeErr != nil {
+			logger.Warn().Err(bridgeErr).Msg("durable event bridge unavailable; events will not cross control-plane replicas")
+		} else {
+			defer bridge.Stop()
+			logger.Info().Msg("durable event bridge attached (Postgres LISTEN/NOTIFY)")
+		}
+	}
 
 	// Provider registry
 	registry := providers.NewRegistry()
+	if cfg.Providers.Mock.Enabled {
+		mock := providers.NewMockProvider()
+		registry.Register(mock)
+		logger.Info().Msg("mock provider registered")
+	}
 	if cfg.Providers.Firecracker.Enabled {
 		fc := providers.NewFirecrackerProvider(providers.FirecrackerProviderConfig{
 			FirecrackerPath: cfg.Providers.Firecracker.FirecrackerPath,
@@ -163,6 +185,10 @@ func runServe() error {
 
 	// Manager
 	ttl, _ := time.ParseDuration(cfg.Defaults.TTL)
+	maxTTL, _ := time.ParseDuration(cfg.Defaults.MaxTTL)
+	defaultExecTimeout, _ := time.ParseDuration(cfg.Defaults.DefaultExecTimeout)
+	maxExecTimeout, _ := time.ParseDuration(cfg.Defaults.MaxExecTimeout)
+	spawnQueueTimeout, _ := time.ParseDuration(cfg.Defaults.SpawnQueueTimeout)
 	mgr := orchestrator.NewManager(registry, st, events, logger, orchestrator.ManagerConfig{
 		DefaultTTL:    ttl,
 		DefaultImage:  cfg.Defaults.Image,
@@ -170,7 +196,24 @@ func runServe() error {
 		DefaultVCPUs:  cfg.Defaults.VCPUs,
 		Pool:          cfg.Pool,
 		PreviewDomain: cfg.Server.PreviewDomain,
+		Limits: orchestrator.OperationalLimits{
+			MaxSandboxes:         cfg.Defaults.MaxSandboxes,
+			MaxSandboxesPerOwner: cfg.Defaults.MaxSandboxesPerOwner,
+			DefaultExecTimeout:   defaultExecTimeout,
+			MaxExecTimeout:       maxExecTimeout,
+			MaxTTL:               maxTTL,
+			SpawnOverflow:        cfg.Defaults.SpawnOverflow,
+			SpawnQueueTimeout:    spawnQueueTimeout,
+			MaxSpawnQueue:        cfg.Defaults.MaxSpawnQueue,
+		},
+		WorkerToken:           cfg.Auth.WorkerToken,
+		WorkerSigningKey:      cfg.Auth.WorkerSigningKey,
+		WorkerRevokedTokenIDs: cfg.Auth.WorkerRevokedTokenIDs,
+		WorkerRPCTLS:          workerTLSConfig(cfg.Worker.RPCTLS),
 	})
+	if err := mgr.Reconcile(context.Background()); err != nil {
+		return err
+	}
 	mgr.Start()
 	mgr.InitVMPool()
 	defer mgr.Stop()
@@ -194,10 +237,41 @@ func runServe() error {
 	}
 
 	// Server
+	rateLimitBucketTTL, _ := time.ParseDuration(cfg.RateLimit.BucketTTL)
+	rateLimitCleanupInterval, _ := time.ParseDuration(cfg.RateLimit.CleanupInterval)
+	adminAuditRetention, _ := time.ParseDuration(cfg.Auth.AdminAuditRetention)
 	srv := api.NewServer(api.ServerConfig{
-		Addr:    cfg.Server.Addr(),
-		APIKey:  cfg.Auth.APIKey,
-		Version: version,
+		Addr:                  cfg.Server.Addr(),
+		APIKey:                cfg.Auth.APIKey,
+		AdminAPIKey:           cfg.Auth.AdminAPIKey,
+		AdminFallbackDisabled: !cfg.Auth.AdminFallbackEnabled,
+		AdminAuditRetention:   adminAuditRetention,
+		CORSAllowedOrigins:    cfg.Server.CORSAllowedOrigins,
+		WorkerToken:           cfg.Auth.WorkerToken,
+		WorkerTokens:          cfg.Auth.WorkerTokens,
+		WorkerSigningKey:      cfg.Auth.WorkerSigningKey,
+		WorkerSigningKeys:     cfg.Auth.WorkerSigningKeys,
+		WorkerRevokedTokenIDs: cfg.Auth.WorkerRevokedTokenIDs,
+		Version:               version,
+		RateLimit: middleware.RateLimitConfig{
+			Enabled:           cfg.RateLimit.Enabled,
+			RequestsPerMinute: cfg.RateLimit.RequestsPerMinute,
+			Burst:             cfg.RateLimit.Burst,
+			KeyBy:             cfg.RateLimit.KeyBy,
+			BucketTTL:         rateLimitBucketTTL,
+			CleanupInterval:   rateLimitCleanupInterval,
+		},
+		OIDC: middleware.OIDCConfig{
+			Issuer:         cfg.Auth.OIDCIssuer,
+			Audience:       cfg.Auth.OIDCAudience,
+			JWKSUrl:        cfg.Auth.OIDCJWKSUrl,
+			PublicKeyPEM:   cfg.Auth.OIDCPublicKey,
+			GroupsClaim:    cfg.Auth.OIDCGroupsClaim,
+			TenantClaim:    cfg.Auth.OIDCTenantClaim,
+			AdminGroups:    cfg.Auth.OIDCAdminGroups,
+			OperatorGroups: cfg.Auth.OIDCOperatorGroups,
+			ViewerGroups:   cfg.Auth.OIDCViewerGroups,
+		},
 	}, registry, mgr, events, templates, pool, st, envBuilds, logger)
 
 	// Graceful shutdown

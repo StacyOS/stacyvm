@@ -1,0 +1,123 @@
+---
+title: "Python SDK"
+description: "Use the StacyVM Python SDK to create sandboxes, run commands, stream output, manage files, and clean up safely."
+---
+
+The Python SDK is the fastest path for Python services, agent backends, notebooks, and workflow runners.
+
+## Prerequisites
+
+- Python 3.9+.
+- A running StacyVM server.
+- An API key when auth is enabled.
+
+## Install
+
+```bash
+pip install stacyvm
+```
+
+## Connect
+
+```python
+import os
+from stacyvm import Client
+
+client = Client(
+    base_url=os.getenv("STACYVM_URL", "http://localhost:7423"),
+    api_key=os.getenv("STACYVM_API_KEY"),
+    user_id="user_123",
+    timeout=60.0,
+)
+```
+
+<ParamField body="base_url" type="string">
+  StacyVM server URL. Defaults to `http://localhost:7423`.
+</ParamField>
+
+<ParamField body="api_key" type="string">
+  API key sent as `X-API-Key` when server auth is enabled.
+</ParamField>
+
+<ParamField body="user_id" type="string">
+  Tenant or owner identity sent as `X-User-ID` for quota and audit attribution.
+</ParamField>
+
+<ParamField body="timeout" type="number">
+  Per-request HTTP timeout in seconds.
+</ParamField>
+
+## Run A Task
+
+```python
+from stacyvm import Client
+
+client = Client(
+    base_url="http://localhost:7423",
+    api_key="sk_test_YOUR_API_KEY",
+)
+
+with client.spawn(image="python:3.12", ttl="10m") as sandbox:
+    sandbox.write_file("/app/main.py", "print(sum([10, 20, 12]))\n")
+    result = sandbox.exec("python3 /app/main.py", timeout="10s")
+
+    if result.exit_code != 0:
+        raise RuntimeError(result.stderr)
+
+    print(result.stdout)
+```
+
+<ResponseField name="exit_code" type="integer">
+  Process exit code returned by the runtime provider.
+</ResponseField>
+
+<ResponseField name="stdout" type="string">
+  Captured standard output.
+</ResponseField>
+
+<ResponseField name="stderr" type="string">
+  Captured standard error.
+</ResponseField>
+
+<ResponseField name="duration" type="string">
+  Provider-reported execution duration.
+</ResponseField>
+
+## Stream Output
+
+```python
+import sys
+
+for chunk in sandbox.exec_stream("python3 -u /app/main.py"):
+    if chunk.stream == "stdout":
+        print(chunk.data, end="")
+    else:
+        print(chunk.data, end="", file=sys.stderr)
+```
+
+## Handle Errors
+
+```python
+from stacyvm import Client, ProviderError, SandboxNotFound
+
+client = Client("http://localhost:7423", api_key="sk_test_YOUR_API_KEY")
+
+try:
+    sandbox = client.spawn(image="python:3.12", ttl="10m")
+    result = sandbox.exec("python3 /missing.py", timeout="10s")
+except SandboxNotFound as exc:
+    print(f"sandbox disappeared: {exc}")
+except ProviderError as exc:
+    print(f"runtime provider failed: {exc}")
+finally:
+    try:
+        sandbox.destroy()
+    except Exception:
+        pass
+```
+
+## Related
+
+- [Quickstart](/docs/getting-started/quickstart)
+- [Example code runner](/docs/tutorials/code-runner)
+- [REST sandboxes](/docs/rest/sandboxes)
