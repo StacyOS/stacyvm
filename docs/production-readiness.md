@@ -93,7 +93,7 @@ This checklist tracks the Phase 7 release-candidate hardening work needed before
 - Support bundle export exists and redacts secrets.
 - Threat model is reviewed for each release candidate.
 - Known limitations are visible in README, docs, and release notes.
-- Public support expectations are documented in [public-support-matrix.md](public-support-matrix.md).
+- Public support expectations are documented in [public-support-matrix](/docs/public-support-matrix).
 - Bug and production support issue templates ask for the same evidence required by the public support matrix.
 - Public release sanity CI builds release binaries and validates checksums; real GitHub release asset verification must be repeated after each version tag is published.
 - Public browser clients use explicit CORS origins; wildcard CORS must fail `stacyvm config lint --production`.
@@ -108,7 +108,7 @@ This checklist tracks the Phase 7 release-candidate hardening work needed before
 - Distributed leases to prevent double ownership. Done in Phase 10.
 - OIDC/SSO and RBAC implemented. RS256 JWT Bearer token validation with configurable OIDC issuer, JWKS URL, audience, and group-to-role mapping is implemented. Roles: `viewer`, `operator`, `admin`, `tenant_admin`, `worker`. Done in Phase 14.
 - Tenant/project model implemented. Tenants, tenant members with RBAC roles, policy controls (image/provider/network allow-deny lists), per-tenant audit export, and admin UI management are implemented. Done in Phase 14.
-- Worker RPC transport enforces [worker-rpc-contract.md](worker-rpc-contract.md). Done in Phase 11-13.
+- Worker RPC transport enforces [worker-rpc-contract](/docs/worker-rpc-contract). Done in Phase 11-13.
 
 ## Phase 14 Acceptance Criteria
 

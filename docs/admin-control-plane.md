@@ -32,7 +32,7 @@ Authenticated requests now carry a request-scoped identity with either the `api`
 
 When API-key auth is enabled, admin routes also enforce the `admin:*` scope at the route layer. This is intentionally redundant with admin-key authentication today and gives future RBAC/OIDC integrations a single policy hook to satisfy.
 
-For the production hardening checklist and OIDC/SSO integration plan, see [security-governance.md](security-governance.md).
+For the production hardening checklist and OIDC/SSO integration plan, see [security-governance](/docs/security-governance).
 
 ## Dashboard Setup
 

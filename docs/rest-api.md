@@ -9,7 +9,7 @@ This document is the source of truth for the StacyVM HTTP API. The Python and Ty
 
 - **Base URL:** `http://localhost:7423/api/v1`
 - **Content type:** `application/json` (request and response, except where noted)
-- **OpenAPI spec:** [swagger.yaml](swagger.yaml) / [swagger.json](swagger.json)
+- **OpenAPI spec:** [swagger.yaml](https://github.com/StacyOS/stacyvm/blob/main/docs/swagger.yaml) / [swagger.json](https://github.com/StacyOS/stacyvm/blob/main/docs/swagger.json)
 
 ---
 
@@ -128,7 +128,7 @@ auth:
 
 Use `X-Admin-API-Key` for admin requests. `X-API-Key` is still accepted when it matches the admin key. If `auth.admin_api_key` is empty, admin routes fall back to `auth.api_key` for backwards compatibility unless `auth.admin_fallback_enabled` is set to `false`.
 
-For dashboard setup, quota workflows, diagnostics, audit history, CSV export, and storage notes, see [admin-control-plane.md](admin-control-plane.md).
+For dashboard setup, quota workflows, diagnostics, audit history, CSV export, and storage notes, see [admin-control-plane](/docs/admin-control-plane).
 
 Admin route aliases:
 
@@ -1203,7 +1203,7 @@ Upgrades the connection to a WebSocket for interactive command execution. Useful
 { "type": "exit",   "exit_code": 0 }
 ```
 
-The web dashboard uses this endpoint to power its live terminal — a concrete reference is at [`web/src/`](../web/src/).
+The web dashboard uses this endpoint to power its live terminal — a concrete reference is at [`web/src/`](https://github.com/StacyOS/stacyvm/tree/main/web/src).
 
 ---
 
@@ -1222,4 +1222,4 @@ If you'd rather write Python or TypeScript than `curl`, every endpoint above map
 | `GET /pool/status` | `client.pool_status()` | `client.poolStatus()` |
 | `GET /health` | `client.health()` | `client.health()` |
 
-Full SDK docs: [Python](../sdk/python/README.md) · [TypeScript](../sdk/js/README.md).
+Full SDK docs: [Python](/docs/sdks/python) · [TypeScript](/docs/sdks/typescript).
