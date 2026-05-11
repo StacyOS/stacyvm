@@ -1,5 +1,5 @@
 {
-  "name": "stacyvm-cli",
+  "name": "stacyvm-setup",
   "version": "0.14.4",
   "private": false,
   "description": "Command-line bootstrapper for StacyVM.",
@@ -8,7 +8,7 @@
     "node": ">=18"
   },
   "bin": {
-    "stacyvm": "scripts/npm-setup.mjs"
+    "stacyvm-setup": "scripts/npm-setup.mjs"
   },
   "files": [
     "scripts/npm-setup.mjs",

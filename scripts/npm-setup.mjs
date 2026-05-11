@@ -17,8 +17,8 @@ function usage() {
   console.log(`StacyVM one-command setup
 
 Usage:
-  npx stacyvm-cli@latest setup
-  npx github:StacyOS/stacyvm#phase-14-worker-identity-hardening stacyvm setup --branch phase-14-worker-identity-hardening
+  npx stacyvm-setup@latest
+  npx github:StacyOS/stacyvm#phase-14-worker-identity-hardening stacyvm-setup --branch phase-14-worker-identity-hardening
   node scripts/npm-setup.mjs
 
 Options:
