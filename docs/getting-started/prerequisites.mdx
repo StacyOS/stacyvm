@@ -1,0 +1,104 @@
+---
+title: "Prerequisites"
+description: "Check the operating system, runtime, SDK, network, and production requirements before you install StacyVM."
+---
+
+Use this checklist before you run StacyVM locally or deploy it for other developers.
+
+## Quick Checklist
+
+| Area | Required for local quickstart | Required for production |
+| --- | --- | --- |
+| Host OS | Linux recommended, macOS acceptable for SDK/docs work | Linux host certified for the runtime you claim |
+| Runtime | Docker for the default provider path | Docker, Firecracker, PRoot, or remote workers certified on target hosts |
+| CLI tools | `curl`, `git`, Docker CLI | `curl`, `git`, Docker CLI, service manager, backup tooling |
+| Build tools | Go only when building from source | Go only for source builds; release binaries are preferred |
+| SDK tools | Python 3.9+ or Node.js 18+ | Match your application language runtime |
+| Network | Local port `7423` available | TLS, reverse proxy, exact CORS origins, private admin access |
+| Secrets | Optional local API key | Strong API key, admin key, worker credentials where applicable |
+| Persistence | Local SQLite file is fine | Persistent data directory and backup plan |
+
+## Local Development
+
+For the simplest local path, you need:
+
+- Docker installed and reachable by the StacyVM process.
+- Port `7423` available on localhost.
+- `curl` for API smoke checks.
+- Python 3.9+ if you want to use the Python SDK or examples.
+- Node.js 18+ if you want to use the TypeScript SDK or examples.
+- Go if you want to run `make serve`, `go test ./...`, or build from source.
+
+If you do not have Go installed, use a release binary or Docker Compose instead of `make serve`.
+
+## Runtime Requirements
+
+### Docker
+
+Docker is the recommended first runtime because it is easiest to install and validate.
+
+- Docker daemon running on the host.
+- Permission for the StacyVM process to create and destroy containers.
+- Resource limits configured for memory, CPU, TTL, and concurrent sandboxes.
+- Production config that disables unsafe Docker options.
+
+### Firecracker
+
+Use Firecracker only after host certification.
+
+- Linux host with KVM access.
+- Firecracker binary installed.
+- Kernel, rootfs, and StacyVM agent configured.
+- Networking configured for your deployment model.
+- Runtime certification evidence for the exact host class.
+
+### PRoot
+
+Use PRoot only after validating the real rootfs and binaries on the target host.
+
+- PRoot installed.
+- Rootfs path configured.
+- Required shell and runtime binaries available inside the rootfs.
+- File and exec conformance passing for your target workload.
+
+## Production Requirements
+
+Before exposing StacyVM to other users, prepare:
+
+- `auth.enabled: true` with a strong API key.
+- Separate admin API key for admin routes.
+- Exact `server.cors_allowed_origins`; do not use wildcard CORS for public browser clients.
+- Rate limits, sandbox caps, TTLs, and quotas.
+- Persistent store path with backups.
+- Health checks for `/api/v1/live`, `/api/v1/ready`, and `/api/v1/health`.
+- Metrics scraping for `/api/v1/metrics/prometheus`.
+- Audit log retention policy.
+- Runtime certification for every provider you publicly claim.
+
+## Verify Your Setup
+
+Run config lint before production:
+
+```bash
+stacyvm config lint --production --file deploy/stacyvm.production.yaml
+```
+
+Run host diagnostics after installation:
+
+```bash
+stacyvm doctor --production
+```
+
+Run a smoke check against the deployed API:
+
+```bash
+STACYVM_SMOKE_URL=https://stacyvm.example.com \
+STACYVM_API_KEY=sk_live_REPLACE_ME \
+scripts/smoke-deployment.sh
+```
+
+## Continue
+
+- Install StacyVM with the [installation guide](/docs/getting-started/installation).
+- Create your first sandbox with the [quickstart](/docs/getting-started/quickstart).
+- Review public runtime claims in the [support matrix](/docs/public-support-matrix).

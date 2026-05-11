@@ -11,6 +11,9 @@ StacyVM gives your applications disposable execution environments for AI agents,
   <Card title="What is StacyVM?" icon="blocks" href="/docs/getting-started/what-is-stacyvm">
     Understand the product, use cases, advantages, and where it fits.
   </Card>
+  <Card title="Prerequisites" icon="list-checks" href="/docs/getting-started/prerequisites">
+    Check the host, runtime, CLI, SDK, and production requirements before you start.
+  </Card>
   <Card title="Quickstart" icon="rocket" href="/docs/getting-started/quickstart">
     Start a local server, create a sandbox, run code, and destroy it.
   </Card>
@@ -78,7 +81,7 @@ await client.withSandbox({ image: "node:20", ttl: "10m" }, async (sandbox) => {
 
 <Steps>
   <Step title="Install StacyVM">
-    Follow the [installation guide](/docs/getting-started/installation) for local Docker, binary, or source builds.
+    Review [prerequisites](/docs/getting-started/prerequisites), then follow the [installation guide](/docs/getting-started/installation) for local Docker, binary, or source builds.
   </Step>
   <Step title="Run the quickstart">
     Use the [quickstart](/docs/getting-started/quickstart) to validate spawn, exec, files, and cleanup.
