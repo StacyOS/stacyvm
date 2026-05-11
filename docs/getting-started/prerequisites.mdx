@@ -42,16 +42,17 @@ make dev
 If you prefer an npm/npx-driven setup, use:
 
 ```bash
-npx github:StacyOS/stacyvm#phase-14-worker-identity-hardening stacyvm-setup \
+npx stacyvm-setup@latest \
   --branch phase-14-worker-identity-hardening
 ```
 
 The npm setup command can clone StacyVM, run `npm install` for the web, SDK, and TypeScript example packages, download Go modules, build the StacyVM binary, and start the server. It still expects Docker and Go to be installed on the host.
 
-After the npm package is published, the public command will be:
+To test the branch directly from GitHub instead of npm, use:
 
 ```bash
-npx stacyvm-setup@latest --branch phase-14-worker-identity-hardening
+npx github:StacyOS/stacyvm#phase-14-worker-identity-hardening stacyvm-setup \
+  --branch phase-14-worker-identity-hardening
 ```
 
 ## OS Setup
@@ -227,6 +228,203 @@ Before exposing StacyVM to other users, prepare:
 - Runtime certification for every provider you publicly claim.
 
 ## Verify Your Setup
+
+### Verify The Npm Bootstrapper
+
+Run this flow in a fresh terminal when you want to confirm the published `stacyvm-setup` package, clone path, build path, server, and sandbox execution are all working.
+
+Verify the npm package:
+
+```bash
+npm view stacyvm-setup name version bin --json
+npx stacyvm-setup@latest --help
+```
+
+Run setup without starting the server:
+
+```bash
+mkdir -p /tmp/stacyvm-npx-test
+cd /tmp/stacyvm-npx-test
+
+npx stacyvm-setup@latest \
+  --branch phase-14-worker-identity-hardening \
+  --dir ./stacyvm \
+  --no-start
+```
+
+Expected result:
+
+```bash
+./stacyvm/stacyvm
+```
+
+Start StacyVM:
+
+```bash
+cd /tmp/stacyvm-npx-test/stacyvm
+./stacyvm serve
+```
+
+In a second terminal, check health:
+
+```bash
+curl http://localhost:7423/api/v1/live
+curl http://localhost:7423/api/v1/ready
+```
+
+Create a sandbox:
+
+```bash
+curl -sS -X POST http://localhost:7423/api/v1/sandboxes \
+  -H "Content-Type: application/json" \
+  -d '{"image":"python:3.12","ttl":"10m"}'
+```
+
+Copy the returned sandbox ID, then run code inside it:
+
+```bash
+export SANDBOX_ID="PASTE_ID_HERE"
+
+curl -sS -X POST "http://localhost:7423/api/v1/sandboxes/${SANDBOX_ID}/exec" \
+  -H "Content-Type: application/json" \
+  -d '{"command":"python3 -c \"print(40 + 2)\"","timeout":"10s"}'
+```
+
+The response should include:
+
+```json
+{
+  "stdout": "42\n"
+}
+```
+
+Destroy the sandbox:
+
+```bash
+curl -sS -X DELETE "http://localhost:7423/api/v1/sandboxes/${SANDBOX_ID}"
+```
+
+After that passes, you can test the full one-command path:
+
+```bash
+cd /tmp
+npx stacyvm-setup@latest \
+  --branch phase-14-worker-identity-hardening \
+  --dir ./stacyvm-full-test
+```
+
+### Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="npm returns 404 for stacyvm-setup">
+    Make sure you are using the published package name:
+
+    ```bash
+    npm view stacyvm-setup name version bin --json
+    npx stacyvm-setup@latest --help
+    ```
+
+    If you are testing an unpublished branch, use the GitHub fallback:
+
+    ```bash
+    npx github:StacyOS/stacyvm#phase-14-worker-identity-hardening stacyvm-setup \
+      --branch phase-14-worker-identity-hardening
+    ```
+  </Accordion>
+
+  <Accordion title="Docker CLI is installed, but the daemon is not reachable">
+    On macOS, start Docker Desktop and wait until it is fully running:
+
+    ```bash
+    open -a Docker
+    docker info
+    docker run --rm hello-world
+    ```
+
+    On Windows, run setup inside WSL 2 Ubuntu and enable Docker Desktop WSL integration for that distro.
+
+    On Linux, start Docker and make sure your user can access it:
+
+    ```bash
+    sudo systemctl enable --now docker
+    sudo usermod -aG docker "$USER"
+    ```
+
+    Log out and back in after changing groups.
+  </Accordion>
+
+  <Accordion title="Go is missing">
+    Source setup requires Go because the npm bootstrapper builds the StacyVM binary.
+
+    macOS:
+
+    ```bash
+    brew install go
+    ```
+
+    Ubuntu or Debian:
+
+    ```bash
+    sudo apt update
+    sudo apt install -y golang-go
+    ```
+  </Accordion>
+
+  <Accordion title="Port 7423 is already in use">
+    Stop the process using port `7423`, then rerun setup.
+
+    macOS or Linux:
+
+    ```bash
+    lsof -iTCP:7423 -sTCP:LISTEN
+    ```
+
+    If you already have StacyVM running, use the existing server and continue with the [quickstart](/docs/getting-started/quickstart).
+  </Accordion>
+
+  <Accordion title="Setup cloned the repo but failed later">
+    Reuse the existing checkout after fixing the host issue:
+
+    ```bash
+    cd /tmp/stacyvm-npx-test
+    npx stacyvm-setup@latest \
+      --branch phase-14-worker-identity-hardening \
+      --dir ./stacyvm \
+      --no-start
+    ```
+
+    The setup command detects an existing StacyVM checkout and continues from there.
+  </Accordion>
+
+  <Accordion title="You want to test without Docker temporarily">
+    You can skip Docker daemon validation:
+
+    ```bash
+    npx stacyvm-setup@latest \
+      --branch phase-14-worker-identity-hardening \
+      --skip-docker-check \
+      --no-start
+    ```
+
+    This only verifies setup and build behavior. Docker must be running before you create real sandboxes with the Docker provider.
+  </Accordion>
+
+  <Accordion title="npm cache or auth errors">
+    Use a clean npm cache directory:
+
+    ```bash
+    npm_config_cache=/tmp/stacyvm-npm-cache npx stacyvm-setup@latest --help
+    ```
+
+    If npm asks for auth unexpectedly, verify your registry:
+
+    ```bash
+    npm config get registry
+    ```
+
+    It should usually be `https://registry.npmjs.org/`.
+  </Accordion>
+</AccordionGroup>
 
 Run config lint before production:
 

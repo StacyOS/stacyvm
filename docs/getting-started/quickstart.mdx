@@ -23,14 +23,15 @@ make dev
 From npm/npx, use:
 
 ```bash
-npx github:StacyOS/stacyvm#phase-14-worker-identity-hardening stacyvm-setup \
+npx stacyvm-setup@latest \
   --branch phase-14-worker-identity-hardening
 ```
 
-After the npm package is published, use:
+To test the branch directly from GitHub instead of npm, use:
 
 ```bash
-npx stacyvm-setup@latest --branch phase-14-worker-identity-hardening
+npx github:StacyOS/stacyvm#phase-14-worker-identity-hardening stacyvm-setup \
+  --branch phase-14-worker-identity-hardening
 ```
 
 ## 1. Check The Server
