@@ -5,13 +5,13 @@
 <h3 align="center"><b>Your AI agent just got its own computer.</b></h3>
 
 <p align="center">
-Like E2B but self-hosted. Like Docker but actually isolated. Like Daytona but one binary.
+Self-hosted execution infrastructure for AI agents, code runners, previews, and automation workflows.
 </p>
 
 <p align="center">
 One tool. Every isolation level. Every platform.<br><br>
-On a Mac? Docker provider, no KVM needed.<br>
-On bare metal? Firecracker microVMs in ~28ms.<br>
+On a Mac? Start with the Docker provider, no KVM needed.<br>
+On bare metal? Use certified Firecracker snapshot hosts for microVM speed.<br>
 On Kubernetes? gVisor or Kata containers.<br>
 Need 100 sandboxes but only have 20 VMs? Pool mode.<br>
 Need to expose <code>localhost:3000</code> from inside the sandbox? Live preview, one method call.<br><br>
@@ -19,16 +19,17 @@ Self-hosted. Single binary. Python &amp; TypeScript SDKs. Apache 2.0 licensed. N
 </p>
 
 <p align="center">
-  <a href="https://github.com/StacyOs/stacyvm/stargazers"><img src="https://img.shields.io/github/stars/StacyOs/stacyvm?style=flat-square" alt="Stars"/></a>
-  <a href="https://github.com/StacyOs/stacyvm/network/members"><img src="https://img.shields.io/github/forks/StacyOs/stacyvm?style=flat-square" alt="Forks"/></a>
-  <a href="https://github.com/StacyOs/stacyvm/issues"><img src="https://img.shields.io/github/issues/StacyOs/stacyvm?style=flat-square" alt="Issues"/></a>
+  <a href="https://github.com/StacyOS/stacyvm/stargazers"><img src="https://img.shields.io/github/stars/StacyOS/stacyvm?style=flat-square" alt="Stars"/></a>
+  <a href="https://github.com/StacyOS/stacyvm/network/members"><img src="https://img.shields.io/github/forks/StacyOS/stacyvm?style=flat-square" alt="Forks"/></a>
+  <a href="https://github.com/StacyOS/stacyvm/issues"><img src="https://img.shields.io/github/issues/StacyOS/stacyvm?style=flat-square" alt="Issues"/></a>
   <img src="https://img.shields.io/badge/go-1.25+-00ADD8?style=flat-square&logo=go&logoColor=white" alt="Go"/>
   <img src="https://img.shields.io/badge/license-Apache%202.0-blue?style=flat-square" alt="Apache 2.0"/>
   <img src="https://img.shields.io/badge/platform-linux%20%7C%20mac%20%7C%20windows-blue?style=flat-square" alt="Platform"/>
 </p>
 
 <p align="center">
-  <a href="#quick-start-30-seconds">Quick Start</a> •
+  <a href="#quick-start">Quick Start</a> •
+  <a href="docs/getting-started/developer-onboarding.mdx">Developer Onboarding</a> •
   <a href="#why-stacyvm">Why StacyVM</a> •
   <a href="#pick-your-isolation-level">Providers</a> •
   <a href="#live-preview">Live Preview</a> •
@@ -43,7 +44,8 @@ Self-hosted. Single binary. Python &amp; TypeScript SDKs. Apache 2.0 licensed. N
 ## Table of contents
 
 - [Table of contents](#table-of-contents)
-- [Quick start (30 seconds)](#quick-start-30-seconds)
+- [Quick start](#quick-start)
+- [Clean verification flow](#clean-verification-flow)
 - [Why StacyVM?](#why-stacyvm)
   - [The math](#the-math)
 - [Pick your isolation level](#pick-your-isolation-level)
@@ -74,23 +76,61 @@ Self-hosted. Single binary. Python &amp; TypeScript SDKs. Apache 2.0 licensed. N
 
 ---
 
-## Quick start (30 seconds)
+## Quick start
 
 ```bash
-git clone https://github.com/StacyOs/stacyvm && cd stacyvm
-./scripts/setup.sh
-
-# Start StacyVM and Traefik (Traefik powers Live Previews)
-docker compose up -d
-
-# Or run StacyVM locally without Docker:
-# ./stacyvm serve
+npx stacyvm-setup@latest
 ```
+
+That command clones StacyVM if needed, installs package dependencies, downloads Go modules, builds the binary, and starts the server at `http://localhost:7423`.
+
+You still need:
+
+- Node.js 18+ and npm for the bootstrap command.
+- Go when building from source.
+- Docker Desktop or Docker Engine running for the default local Docker provider.
+
+Then verify the server:
 
 ```bash
-pip install stacyvm        # Python
-npm install stacyvm        # TypeScript
+curl http://localhost:7423/api/v1/live
+curl http://localhost:7423/api/v1/ready
 ```
+
+Create a sandbox:
+
+```bash
+curl -sS -X POST http://localhost:7423/api/v1/sandboxes \
+  -H "Content-Type: application/json" \
+  -d '{"image":"python:3.12","ttl":"10m"}'
+```
+
+Copy the returned sandbox ID, then run code and destroy it:
+
+```bash
+export SANDBOX_ID="PASTE_ID_HERE"
+
+curl -sS -X POST "http://localhost:7423/api/v1/sandboxes/${SANDBOX_ID}/exec" \
+  -H "Content-Type: application/json" \
+  -d '{"command":"python3 -c \"print(40 + 2)\"","timeout":"10s"}'
+
+curl -sS -X DELETE "http://localhost:7423/api/v1/sandboxes/${SANDBOX_ID}"
+```
+
+Expected exec output includes:
+
+```json
+"stdout": "42\n"
+```
+
+Install an SDK when you are ready to build:
+
+```bash
+pip install stacyvm
+npm install stacyvm
+```
+
+Python:
 
 ```python
 from stacyvm import Client
@@ -98,13 +138,62 @@ from stacyvm import Client
 client = Client("http://localhost:7423")
 sandbox = client.spawn(image="python:3.12")
 
-result = sandbox.exec('python3 -c "print(\'hello from my own computer\')"')
-print(result.stdout)  # hello from my own computer
+result = sandbox.exec('python3 -c "print(40 + 2)"')
+print(result.stdout)  # 42
 
-sandbox.destroy()  # gone. forever.
+sandbox.destroy()
 ```
 
-7 lines. Your AI agent now has a real, isolated machine it can use and throw away.
+TypeScript:
+
+```typescript
+import { Client } from "stacyvm";
+
+const client = new Client("http://localhost:7423");
+const sandbox = await client.spawn({ image: "node:20" });
+
+const result = await sandbox.exec("node -e \"console.log(40 + 2)\"");
+console.log(result.stdout); // 42
+
+await sandbox.destroy();
+```
+
+For the complete copy-paste local setup, see [Developer Onboarding](docs/getting-started/developer-onboarding.mdx).
+
+---
+
+## Clean verification flow
+
+Use this when you want to check clone, dependency install, Go module download, and build behavior before starting the server.
+
+```bash
+npm view stacyvm-setup name version bin --json
+npx stacyvm-setup@latest --help
+```
+
+```bash
+mkdir -p /tmp/stacyvm-npx-test
+cd /tmp/stacyvm-npx-test
+
+npx stacyvm-setup@latest \
+  --dir ./stacyvm \
+  --no-start
+```
+
+Expected result:
+
+```bash
+./stacyvm/stacyvm
+```
+
+Start StacyVM:
+
+```bash
+cd /tmp/stacyvm-npx-test/stacyvm
+./stacyvm serve
+```
+
+Leave that terminal running, then use the health and sandbox checks from the quick start in a second terminal.
 
 ---
 
@@ -119,13 +208,13 @@ You're building an AI agent. It generates code. That code needs to run somewhere
 - **Daytona** is self-hostable but needs [12 services](https://www.daytona.io/docs/en/oss-deployment) (PostgreSQL, Redis, MinIO, Dex, registry...) just to get started.
 - **Zeroboot** is blazing fast (~0.8ms) but strips everything — no networking, no filesystem, no multi-vCPU, serial-only I/O. Built for "run a function, get a result."
 
-**StacyVM is one binary.** Self-hosted. Boots a sandbox in ~28ms. Your data never leaves your machine. And you choose the isolation level — Docker containers for dev, gVisor for cloud VMs, Firecracker microVMs for maximum hardware-level security.
+**StacyVM is one binary.** Self-hosted. Your data never leaves your machine. And you choose the isolation level — Docker containers for dev, gVisor for cloud VMs, Firecracker microVMs for maximum hardware-level security, and certified snapshot restores for low-latency production hosts.
 
 | | StacyVM | E2B | Zeroboot | Daytona | Modal | Raw Docker |
 |---|:---:|:---:|:---:|:---:|:---:|:---:|
 | Self-hosted | ✅ | ❌ Cloud only | ✅ | ✅ (12 services) | ❌ Cloud only | ✅ |
 | Isolation | KVM + gVisor + Docker | Container | KVM only | Container | Container | Shared kernel |
-| Cold boot | **~28ms** (snapshot) | ~500ms | **~0.8ms** (CoW fork) | Seconds | Seconds | ~200ms |
+| Cold boot | Docker locally; Firecracker snapshots on certified Linux/KVM hosts | ~500ms | **~0.8ms** (CoW fork) | Seconds | Seconds | ~200ms |
 | Networking | ✅ | ✅ | ❌ Serial only | ✅ | ✅ | ✅ |
 | Filesystem / disk I/O | ✅ | ✅ | ❌ Memory only | ✅ | ✅ | ✅ |
 | Multi-vCPU | ✅ | ✅ | ❌ Single vCPU | ✅ | ✅ | ✅ |
@@ -138,7 +227,7 @@ You're building an AI agent. It generates code. That code needs to run somewhere
 | Your data stays local | ✅ | ❌ | ✅ | ✅ | ❌ | ✅ |
 | License | Apache 2.0 | Partial | Apache 2.0 | Apache 2.0 | Proprietary | N/A |
 
-> **On speed:** Zeroboot's 0.8ms is real — they bypass Firecracker's VMM entirely and `mmap(MAP_PRIVATE)` the snapshot memory as copy-on-write. But there's no disk, no network, and I/O is serial UART only. StacyVM's 28ms gives you a full sandbox with networking, file system, virtio, and multi-vCPU. Different tools for different jobs.
+> **On speed:** Zeroboot's 0.8ms is real — they bypass Firecracker's VMM entirely and `mmap(MAP_PRIVATE)` the snapshot memory as copy-on-write. But there's no disk, no network, and I/O is serial UART only. StacyVM focuses on full disposable sandboxes with networking, filesystem access, provider choice, and runtime certification.
 
 ### The math
 
@@ -175,7 +264,7 @@ providers:
 
 | Provider | What it does | KVM? | Boot | Use when |
 |---|---|:---:|---|---|
-| **Firecracker** | Real microVM. Own kernel, rootfs, network. ~28ms via snapshot restore. | Yes | ~28ms | Production. Maximum isolation. |
+| **Firecracker** | Real microVM. Own kernel, rootfs, network. Fast snapshot restores on certified Linux/KVM hosts. | Yes | Snapshot restore | Production. Maximum isolation. |
 | **Docker** (runc) | OCI container with seccomp, cap_drop ALL, read-only rootfs option. | No | ~200ms | Dev, CI/CD, Mac, Windows. |
 | **Docker** (gVisor) | Same as above, but syscalls hit a user-space kernel instead of host. | No | ~400ms | Cloud VMs. Stronger than containers. |
 | **Docker** (Kata) | Lightweight VM per container. Hardware isolation without Firecracker setup. | Yes | ~1s | Kubernetes (AKS/GKE). |
@@ -282,7 +371,7 @@ providers:
 
 **100 users → 20 VMs instead of 100. 60% less infrastructure. Same isolation guarantees.**
 
-Pool mode works with every provider — Docker containers, Firecracker microVMs, gVisor, Kata. The orchestrator handles user-to-VM assignment, workspace scoping, and cleanup automatically.
+Pool mode is implemented above the provider contract, so user assignment, workspace scoping, and cleanup stay consistent across supported runtimes.
 
 Check pool status from the SDK:
 ```python
@@ -780,13 +869,35 @@ Full security model and reporting policy: [SECURITY.md](SECURITY.md). Production
 
 ## Architecture
 
-![StacyVM Architecture](assets/stacyvm_architecture_diagram.svg)
+```mermaid
+flowchart LR
+  App["Your app, agent, or CI job"] --> SDK["Python SDK / TypeScript SDK / REST"]
+  SDK --> API["StacyVM API server"]
+  API --> Auth["Auth, tenant, quota, audit"]
+  API --> Orch["Orchestrator"]
+  Orch --> Store[("SQLite or Postgres store")]
+  Orch --> Sched["Scheduler and worker router"]
+  Sched --> Local["Local worker"]
+  Sched --> Remote["Remote workers over signed RPC / mTLS"]
+  Local --> Contract["Provider contract"]
+  Remote --> Contract
+  Contract --> Docker["Docker / gVisor / Kata"]
+  Contract --> Firecracker["Firecracker"]
+  Contract --> PRoot["PRoot"]
+  Contract --> Custom["Custom HTTP / E2B / Mock"]
+  Docker --> Sandbox["Disposable sandbox"]
+  Firecracker --> Sandbox
+  PRoot --> Sandbox
+  Custom --> Sandbox
+```
 
 **Request flow:** SDK → REST API → Orchestrator (lifecycle, TTL, pool, templates) → Provider → Sandbox.
 
 **Live preview flow:** Browser → Traefik → Docker label lookup → Sandbox container.
 
-**Snapshot trick:** First Firecracker spawn cold-boots (~1s) and snapshots the VM state. Every spawn after that restores from snapshot in **~28ms** — faster than most HTTP requests. Details in [docs/snapshot-restore.md](docs/snapshot-restore.md).
+**Snapshot trick:** On certified Linux/KVM hosts, Firecracker can cold-boot once, snapshot VM state, then restore from that snapshot for fast sandbox startup. Details in [docs/snapshot-restore.md](docs/snapshot-restore.md) and [docs/runtime-certification.md](docs/runtime-certification.md).
+
+Full architecture guide: [docs/architecture/system-overview.mdx](docs/architecture/system-overview.mdx).
 
 ---
 
@@ -805,25 +916,29 @@ The dashboard talks to the same REST API documented above — useful as a workin
 
 ## Install options
 
-**One-command setup (recommended):**
+**One-command setup (recommended for individual developers):**
 ```bash
-git clone https://github.com/StacyOs/stacyvm && cd stacyvm
-./scripts/setup.sh    # checks Go, Docker, KVM, downloads Firecracker + kernel, builds everything
-./stacyvm serve
+npx stacyvm-setup@latest
 ```
 
-**Build from source:**
+**Safe verification without starting the server:**
 ```bash
-make build-all
-sudo mkdir -p /var/lib/stacyvm && sudo chown $(whoami) /var/lib/stacyvm
-./scripts/setup-kernel.sh
+npx stacyvm-setup@latest --dir ./stacyvm --no-start
 ```
 
-**Docker (with Traefik for live preview):**
+**Existing source checkout:**
 ```bash
+git clone https://github.com/StacyOS/stacyvm.git
+cd stacyvm
+make dev
+```
+
+**Production-oriented Docker Compose:**
+```bash
+cd deploy
+cp .env.example .env
 docker compose up -d
-# StacyVM:        http://localhost:7423
-# Traefik admin:  http://localhost:8080
+docker compose logs -f stacyvm
 ```
 
 **Docker (StacyVM only):**
@@ -832,19 +947,21 @@ docker build -t stacyvm .
 docker run -p 7423:7423 stacyvm
 ```
 
-**Binary download** (when releases are available):
+**Release binary:**
 ```bash
-curl -fsSL https://github.com/StacyOs/stacyvm/releases/latest/download/stacyvm-linux-amd64 -o stacyvm
-chmod +x stacyvm && sudo mv stacyvm /usr/local/bin/
+curl -L -o stacyvm.tar.gz \
+  https://github.com/StacyOS/stacyvm/releases/latest/download/stacyvm_linux_amd64.tar.gz
+tar -xzf stacyvm.tar.gz
+sudo install -m 0755 stacyvm /usr/local/bin/stacyvm
 ```
 
 For public installs, verify the release first:
 
 ```bash
-scripts/verify-release.sh v0.4.0 amd64
+scripts/post-release-validate.sh v0.14.4
 ```
 
-The installer verifies Sigstore signatures automatically when `cosign` is installed. Set `STACYVM_REQUIRE_SIGNATURES=true` to fail closed when signature verification is unavailable.
+Replace `v0.14.4` with the release tag you plan to deploy. The installer verifies Sigstore signatures automatically when `cosign` is installed. Set `STACYVM_REQUIRE_SIGNATURES=true` to fail closed when signature verification is unavailable.
 
 ---
 
@@ -863,8 +980,8 @@ stacyvm/
 │   └── python/          # Python SDK — see sdk/python/README.md
 ├── web/                 # React dashboard
 ├── tui/                 # Terminal UI (bubbletea)
-├── docs/                # Architecture docs, OpenAPI spec, API reference
-├── scripts/             # setup.sh, build-rootfs.sh, install.sh, benchmarks
+├── docs/                # Mintlify docs, architecture, deployment, support matrix
+├── scripts/             # npm setup, dev, install, release, certification, smoke checks
 ├── examples/            # Working code samples (js, python)
 ├── tests/               # Integration and provider tests
 ├── docker-compose.yml   # StacyVM + Traefik
@@ -925,6 +1042,6 @@ If you find a security issue, do **not** open a public issue — follow [SECURIT
 ---
 
 <p align="center">
-  <b>Built by <a href="https://github.com/StacyOs">StacyOs</a></b><br>
+  <b>Built by <a href="https://github.com/StacyOS">StacyOS</a></b><br>
   If StacyVM helps you, drop a ⭐ — it helps others find it.
 </p>
