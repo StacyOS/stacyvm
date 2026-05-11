@@ -38,6 +38,10 @@ web:
 serve: build
 	./stacyvm serve
 
+# Check local prerequisites, build, and start a development server
+dev:
+	./scripts/dev.sh
+
 # Clean build artifacts
 clean:
 	rm -f stacyvm stacyvm-agent

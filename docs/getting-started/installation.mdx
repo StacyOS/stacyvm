@@ -22,6 +22,14 @@ Use the [Prerequisites OS setup](/docs/getting-started/prerequisites#os-setup) b
 - Linux: Docker and Go from your distribution package manager.
 - Ubuntu: Docker Engine, Compose plugin, Go, Git, curl, and make.
 
+For individual local development from a source checkout, use the one-command setup:
+
+```bash
+make dev
+```
+
+This checks the host, builds StacyVM, and starts the API server.
+
 ## Option 1: Release Binary
 
 Use a signed GitHub release for production-like installs.
@@ -61,9 +69,7 @@ Build from source when you are contributing to StacyVM itself.
 ```bash
 git clone https://github.com/StacyOS/stacyvm.git
 cd stacyvm
-go test ./...
-go build ./cmd/stacyvm
-./stacyvm serve
+make dev
 ```
 
 ## Configure Auth

@@ -31,6 +31,14 @@ For the simplest local path, you need:
 
 If you do not have Go installed, use a release binary or Docker Compose instead of `make serve`.
 
+Once the repository is cloned, the one-command local setup path is:
+
+```bash
+make dev
+```
+
+`make dev` checks Go, Docker, Docker daemon access, and port `7423`, then builds StacyVM and starts `./stacyvm serve`. It does not install Docker Desktop or OS packages for you; when something is missing, it prints the right OS-specific fix.
+
 ## OS Setup
 
 Choose the setup path for the machine where you will run StacyVM.
@@ -57,7 +65,7 @@ Run StacyVM from source:
 ```bash
 git clone https://github.com/StacyOS/stacyvm.git
 cd stacyvm
-make serve
+make dev
 ```
 
 Check the API:
@@ -92,7 +100,7 @@ Run StacyVM:
 ```bash
 git clone https://github.com/StacyOS/stacyvm.git
 cd stacyvm
-make serve
+make dev
 ```
 
 If Docker commands fail inside WSL, open Docker Desktop settings and enable WSL integration for the Ubuntu distro you are using.
@@ -121,7 +129,7 @@ Run StacyVM:
 ```bash
 git clone https://github.com/StacyOS/stacyvm.git
 cd stacyvm
-make serve
+make dev
 ```
 
 ### Ubuntu
@@ -154,7 +162,7 @@ Run StacyVM:
 ```bash
 git clone https://github.com/StacyOS/stacyvm.git
 cd stacyvm
-make serve
+make dev
 ```
 
 For production-like Ubuntu hosts, continue with [Production Deployment](/docs/deployment) after local verification.
