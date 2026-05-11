@@ -1,11 +1,12 @@
 :root {
-  --stacy-orange: #ff7038;
-  --stacy-ink: #1c1c1c;
-  --stacy-panel: #262626;
-  --stacy-line: #3a3832;
-  --stacy-paper: #f0e7da;
-  --stacy-sand: #d1c2a5;
-  --stacy-muted: #d0c6b5;
+  --stacy-orange: #ffa60c;
+  --stacy-green: #22c55e;
+  --stacy-mint: #d7f6e2;
+  --stacy-cream: #fdf6d6;
+  --stacy-ink: #0c0c0c;
+  --stacy-paper: #f9f7f3;
+  --stacy-line: #d9d6ce;
+  --stacy-muted: #5f5c55;
 }
 
 html.dark,
@@ -13,12 +14,13 @@ html.dark,
   background:
     linear-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1px),
     linear-gradient(90deg, rgba(255, 255, 255, 0.025) 1px, transparent 1px),
-    #1c1c1c;
+    var(--stacy-ink);
   background-size: 56px 56px;
 }
 
 body {
   letter-spacing: 0;
+  background-color: var(--stacy-paper);
 }
 
 #navbar,
@@ -30,13 +32,13 @@ body {
 .dark #navbar,
 .dark #sidebar,
 .dark #table-of-contents {
-  background-color: rgba(28, 28, 28, 0.88);
-  border-color: var(--stacy-line);
+  background-color: rgba(12, 12, 12, 0.88);
+  border-color: rgba(249, 247, 243, 0.12);
 }
 
 .dark .card,
 .dark [class*="card"] {
-  border-color: rgba(209, 194, 165, 0.18);
+  border-color: rgba(249, 247, 243, 0.14);
 }
 
 .stacy-proof-grid {
@@ -49,8 +51,15 @@ body {
 .stacy-proof {
   min-height: 132px;
   padding: 18px;
-  border: 1px solid rgba(209, 194, 165, 0.28);
-  background: rgba(240, 231, 218, 0.08);
+  border: 1px solid rgba(12, 12, 12, 0.12);
+  background: rgba(249, 247, 243, 0.72);
+  box-shadow: 0 14px 40px rgba(12, 12, 12, 0.06);
+}
+
+.dark .stacy-proof {
+  border-color: rgba(249, 247, 243, 0.14);
+  background: rgba(249, 247, 243, 0.05);
+  box-shadow: none;
 }
 
 .stacy-proof strong {

@@ -4,30 +4,30 @@
   "name": "StacyVM",
   "description": "Deterministic execution infrastructure for autonomous software systems.",
   "colors": {
-    "primary": "#FF7038",
-    "light": "#D1C2A5",
-    "dark": "#FF7038"
+    "primary": "#FFA60C",
+    "light": "#FFA60C",
+    "dark": "#FFA60C"
   },
   "logo": {
     "light": "/assets/stacy-logo-light.png",
     "dark": "/assets/stacy-logo-dark.png",
     "href": "https://github.com/StacyOS/stacyvm"
   },
-  "favicon": "/assets/stacy-mark-orange.png",
+  "favicon": "/assets/stacyvm-favicon.svg",
   "appearance": {
     "default": "system"
   },
   "fonts": {
-    "family": "IBM Plex Sans",
+    "family": "Untitled Sans",
     "heading": {
-      "family": "Libre Baskerville",
+      "family": "Instrument Serif",
       "weight": 400
     }
   },
   "background": {
     "color": {
-      "light": "#F0E7DA",
-      "dark": "#262626"
+      "light": "#F9F7F3",
+      "dark": "#0C0C0C"
     }
   },
   "styling": {
