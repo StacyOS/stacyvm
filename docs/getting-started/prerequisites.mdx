@@ -31,6 +31,134 @@ For the simplest local path, you need:
 
 If you do not have Go installed, use a release binary or Docker Compose instead of `make serve`.
 
+## OS Setup
+
+Choose the setup path for the machine where you will run StacyVM.
+
+### macOS
+
+macOS is a good local development environment for the Docker provider, SDKs, and docs. Use Docker Desktop as the runtime. Firecracker is not a macOS starter path because it requires Linux/KVM.
+
+Install tools:
+
+```bash
+brew install go git curl make
+```
+
+Install and start Docker Desktop, then verify Docker works:
+
+```bash
+docker version
+docker run --rm hello-world
+```
+
+Run StacyVM from source:
+
+```bash
+git clone https://github.com/StacyOS/stacyvm.git
+cd stacyvm
+make serve
+```
+
+Check the API:
+
+```bash
+curl http://localhost:7423/api/v1/live
+```
+
+Use multi-architecture images such as `python:3.12`, `node:20`, or `alpine:latest` on Apple Silicon.
+
+### Windows
+
+Use Windows with WSL 2. Run StacyVM commands inside Ubuntu on WSL, not in PowerShell, so paths, shell behavior, and Docker integration match Linux more closely.
+
+Install:
+
+- WSL 2 with Ubuntu.
+- Docker Desktop with WSL integration enabled for your Ubuntu distro.
+- Go, Git, curl, and make inside Ubuntu.
+
+Inside Ubuntu on WSL:
+
+```bash
+sudo apt update
+sudo apt install -y git curl make golang-go
+docker version
+docker run --rm hello-world
+```
+
+Run StacyVM:
+
+```bash
+git clone https://github.com/StacyOS/stacyvm.git
+cd stacyvm
+make serve
+```
+
+If Docker commands fail inside WSL, open Docker Desktop settings and enable WSL integration for the Ubuntu distro you are using.
+
+### Linux
+
+Linux is the recommended host family for runtime work and production certification. Docker is the easiest first provider; Firecracker and PRoot require additional host-specific setup.
+
+Install basic tools with your distribution package manager:
+
+```bash
+sudo apt update
+sudo apt install -y git curl make golang-go docker.io
+sudo systemctl enable --now docker
+sudo usermod -aG docker "$USER"
+```
+
+Log out and back in after adding your user to the Docker group, then verify:
+
+```bash
+docker run --rm hello-world
+```
+
+Run StacyVM:
+
+```bash
+git clone https://github.com/StacyOS/stacyvm.git
+cd stacyvm
+make serve
+```
+
+### Ubuntu
+
+Ubuntu is the most straightforward Linux path for individual setup and single-node staging.
+
+Install Docker and build tools:
+
+```bash
+sudo apt update
+sudo apt install -y ca-certificates curl git make golang-go
+sudo install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | sudo tee /etc/apt/keyrings/docker.asc >/dev/null
+sudo chmod a+r /etc/apt/keyrings/docker.asc
+echo "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu $(. /etc/os-release && echo "$VERSION_CODENAME") stable" | sudo tee /etc/apt/sources.list.d/docker.list >/dev/null
+sudo apt update
+sudo apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+sudo usermod -aG docker "$USER"
+```
+
+Log out and back in, then verify:
+
+```bash
+docker run --rm hello-world
+docker compose version
+```
+
+Run StacyVM:
+
+```bash
+git clone https://github.com/StacyOS/stacyvm.git
+cd stacyvm
+make serve
+```
+
+For production-like Ubuntu hosts, continue with [Production Deployment](/docs/deployment) after local verification.
+
 ## Runtime Requirements
 
 ### Docker
