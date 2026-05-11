@@ -56,13 +56,13 @@ GitHub bug and production support issue templates ask for this same evidence. Re
 
 | Symptom | First remediation path |
 |---|---|
-| Install verification fails | [releasing.md](releasing.md) |
-| Production config lint fails | [deployment.md](deployment.md) |
-| Upgrade rehearsal fails | [deployment.md#upgrade-rehearsal-and-rollback](deployment.md#upgrade-rehearsal-and-rollback) |
-| Runtime health fails | [runtime-certification.md](runtime-certification.md) |
-| Runtime behavior differs across providers | [runtime-conformance.md](runtime-conformance.md) |
-| Admin or auth hardening question | [security-governance.md](security-governance.md) |
-| Operator diagnostics needed | [deployment.md#support-bundles](deployment.md#support-bundles) |
+| Install verification fails | [releasing](/docs/releasing) |
+| Production config lint fails | [deployment](/docs/deployment) |
+| Upgrade rehearsal fails | [deployment#upgrades](/docs/deployment#upgrades) |
+| Runtime health fails | [runtime-certification](/docs/runtime-certification) |
+| Runtime behavior differs across providers | [runtime-conformance](/docs/runtime-conformance) |
+| Admin or auth hardening question | [security-governance](/docs/security-governance) |
+| Operator diagnostics needed | [deployment#support-bundles](/docs/deployment#support-bundles) |
 
 ## Post-Tag Release Verification
 

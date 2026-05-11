@@ -242,4 +242,4 @@ In Postgres terms, lease acquire should be implemented with a unique key on `res
 
 ## Current Limits
 
-Remote placement returns `remote_worker_rpc_unavailable` unless the selected worker advertises `rpc_url` and the control plane can authenticate to worker RPC with either short-lived signed RPC-audience tokens or a static worker token. Postgres-backed cluster storage and signed production worker identity are wired into the current transport; deployment certification still needs the target host/runtime conformance checks listed in [cluster-conformance.md](cluster-conformance.md).
+Remote placement returns `remote_worker_rpc_unavailable` unless the selected worker advertises `rpc_url` and the control plane can authenticate to worker RPC with either short-lived signed RPC-audience tokens or a static worker token. Postgres-backed cluster storage and signed production worker identity are wired into the current transport; deployment certification still needs the target host/runtime conformance checks listed in [cluster-conformance](/docs/cluster-conformance).

@@ -58,7 +58,7 @@ The files in `deploy/` provide a production-oriented Compose starting point:
 
 Use separate values for `STACYVM_API_KEY` and `STACYVM_ADMIN_API_KEY` in production. Admin routes live under `/api/v1/admin/*` and should be restricted to operator networks where possible. Replace the example `server.cors_allowed_origins` value with the exact public console/API origins for your deployment; do not expose browser clients with wildcard CORS.
 
-See [admin-control-plane.md](admin-control-plane.md) for admin dashboard setup, quota operations, diagnostics, audit export, and audit retention notes. See [security-governance.md](security-governance.md) for the production admin hardening checklist and OIDC/SSO integration plan. The production config keeps 90 days of admin audit history with `auth.admin_audit_retention: "2160h"` and disables admin fallback with `auth.admin_fallback_enabled: false`.
+See [admin-control-plane](/docs/admin-control-plane) for admin dashboard setup, quota operations, diagnostics, audit export, and audit retention notes. See [security-governance](/docs/security-governance) for the production admin hardening checklist and OIDC/SSO integration plan. The production config keeps 90 days of admin audit history with `auth.admin_audit_retention: "2160h"` and disables admin fallback with `auth.admin_fallback_enabled: false`.
 
 ```bash
 cd deploy
@@ -198,4 +198,4 @@ Firecracker requires Linux/KVM, a kernel image, rootfs images, networking setup,
 
 PRoot requires a real rootfs with the binaries your sandboxes need. Use it for restricted environments where Docker and KVM are unavailable, and validate memory/disk limits against the host because PRoot enforcement is not equivalent to VM isolation.
 
-Use [runtime-conformance.md](runtime-conformance.md) as the signoff checklist for Docker, gVisor, Kata, Firecracker, PRoot, E2B, and custom providers.
+Use [runtime-conformance](/docs/runtime-conformance) as the signoff checklist for Docker, gVisor, Kata, Firecracker, PRoot, E2B, and custom providers.
