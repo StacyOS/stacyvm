@@ -33,11 +33,17 @@ This checks the host, builds StacyVM, and starts the API server.
 You can also use the npm/npx bootstrapper:
 
 ```bash
-npx github:StacyOS/stacyvm#phase-14-worker-identity-hardening stacyvm-setup \
+npx github:StacyOS/stacyvm#phase-14-worker-identity-hardening stacyvm setup \
   --branch phase-14-worker-identity-hardening
 ```
 
 That command can clone the repo, install Node package dependencies, download Go modules, build StacyVM, and start the server. It does not install Docker Desktop or Go for you.
+
+After the npm package is published, use:
+
+```bash
+npx stacyvm-cli@latest setup --branch phase-14-worker-identity-hardening
+```
 
 ## Option 1: Release Binary
 

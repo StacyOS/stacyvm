@@ -17,8 +17,8 @@ function usage() {
   console.log(`StacyVM one-command setup
 
 Usage:
-  npx stacyvm-setup@latest
-  npx github:StacyOS/stacyvm#phase-14-worker-identity-hardening stacyvm-setup --branch phase-14-worker-identity-hardening
+  npx stacyvm-cli@latest setup
+  npx github:StacyOS/stacyvm#phase-14-worker-identity-hardening stacyvm setup --branch phase-14-worker-identity-hardening
   node scripts/npm-setup.mjs
 
 Options:
@@ -38,6 +38,10 @@ Environment:
 }
 
 function parseArgs(argv) {
+  if (argv[0] === "setup" || argv[0] === "dev" || argv[0] === "start") {
+    argv = argv.slice(1);
+  }
+
   const options = {
     branch: DEFAULT_BRANCH,
     repo: REPO_URL,
@@ -79,7 +83,7 @@ function parseArgs(argv) {
         options.start = false;
         break;
       default:
-        throw new Error(`Unknown option: ${arg}`);
+        throw new Error(`Unknown option or command: ${arg}`);
     }
   }
 
