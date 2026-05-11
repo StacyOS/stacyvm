@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo.png" alt="StacyVM" />
+  <img src="assets/stacyvm-readme.png" alt="StacyVM" width="760" />
 </p>
 
 <h3 align="center"><b>Your AI agent just got its own computer.</b></h3>
