@@ -1,0 +1,23 @@
+{
+  "name": "stacyvm-setup",
+  "version": "0.14.4",
+  "private": false,
+  "description": "One-command local setup for StacyVM.",
+  "type": "module",
+  "bin": {
+    "stacyvm-setup": "./scripts/npm-setup.mjs"
+  },
+  "scripts": {
+    "setup": "node ./scripts/npm-setup.mjs",
+    "setup:check": "node ./scripts/npm-setup.mjs --check-only --skip-docker-check --skip-node-deps --no-start"
+  },
+  "keywords": [
+    "stacyvm",
+    "sandbox",
+    "agent",
+    "setup",
+    "docker",
+    "firecracker"
+  ],
+  "license": "MIT"
+}

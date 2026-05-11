@@ -39,6 +39,15 @@ make dev
 
 `make dev` checks Go, Docker, Docker daemon access, and port `7423`, then builds StacyVM and starts `./stacyvm serve`. It does not install Docker Desktop or OS packages for you; when something is missing, it prints the right OS-specific fix.
 
+If you prefer an npm/npx-driven setup, use:
+
+```bash
+npx github:StacyOS/stacyvm#phase-14-worker-identity-hardening stacyvm-setup \
+  --branch phase-14-worker-identity-hardening
+```
+
+The npm setup command can clone StacyVM, run `npm install` for the web, SDK, and TypeScript example packages, download Go modules, build the StacyVM binary, and start the server. It still expects Docker and Go to be installed on the host.
+
 ## OS Setup
 
 Choose the setup path for the machine where you will run StacyVM.
