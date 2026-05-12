@@ -1,5 +1,4 @@
 :root {
-  --stacy-orange: #ffa60c;
   --stacy-green: #22c55e;
   --stacy-mint: #d7f6e2;
   --stacy-cream: #fdf6d6;
@@ -64,7 +63,7 @@ body {
 
 .stacy-proof strong {
   display: block;
-  color: var(--stacy-orange);
+  color: var(--stacy-green);
   font-family: "IBM Plex Mono", monospace;
   font-size: 12px;
   text-transform: uppercase;
