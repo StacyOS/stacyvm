@@ -14,7 +14,7 @@ On a Mac? Start with the Docker provider, no KVM needed.<br>
 On bare metal? Use certified Firecracker snapshot hosts for microVM speed.<br>
 On Kubernetes? gVisor or Kata containers.<br>
 Need 100 sandboxes but only have 20 VMs? Pool mode.<br>
-Need to expose <code>localhost:3000</code> from inside the sandbox? Live preview, one method call.<br><br>
+Need to expose <code>localhost:3000</code> from inside the sandbox? Live preview, one method call. (Port 3000 today; configurable ports tracked on the roadmap.)<br><br>
 Self-hosted. Single binary. Python &amp; TypeScript SDKs. Apache 2.0 licensed. No cloud required.
 </p>
 
@@ -221,8 +221,8 @@ You're building an AI agent. It generates code. That code needs to run somewhere
 | Multiple providers | ✅ KVM/Docker/gVisor | ❌ | ❌ KVM only | ❌ | ❌ | N/A |
 | Runs without KVM | ✅ Docker provider | N/A | ❌ | ✅ | N/A | ✅ |
 | Multi-user pool mode | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| Live preview URLs | ✅ Built-in (Traefik) | ✅ | ❌ | Partial | ✅ | ❌ |
-| File API (read/write/glob) | ✅ 9 methods | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Live preview URLs | ✅ Built-in (Traefik, port 3000) | ✅ | ❌ | Partial | ✅ | ❌ |
+| File API (read/write/glob) | ✅ 8 file methods + exec | ✅ | ❌ | ❌ | ❌ | ❌ |
 | Python + TS SDKs | ✅ | ✅ | ✅ | ❌ | ✅ | ❌ |
 | Your data stays local | ✅ | ❌ | ✅ | ✅ | ❌ | ✅ |
 | License | Apache 2.0 | Partial | Apache 2.0 | Apache 2.0 | Proprietary | N/A |
@@ -279,7 +279,7 @@ Every provider implements the same interface. SDKs, REST API, CLI, pool mode, li
 
 ## Live Preview
 
-Sandboxes can serve HTTP. StacyVM gives you a public URL for any port the sandbox exposes — no manual port forwarding, no SSH tunnels.
+Sandboxes can serve HTTP on port 3000 and StacyVM gives you a public URL for it — no manual port forwarding, no SSH tunnels. Configurable ports per sandbox are on the roadmap; today the Docker provider routes port 3000 by convention.
 
 ```python
 from stacyvm import Client
@@ -325,7 +325,7 @@ Point a wildcard DNS record (`*.stacyide.xyz` → your server IP), give Traefik 
 
 Full architecture write-up: [docs/live-preview-architecture.md](docs/live-preview-architecture.md).
 
-> Live preview currently works with the Docker provider. Firecracker support is in progress (tracked on the roadmap).
+> Live preview today: Docker provider, port 3000 only. Configurable ports and Firecracker support are tracked on the roadmap.
 
 ---
 
@@ -357,19 +357,11 @@ const client = new Client({ baseUrl: "http://localhost:7423", userId: "alice@exa
 
 User IDs are trimmed by the server. They must be 128 characters or fewer and cannot contain whitespace, control characters, or path separators.
 
-Hardening knobs (Docker provider):
+**Pool isolation today.** Each user gets their own workspace under `/workspace/{user_id}/`. Path traversal is rejected by the file API. The shared container runs as a non-root user, with `cap_drop: ALL`, the default seccomp profile, and a PID limit.
 
-```yaml
-providers:
-  docker:
-    pool_security:
-      per_user_uid: true              # each user gets a unique UID
-      pid_namespace: true             # each user in a separate PID namespace
-      workspace_permissions: true     # restrict file access between users
-      hidepid: true                   # hide other users' processes from /proc
-```
+> **Coming in v0.2:** per-user UIDs, per-user PID namespaces, `/proc` hardening (`hidepid`), and stricter workspace permissions. Config knobs for these (`per_user_uid`, `pid_namespace`, `workspace_permissions`, `hidepid`) exist in the schema but are **not yet wired up in the Docker provider** — setting them has no effect today. Don't rely on them for multi-tenant isolation until v0.2. Tracked in the roadmap.
 
-**100 users → 20 VMs instead of 100. 60% less infrastructure. Same isolation guarantees.**
+**100 users → 20 VMs instead of 100. 60% less infrastructure** at the cost of softer isolation than 1:1 (shared kernel and PID namespace within each VM until v0.2 ships the hardening knobs above). For workloads where users trust each other (single org, internal CI, AI agents owned by the same account), the tradeoff is usually a clear win. For untrusted multi-tenant, stick with 1:1 until v0.2.
 
 Pool mode is implemented above the provider contract, so user assignment, workspace scoping, and cleanup stay consistent across supported runtimes.
 
@@ -490,7 +482,7 @@ Exec requests default to backwards-compatible shell mode. Set `mode: "argv"` wit
 | `GET` | `/sandboxes/{id}/files?path=` | Read a file |
 | `DELETE` | `/sandboxes/{id}/files?path=` | Delete a file (`recursive=true` for dirs) |
 | `GET` | `/sandboxes/{id}/files/list?path=` | List a directory |
-| `POST` | `/sandboxes/{id}/files/move` | Move/rename |
+| `POST` | `/sandboxes/{id}/files/move` | Move/rename (body: `old_path`, `new_path`) |
 | `POST` | `/sandboxes/{id}/files/chmod` | Change permissions |
 | `GET` | `/sandboxes/{id}/files/stat?path=` | File metadata |
 | `GET` | `/sandboxes/{id}/files/glob?pattern=` | Glob pattern matching |
@@ -604,11 +596,8 @@ providers:
     dropped_caps: ["ALL"]
     added_caps: []
     pids_limit: 256
-    pool_security:
-      per_user_uid: false
-      pid_namespace: false
-      workspace_permissions: true
-      hidepid: false
+    # pool_security knobs (per_user_uid, pid_namespace, workspace_permissions,
+    # hidepid) are reserved for v0.2 and have no effect today.
 
   firecracker:
     enabled: true
@@ -993,7 +982,7 @@ stacyvm/
 ## Roadmap
 
 **Single-node & public self-serve**
-- [x] Firecracker provider (KVM microVMs, ~28ms snapshot restore)
+- [x] Firecracker provider (KVM microVMs, ~28ms snapshot restore — see [docs/snapshot-restore.md](docs/snapshot-restore.md) for methodology and `scripts/benchmark.sh` to reproduce)
 - [x] Docker provider (OCI containers, seccomp, no KVM needed)
 - [x] gVisor support (user-space kernel via runsc runtime)
 - [x] Pool mode (N users per VM, workspace isolation)
@@ -1020,6 +1009,8 @@ stacyvm/
 - [x] Enterprise signoff runbook + runtime certification script
 
 **Planned**
+- [ ] Pool security hardening: wire up `per_user_uid`, `pid_namespace`, `workspace_permissions`, `hidepid` in the Docker provider (v0.2)
+- [ ] Configurable preview ports (today: port 3000 only)
 - [ ] Live Preview for Firecracker
 - [ ] Kata Containers provider (K8s-native)
 - [ ] Persistent volumes across sandboxes
