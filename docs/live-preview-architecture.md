@@ -4,10 +4,10 @@
 To implement a production-grade, highly scalable "Live Preview" system for 100+ concurrent users entirely powered by **Traefik**. This design supports seamless local development (`*.localhost`) and production environments (`*.stacyide.xyz`), using Traefik's native dynamic discovery.
 
 ## Status: Implemented (Phase 1 & 2)
-StacyVM now supports automatic Traefik integration for the Docker provider. Preview URLs can be generated via the SDK using `sandbox.getPreviewUrl(port)`.
+StacyVM now supports automatic Traefik integration for the Docker provider. Preview URLs can be generated via the SDK using `sandbox.getPreviewUrl(port)`. **Today only port 3000 is routed** (see Traefik labels below); the SDK signature accepts any int, but URLs for other ports will not resolve. Configurable ports are tracked on the roadmap.
 
 ## Background & Motivation
-StacyVM sandboxes need a way to expose internal web servers (e.g., Vite on 5173, Next.js on 3000) to external users. Traefik is an industry-standard dynamic reverse proxy that integrates natively with Docker. By using Traefik, we eliminate custom proxy code and leverage robust features like automatic SSL (Let's Encrypt), WebSocket support, and zero-downtime configuration updates.
+StacyVM sandboxes need a way to expose an internal web server (today: port 3000, e.g., a Next.js dev server) to external users. Traefik is an industry-standard dynamic reverse proxy that integrates natively with Docker. By using Traefik, we eliminate custom proxy code and leverage robust features like automatic SSL (Let's Encrypt), WebSocket support, and zero-downtime configuration updates.
 
 ## Architecture
 
