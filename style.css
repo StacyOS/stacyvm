@@ -28,6 +28,11 @@ body {
   backdrop-filter: blur(18px);
 }
 
+#navbar img {
+  height: 2.25rem;
+  width: auto;
+}
+
 .dark #navbar,
 .dark #sidebar,
 .dark #table-of-contents {
