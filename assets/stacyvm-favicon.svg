@@ -1,5 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64" role="img" aria-label="StacyVM">
-  <rect width="64" height="64" rx="14" fill="#0C0C0C"/>
-  <path d="M14 10h36l-8 8v28l8 8H14l8-8V18z" fill="#FFA60C"/>
-  <path d="M28 22h10v20H28z" fill="#F9F7F3"/>
-</svg>

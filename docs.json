@@ -13,7 +13,7 @@
     "dark": "/assets/stacy-logo-dark.png",
     "href": "https://github.com/StacyOS/stacyvm"
   },
-  "favicon": "/assets/stacyvm-favicon.svg",
+  "favicon": "/assets/stacyvm-favicon.png",
   "appearance": {
     "default": "system"
   },
