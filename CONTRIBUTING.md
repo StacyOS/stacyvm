@@ -1,6 +1,6 @@
 # Contributing to StacyVM
 
-Thanks for considering a contribution. StacyVM is MIT-licensed, vendor-neutral, and built in the open. The most useful contributions are:
+Thanks for considering a contribution. StacyVM is Apache 2.0-licensed, vendor-neutral, and built in the open. The most useful contributions are:
 
 1. **New providers** (Kata, Podman, K3s, Nomad, …)
 2. **SDK improvements** (more languages, ergonomics, error handling)
@@ -360,7 +360,7 @@ For feature requests, describe the use case before the proposed API. The "why" u
 
 ## Licensing
 
-By submitting a contribution, you agree it's licensed under [MIT](LICENSE), the same as the rest of the project. No CLA, no paperwork — the act of opening a PR is the agreement.
+By submitting a contribution, you agree it's licensed under [Apache 2.0](LICENSE), the same as the rest of the project. No CLA, no paperwork — the act of opening a PR is the agreement.
 
 If you're contributing on behalf of an employer, make sure they're okay with that. Check your employment agreement before contributing significant code.
 

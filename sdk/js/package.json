@@ -33,7 +33,7 @@
     "ai-agent"
   ],
   "author": "StacyOs",
-  "license": "MIT",
+  "license": "Apache-2.0",
   "homepage": "https://github.com/StacyOs/stacyvm",
   "repository": {
     "type": "git",
