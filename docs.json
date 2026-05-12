@@ -4,9 +4,9 @@
   "name": "StacyVM",
   "description": "Deterministic execution infrastructure for autonomous software systems.",
   "colors": {
-    "primary": "#FFA60C",
-    "light": "#FFA60C",
-    "dark": "#FFA60C"
+    "primary": "#22C55E",
+    "light": "#22C55E",
+    "dark": "#22C55E"
   },
   "logo": {
     "light": "/assets/stacy-logo-light.png",
