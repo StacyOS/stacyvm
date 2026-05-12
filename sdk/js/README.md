@@ -455,4 +455,4 @@ npm test            # run vitest
 
 ## License
 
-MIT — see [LICENSE](https://github.com/StacyOs/stacyvm/blob/main/LICENSE).
+Apache 2.0 — see [LICENSE](https://github.com/StacyOs/stacyvm/blob/main/LICENSE).
