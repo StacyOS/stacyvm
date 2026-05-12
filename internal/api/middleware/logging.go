@@ -24,6 +24,21 @@ func (rw *responseWriter) Write(b []byte) (int, error) {
 	return n, err
 }
 
+// Flush forwards to the underlying writer when it supports flushing.
+// Required so streaming handlers (SSE, NDJSON) can flush per chunk after
+// the logging middleware has wrapped the writer.
+func (rw *responseWriter) Flush() {
+	if f, ok := rw.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+// Unwrap exposes the underlying writer so http.ResponseController can reach
+// optional interfaces (Flusher, Hijacker, etc.) past this wrapper.
+func (rw *responseWriter) Unwrap() http.ResponseWriter {
+	return rw.ResponseWriter
+}
+
 func Logging(logger zerolog.Logger) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

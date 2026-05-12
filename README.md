@@ -490,7 +490,7 @@ Exec requests default to backwards-compatible shell mode. Set `mode: "argv"` wit
 | `GET` | `/sandboxes/{id}/files?path=` | Read a file |
 | `DELETE` | `/sandboxes/{id}/files?path=` | Delete a file (`recursive=true` for dirs) |
 | `GET` | `/sandboxes/{id}/files/list?path=` | List a directory |
-| `POST` | `/sandboxes/{id}/files/move` | Move/rename |
+| `POST` | `/sandboxes/{id}/files/move` | Move/rename (body: `old_path`, `new_path`) |
 | `POST` | `/sandboxes/{id}/files/chmod` | Change permissions |
 | `GET` | `/sandboxes/{id}/files/stat?path=` | File metadata |
 | `GET` | `/sandboxes/{id}/files/glob?pattern=` | Glob pattern matching |
