@@ -107,6 +107,7 @@
       {
         "group": "Release Notes",
         "pages": [
+          "docs/releases/week-of-2026-05-15",
           "docs/releases/phase-14-worker-identity-hardening",
           "docs/releases/phase-13-cluster-store-and-worker-identity",
           "docs/releases/phase-12-remote-sandbox-io-routing",
