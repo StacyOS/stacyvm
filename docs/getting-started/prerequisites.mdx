@@ -31,15 +31,7 @@ For the simplest local path, you need:
 
 If you do not have Go installed, use a release binary or Docker Compose instead of `make serve`.
 
-Once the repository is cloned, the one-command local setup path is:
-
-```bash
-make dev
-```
-
-`make dev` checks Go, Docker, Docker daemon access, and port `7423`, then builds StacyVM and starts `./stacyvm serve`. It does not install Docker Desktop or OS packages for you; when something is missing, it prints the right OS-specific fix.
-
-If you prefer an npm/npx-driven setup, use:
+The lowest-friction local setup path is:
 
 ```bash
 npx stacyvm-setup@latest
@@ -47,11 +39,18 @@ npx stacyvm-setup@latest
 
 The npm setup command can clone StacyVM, run `npm install` for the web, SDK, and TypeScript example packages, download Go modules, build the StacyVM binary, and start the server. It still expects Docker and Go to be installed on the host.
 
-To test a non-main branch directly from GitHub, use:
+Once the repository is already cloned, the source-checkout setup path is:
 
 ```bash
-npx github:StacyOS/stacyvm#phase-14-worker-identity-hardening stacyvm-setup \
-  --branch phase-14-worker-identity-hardening
+make dev
+```
+
+`make dev` checks Go, Docker, Docker daemon access, and port `7423`, then builds StacyVM and starts `./stacyvm serve`. It does not install Docker Desktop or OS packages for you; when something is missing, it prints the right OS-specific fix.
+
+To test the current GitHub source directly without waiting for the npm package, use:
+
+```bash
+npx github:StacyOS/stacyvm stacyvm-setup
 ```
 
 ## OS Setup
@@ -324,8 +323,7 @@ npx stacyvm-setup@latest \
     If you are testing an unpublished branch, use the GitHub fallback:
 
     ```bash
-    npx github:StacyOS/stacyvm#phase-14-worker-identity-hardening stacyvm-setup \
-      --branch phase-14-worker-identity-hardening
+    npx github:StacyOS/stacyvm stacyvm-setup
     ```
   </Accordion>
 

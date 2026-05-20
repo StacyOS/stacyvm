@@ -29,7 +29,7 @@ This matrix sets expectations for public self-serve StacyVM installs. It separat
 
 Before treating a self-serve install as supported, operators should capture:
 
-- Release verification output from `scripts/verify-release.sh <version> <arch>` or installer output with Sigstore verification.
+- Release verification output from `scripts/post-release-validate.sh <version>` or installer output with Sigstore verification.
 - `stacyvm config lint --production --file <config>` output with production environment variables loaded.
 - Confirmation that `server.cors_allowed_origins` contains exact trusted origins, not `*`.
 - `stacyvm upgrade rehearse --config <config> --database <db>` output before binary or image replacement.

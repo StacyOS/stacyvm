@@ -18,7 +18,7 @@ function usage() {
 
 Usage:
   npx stacyvm-setup@latest
-  npx github:StacyOS/stacyvm#phase-14-worker-identity-hardening stacyvm-setup --branch phase-14-worker-identity-hardening
+  npx github:StacyOS/stacyvm stacyvm-setup
   node scripts/npm-setup.mjs
 
 Options:

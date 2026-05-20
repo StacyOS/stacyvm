@@ -15,13 +15,13 @@ The release workflow lives at `.github/workflows/release.yml`.
 It runs automatically for tags that match `v*`:
 
 ```bash
-git tag v0.4.0
-git push origin v0.4.0
+git tag <version>
+git push origin <version>
 ```
 
 It can also be started manually from GitHub Actions with:
 
-- `version`: release version or image tag, for example `v0.4.0`.
+- `version`: release version or image tag, for example `v0.14.4`.
 - `publish_image`: whether to publish the GHCR image.
 - `create_release`: whether to create a GitHub release with binary artifacts.
 
@@ -32,7 +32,7 @@ Tag-triggered releases always build binaries, create the GitHub release, and pub
 Local release artifacts can be built with:
 
 ```bash
-make release-build-all VERSION=v0.4.0
+make release-build-all VERSION=<version>
 ```
 
 The command writes artifacts to `dist/`:
@@ -55,8 +55,8 @@ for every binary and `checksums.txt`.
 Install `cosign`, then run:
 
 ```bash
-scripts/verify-release.sh v0.4.0 amd64
-scripts/verify-release.sh v0.4.0 arm64
+scripts/verify-release.sh <version> amd64
+scripts/verify-release.sh <version> arm64
 ```
 
 The verifier checks:
@@ -109,12 +109,12 @@ make build
 cd web && npm run build
 scripts/check-swagger.sh
 stacyvm config lint --production --file deploy/stacyvm.production.yaml
-make release-build-all VERSION=v0.4.0
+make release-build-all VERSION=<version>
 ```
 
 When linting the production template, provide real `STACYVM_AUTH_API_KEY` and `STACYVM_AUTH_ADMIN_API_KEY` values through the environment so placeholder secrets do not pass the release gate.
 
-For Phase 4, also confirm the production deployment templates still render:
+Also confirm the production deployment templates still render:
 
 ```bash
 docker compose --env-file deploy/.env.example -f deploy/docker-compose.yml config
@@ -123,15 +123,15 @@ docker compose --env-file deploy/.env.example -f deploy/docker-compose.yml confi
 After the release workflow publishes artifacts, verify both architectures:
 
 ```bash
-scripts/verify-release.sh v0.4.0 amd64
-scripts/verify-release.sh v0.4.0 arm64
+scripts/verify-release.sh <version> amd64
+scripts/verify-release.sh <version> arm64
 ```
 
 Or run the full post-release gate:
 
 ```bash
-scripts/post-release-validate.sh v0.4.0
-STACYVM_VALIDATE_INSTALLER=true scripts/post-release-validate.sh v0.4.0
+scripts/post-release-validate.sh <version>
+STACYVM_VALIDATE_INSTALLER=true scripts/post-release-validate.sh <version>
 ```
 
 The full gate confirms that every binary, checksum, signature, and certificate
