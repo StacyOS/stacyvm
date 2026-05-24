@@ -99,7 +99,7 @@ for await (const chunk of sandbox.execStream("npm test")) {
 ## Handle Errors
 
 ```typescript
-import { Client, ForgevmError } from "stacyvm";
+import { Client, StacyVMError } from "stacyvm";
 
 const client = new Client("http://localhost:7423");
 
@@ -108,7 +108,7 @@ try {
     await sandbox.exec("node /missing.js", { timeout: "10s" });
   });
 } catch (error) {
-  if (error instanceof ForgevmError) {
+  if (error instanceof StacyVMError) {
     console.error(error.message);
   } else {
     throw error;

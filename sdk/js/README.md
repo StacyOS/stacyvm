@@ -323,11 +323,11 @@ await client.prune();         // returns count of expired sandboxes destroyed
 
 ## Errors
 
-All errors extend `ForgevmError`. Catch the base class for general handling, or specific subclasses to react to particular failures.
+All errors extend `StacyVMError`. Catch the base class for general handling, or specific subclasses to react to particular failures.
 
 ```typescript
 import {
-  ForgevmError,
+  StacyVMError,
   SandboxNotFoundError,
   ProviderError,
   ConnectionError,
@@ -342,7 +342,7 @@ try {
     // provider returned 5xx
   } else if (err instanceof ConnectionError) {
     // network issue
-  } else if (err instanceof ForgevmError) {
+  } else if (err instanceof StacyVMError) {
     // any other API error — err.code, err.statusCode
   } else {
     throw err;
@@ -352,7 +352,7 @@ try {
 
 | Error | When | Properties |
 |---|---|---|
-| `ForgevmError` | Base — any API error | `code`, `statusCode`, `message` |
+| `StacyVMError` | Base — any API error | `code`, `statusCode`, `message` |
 | `SandboxNotFoundError` | 404 from server | `sandboxId` |
 | `ProviderError` | 5xx from server | `code`, `statusCode` |
 | `ConnectionError` | Network failure | `message` |
@@ -384,8 +384,8 @@ import {
   VMPoolStatus,
   SpawnAdmissionDecision,
   QuotaSummary,
-  ForgevmClientConfig,
-  ForgevmClientOptions,
+  StacyVMClientConfig,
+  StacyVMClientOptions,
 } from "stacyvm";
 ```
 

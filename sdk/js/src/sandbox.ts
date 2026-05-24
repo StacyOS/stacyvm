@@ -278,7 +278,7 @@ export class Sandbox {
    * ```ts
    * const files = await sandbox.listFiles("/tmp");
    * for (const f of files) {
-   *   console.log(`${f.name}  ${f.size} bytes`);
+   *   console.log(`${f.path}  ${f.size} bytes`);
    * }
    * ```
    */

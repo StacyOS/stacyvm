@@ -12,7 +12,7 @@ from stacyvm.models import (
     Template,
 )
 from stacyvm.exceptions import (
-    ForgevmError,
+    StacyVMError,
     SandboxNotFound,
     ProviderError,
     ConnectionError,
@@ -29,7 +29,7 @@ __all__ = [
     "SandboxInfo",
     "SpawnAdmissionDecision",
     "Template",
-    "ForgevmError",
+    "StacyVMError",
     "SandboxNotFound",
     "ProviderError",
     "ConnectionError",

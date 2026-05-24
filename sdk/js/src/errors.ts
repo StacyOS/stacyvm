@@ -1,7 +1,7 @@
 /**
  * Error classes for the StacyVM SDK.
  *
- * All SDK errors extend {@link ForgevmError} so callers can catch the base
+ * All SDK errors extend {@link StacyVMError} so callers can catch the base
  * class for generic handling or catch specific subclasses for fine-grained
  * control.
  *
@@ -22,13 +22,13 @@ import type { ApiErrorBody } from "./types.js";
  * try {
  *   await client.spawn();
  * } catch (err) {
- *   if (err instanceof ForgevmError) {
+ *   if (err instanceof StacyVMError) {
  *     console.error(`StacyVM error [${err.code}]: ${err.message}`);
  *   }
  * }
  * ```
  */
-export class ForgevmError extends Error {
+export class StacyVMError extends Error {
   /** Machine-readable error code (e.g. `"NOT_FOUND"`, `"INTERNAL"`). */
   public readonly code: string;
 
@@ -37,7 +37,7 @@ export class ForgevmError extends Error {
 
   constructor(message: string, code?: string, statusCode?: number) {
     super(message);
-    this.name = "ForgevmError";
+    this.name = "StacyVMError";
     this.code = code ?? "";
     this.statusCode = statusCode;
 
@@ -64,7 +64,7 @@ export class ForgevmError extends Error {
  * }
  * ```
  */
-export class SandboxNotFoundError extends ForgevmError {
+export class SandboxNotFoundError extends StacyVMError {
   /** The sandbox ID that was not found. */
   public readonly sandboxId: string;
 
@@ -83,7 +83,7 @@ export class SandboxNotFoundError extends ForgevmError {
 /**
  * Raised when a provider operation fails (HTTP 5xx from the API).
  */
-export class ProviderError extends ForgevmError {
+export class ProviderError extends StacyVMError {
   constructor(message: string, code?: string, statusCode?: number) {
     super(message, code ?? "PROVIDER_ERROR", statusCode);
     this.name = "ProviderError";
@@ -95,7 +95,7 @@ export class ProviderError extends ForgevmError {
  * Raised when the SDK cannot connect to the StacyVM server at all
  * (network error, DNS failure, connection refused, etc.).
  */
-export class ConnectionError extends ForgevmError {
+export class ConnectionError extends StacyVMError {
   constructor(message: string) {
     super(message, "CONNECTION_ERROR");
     this.name = "ConnectionError";
@@ -119,9 +119,9 @@ export class ConnectionError extends ForgevmError {
  * @param sandboxId - Optional sandbox ID for better 404 error messages.
  *
  * @throws {@link SandboxNotFoundError} on 404
- * @throws {@link ForgevmError} with code `"UNAUTHORIZED"` on 401
+ * @throws {@link StacyVMError} with code `"UNAUTHORIZED"` on 401
  * @throws {@link ProviderError} on 5xx
- * @throws {@link ForgevmError} on any other non-success status
+ * @throws {@link StacyVMError} on any other non-success status
  */
 export async function handleResponse(
   response: Response,
@@ -148,12 +148,12 @@ export async function handleResponse(
   }
 
   if (response.status === 401) {
-    throw new ForgevmError(message, "UNAUTHORIZED", 401);
+    throw new StacyVMError(message, "UNAUTHORIZED", 401);
   }
 
   if (response.status >= 500) {
     throw new ProviderError(message, code, response.status);
   }
 
-  throw new ForgevmError(message, code, response.status);
+  throw new StacyVMError(message, code, response.status);
 }

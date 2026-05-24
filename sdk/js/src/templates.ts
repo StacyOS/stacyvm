@@ -80,7 +80,7 @@ export class TemplateManager {
    * @param name - The template name.
    * @returns The {@link Template} object.
    *
-   * @throws {@link ForgevmError} with code `"NOT_FOUND"` if the template
+   * @throws {@link StacyVMError} with code `"NOT_FOUND"` if the template
    *   does not exist.
    */
   async get(name: string): Promise<Template> {
@@ -128,7 +128,7 @@ export class TemplateManager {
    *
    * @param name - The template name to delete.
    *
-   * @throws {@link ForgevmError} with code `"NOT_FOUND"` if the template
+   * @throws {@link StacyVMError} with code `"NOT_FOUND"` if the template
    *   does not exist.
    */
   async delete(name: string): Promise<void> {

@@ -11,8 +11,8 @@ import {
 import { Sandbox } from "./sandbox.js";
 import { TemplateManager } from "./templates.js";
 import type {
-  ForgevmClientConfig,
-  ForgevmClientOptions,
+  StacyVMClientConfig,
+  StacyVMClientOptions,
   HealthInfo,
   ProviderInfo,
   QuotaSummary,
@@ -115,8 +115,8 @@ export class Client {
    * });
    * ```
    */
-  constructor(options?: ForgevmClientConfig) {
-    const opts: ForgevmClientOptions = typeof options === "string"
+  constructor(options?: StacyVMClientConfig) {
+    const opts: StacyVMClientOptions = typeof options === "string"
       ? { baseUrl: options }
       : options ?? {};
 

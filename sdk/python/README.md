@@ -367,11 +367,11 @@ client.prune()              # int — count of expired sandboxes destroyed
 
 ## Errors
 
-All exceptions inherit from `ForgevmError`. Catch the base class for general handling, or specific subclasses for granular control.
+All exceptions inherit from `StacyVMError`. Catch the base class for general handling, or specific subclasses for granular control.
 
 ```python
 from stacyvm import (
-    ForgevmError,
+    StacyVMError,
     SandboxNotFound,
     ProviderError,
     ConnectionError,
@@ -385,13 +385,13 @@ except ProviderError as e:
     print(f"Provider error ({e.code}): {e}")
 except ConnectionError as e:
     print(f"Network issue: {e}")
-except ForgevmError as e:
+except StacyVMError as e:
     print(f"API error ({e.code}): {e}")
 ```
 
 | Exception | When | Properties |
 |---|---|---|
-| `ForgevmError` | Base — any API error | `code`, `message` |
+| `StacyVMError` | Base — any API error | `code`, `message` |
 | `SandboxNotFound` | 404 from server | `sandbox_id`, `code="not_found"` |
 | `ProviderError` | 5xx from server | `code` |
 | `ConnectionError` | Network failure | `message` |
@@ -417,7 +417,7 @@ from stacyvm import (
     SpawnAdmissionDecision,
     StreamChunk,
     # Exceptions
-    ForgevmError,
+    StacyVMError,
     SandboxNotFound,
     ProviderError,
     ConnectionError,

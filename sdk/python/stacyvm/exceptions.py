@@ -5,7 +5,7 @@ from __future__ import annotations
 import httpx
 
 
-class ForgevmError(Exception):
+class StacyVMError(Exception):
     """Base exception for StacyVM SDK."""
 
     def __init__(self, message: str, code: str | None = None):
@@ -13,7 +13,7 @@ class ForgevmError(Exception):
         self.code = code
 
 
-class SandboxNotFound(ForgevmError):
+class SandboxNotFound(StacyVMError):
     """Raised when a sandbox is not found."""
 
     def __init__(self, sandbox_id: str):
@@ -21,13 +21,13 @@ class SandboxNotFound(ForgevmError):
         self.sandbox_id = sandbox_id
 
 
-class ProviderError(ForgevmError):
+class ProviderError(StacyVMError):
     """Raised when a provider operation fails."""
 
     pass
 
 
-class ConnectionError(ForgevmError):
+class ConnectionError(StacyVMError):
     """Raised when the connection to the StacyVM server fails."""
 
     pass
@@ -49,8 +49,8 @@ def handle_response(response: httpx.Response) -> None:
     if response.status_code == 404:
         raise SandboxNotFound(message)
     if response.status_code == 401:
-        raise ForgevmError(message, code="UNAUTHORIZED")
+        raise StacyVMError(message, code="UNAUTHORIZED")
     if response.status_code >= 500:
         raise ProviderError(message, code=code)
 
-    raise ForgevmError(message, code=code)
+    raise StacyVMError(message, code=code)

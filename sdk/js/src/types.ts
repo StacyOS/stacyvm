@@ -169,8 +169,6 @@ export interface StreamChunk {
  * Information about a file or directory inside a sandbox.
  */
 export interface FileInfo {
-  /** File or directory name. */
-  name: string;
   /** Full path inside the sandbox. */
   path: string;
   /** Size in bytes. */
@@ -277,7 +275,7 @@ export interface HealthInfo {
 /**
  * Options for constructing a {@link Client} instance.
  */
-export interface ForgevmClientOptions {
+export interface StacyVMClientOptions {
   /**
    * Hostname or IP of the StacyVM server.
    * @defaultValue `"localhost"`
@@ -311,7 +309,7 @@ export interface ForgevmClientOptions {
 /**
  * Client constructor input: either a full base URL string or an options object.
  */
-export type ForgevmClientConfig = string | ForgevmClientOptions;
+export type StacyVMClientConfig = string | StacyVMClientOptions;
 
 /**
  * VM pool status information.

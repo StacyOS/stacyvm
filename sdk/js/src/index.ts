@@ -24,7 +24,7 @@ export { TemplateManager } from "./templates.js";
 
 // -- Error classes ----------------------------------------------------------
 export {
-  ForgevmError,
+  StacyVMError,
   SandboxNotFoundError,
   ProviderError,
   ConnectionError,
@@ -51,7 +51,7 @@ export type {
   SpawnAdmissionDecision,
   StreamChunk,
   FileInfo,
-  ForgevmClientConfig,
-  ForgevmClientOptions,
+  StacyVMClientConfig,
+  StacyVMClientOptions,
   ApiErrorBody,
 } from "./types.js";
