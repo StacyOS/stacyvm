@@ -183,6 +183,19 @@ func runServe() error {
 		logger.Warn().Err(err).Msg("setting default provider")
 	}
 
+	// Pre-flight check: ensure the default provider is active/accessible.
+	defaultProvider, _ := registry.Get(cfg.Providers.Default)
+	if defaultProvider != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		healthy := defaultProvider.Healthy(ctx)
+		cancel()
+		if !healthy {
+			logger.Fatal().
+				Str("provider", defaultProvider.Name()).
+				Msgf("The default provider '%s' is not active or accessible. Please ensure the corresponding service (e.g., Docker daemon) is running and you have the correct permissions before starting stacyvm.", defaultProvider.Name())
+		}
+	}
+
 	// Manager
 	ttl, _ := time.ParseDuration(cfg.Defaults.TTL)
 	maxTTL, _ := time.ParseDuration(cfg.Defaults.MaxTTL)
