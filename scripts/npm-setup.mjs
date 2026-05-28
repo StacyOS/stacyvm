@@ -4,7 +4,7 @@ import { mkdir } from "node:fs/promises";
 import { copyFileSync, chmodSync, mkdirSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawnSync } from "node:child_process";
+import { spawnSync, spawn } from "node:child_process";
 
 const REPO_URL = "https://github.com/StacyOS/stacyvm.git";
 const DEFAULT_BRANCH = process.env.STACYVM_SETUP_BRANCH ?? "main";
@@ -132,13 +132,19 @@ function run(command, args, options = {}) {
 }
 
 function commandExists(command) {
-  const probe = process.platform === "win32" ? "where" : "command";
-  const args = process.platform === "win32" ? [command] : ["-v", command];
-  const result = spawnSync(probe, args, {
-    shell: process.platform !== "win32",
-    stdio: "ignore",
-  });
-  return result.status === 0;
+  const probe = process.platform === "win32"
+    ? "where"
+    : "which";
+
+  try {
+    const result = spawnSync(probe, [command], {
+      stdio: "ignore",
+    });
+
+    return result.status === 0;
+  } catch {
+    return false;
+  }
 }
 
 function isStacyRepo(dir) {
@@ -184,6 +190,7 @@ async function ensureRepo(targetDir, options) {
   await mkdir(dirname(targetDir), { recursive: true });
   logStep(`Cloning StacyVM into ${targetDir}`);
   run("git", ["clone", "--depth", "1", "--branch", options.branch, options.repo, targetDir]);
+  options.didCloneRepo = true;
 }
 
 function checkHost(options) {
@@ -377,24 +384,76 @@ async function main() {
   console.log("StacyVM setup");
   console.log(`Target: ${targetDir}`);
 
-  await ensureRepo(targetDir, options);
-  checkHost(options);
+  let serveProcess = null;
+  let isCleanedUp = false;
 
-  if (options.checkOnly) {
-    logOk("Check-only mode complete");
-    return;
-  }
+  const performCleanup = () => {
+    if (isCleanedUp) return;
+    isCleanedUp = true;
 
-  installNodeDeps(targetDir, options);
-  downloadGoDeps(targetDir);
-  buildStacyVM(targetDir);
+    if (serveProcess) {
+      try {
+        serveProcess.kill();
+      } catch (e) {}
+    }
 
-  if (options.start) {
-    installGlobal(targetDir);
-    runSetupWizard(targetDir);
-  } else {
-    logOk("Setup complete");
-    console.log(`Run next: cd ${targetDir} && ./stacyvm setup`);
+    if (options.didCloneRepo) {
+      console.log("");
+      logStep("Cleaning up downloaded repository");
+      try {
+        rmSync(targetDir, { recursive: true, force: true });
+        logOk(`Removed ${targetDir}`);
+      } catch (e) {
+        logWarn(`Failed to remove repository: ${e.message}`);
+      }
+    }
+  };
+
+  process.on("SIGINT", () => {
+    performCleanup();
+    process.exit(130);
+  });
+
+  process.on("SIGTERM", () => {
+    performCleanup();
+    process.exit(143);
+  });
+
+  try {
+    await ensureRepo(targetDir, options);
+    checkHost(options);
+
+    if (options.checkOnly) {
+      logOk("Check-only mode complete");
+      return;
+    }
+
+    installNodeDeps(targetDir, options);
+    downloadGoDeps(targetDir);
+    buildStacyVM(targetDir);
+
+    if (options.start) {
+      installGlobal(targetDir);
+      runSetupWizard(targetDir);
+      
+      logStep("Starting StacyVM Server");
+      const globalBin = process.platform === "win32" ? "stacyvm.exe" : "stacyvm";
+      
+      serveProcess = spawn(globalBin, ["serve"], {
+        stdio: "ignore"
+      });
+      logOk("Server started in the background");
+
+      logStep("Launching Web UI");
+      spawnSync(globalBin, ["web-ui"], {
+        stdio: "inherit"
+      });
+    } else {
+      logOk("Setup complete");
+      console.log(`Run next: cd ${targetDir} && ./stacyvm setup`);
+    }
+  } finally {
+    performCleanup();
   }
 }
 
