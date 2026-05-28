@@ -34,6 +34,7 @@ func main() {
 		newListCmd(),
 		newVersionCmd(),
 		newTUICmd(),
+		newWebUICmd(),
 		newBuildImageCmd(),
 		newDoctorCmd(),
 		newConfigCmd(),

@@ -35,7 +35,16 @@ export default function ClientShell({ children }: { children: ReactNode }) {
   const [darkMode, setDarkMode] = useState(true);
   const pathname = usePathname();
 
+  const [isIframe, setIsIframe] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.self !== window.top;
+    }
+    return false;
+  });
+
   useEffect(() => {
+    if (isIframe) return;
+
     const stored = localStorage.getItem('stacyvm-theme');
     if (stored === 'light') {
       setDarkMode(false);
@@ -45,6 +54,20 @@ export default function ClientShell({ children }: { children: ReactNode }) {
       document.documentElement.classList.add('dark');
     }
   }, []);
+
+  if (isIframe) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-navy-950 text-gray-500 p-6 text-center">
+        <div>
+          <Box className="w-12 h-12 mx-auto mb-4 opacity-40" />
+          <h2 className="text-lg font-medium text-gray-300">Live Preview Unavailable</h2>
+          <p className="mt-2 text-sm text-gray-500">
+            The sandbox preview domain could not be resolved or the Wails asset server intercepted the request.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const toggleTheme = () => {
     const next = !darkMode;

@@ -23,6 +23,7 @@ import {
   type CreateSandboxRequest,
   type Template,
   type SnapshotSummary,
+  type Sandbox,
   createSandbox,
   destroySandbox,
   extendSandboxTTL,
@@ -36,6 +37,69 @@ import LogViewer from '../../components/LogViewer';
 import { SandboxCardSkeleton } from '../../components/Skeleton';
 
 type DetailTab = 'terminal' | 'files' | 'console' | 'preview';
+
+function PreviewTab({ sandbox, activeTab, expandedId }: { sandbox: Sandbox; activeTab: DetailTab; expandedId: string | null }) {
+  const [previewState, setPreviewState] = useState<'checking' | 'ready' | 'unavailable'>('checking');
+
+  useEffect(() => {
+    if (activeTab !== 'preview' || expandedId !== sandbox.id) return;
+    const url = `http://3000-${sandbox.id}.${sandbox.preview_domain || 'localhost'}`;
+    const ctrl = new AbortController();
+    fetch(url, { method: 'GET', mode: 'no-cors', signal: ctrl.signal })
+      .then(() => setPreviewState('ready'))
+      .catch(() => setPreviewState('unavailable'));
+    return () => ctrl.abort();
+  }, [activeTab, expandedId, sandbox.id, sandbox.preview_domain]);
+
+  return (
+    <div className="flex flex-col h-[600px] w-full bg-navy-950 rounded-lg border border-navy-600 overflow-hidden">
+      <div className="flex items-center justify-between px-4 py-2 bg-navy-900 border-b border-navy-600">
+        <div className="flex items-center gap-2 text-sm text-gray-400">
+          <Box className="w-4 h-4" />
+          <span>Live Preview</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-mono text-gray-500 bg-navy-800 px-2 py-1 rounded select-all">
+            {`http://3000-${sandbox.id}.${sandbox.preview_domain || 'localhost'}`}
+          </span>
+          <a
+            href={`http://3000-${sandbox.id}.${sandbox.preview_domain || 'localhost'}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-gray-500 hover:text-gray-300 transition-colors"
+            title="Open in new tab"
+          >
+            <ExternalLink className="w-4 h-4" />
+          </a>
+        </div>
+      </div>
+      <div className="relative flex-1 w-full h-full bg-navy-950">
+        {previewState === 'checking' && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-500">
+            <Loader2 className="w-6 h-6 animate-spin mb-2" />
+            <span className="text-sm">Connecting to sandbox port 3000...</span>
+          </div>
+        )}
+        {previewState === 'unavailable' && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center text-gray-500">
+            <AlertCircle className="w-8 h-8 mb-2 opacity-50" />
+            <span className="text-sm font-medium">No web server detected on port 3000</span>
+            <span className="text-xs text-gray-600 mt-1">Make sure your sandbox is listening on 0.0.0.0:3000</span>
+          </div>
+        )}
+        {previewState === 'ready' && (
+          <iframe
+            key={sandbox.id}
+            src={`http://3000-${sandbox.id}.${sandbox.preview_domain || 'localhost'}`}
+            className="absolute inset-0 w-full h-full border-none bg-white"
+            title={`Live Preview for ${sandbox.id}`}
+            sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
+          />
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function Sandboxes() {
   const { sandboxes, loading, error, refresh } = useSandboxes();
@@ -375,34 +439,7 @@ export default function Sandboxes() {
                 <Terminal sandboxId={sandbox.id} />
               )}
               {activeTab === 'preview' && (
-                <div className="flex flex-col h-[600px] w-full bg-navy-950 rounded-lg border border-navy-600 overflow-hidden">
-                  <div className="flex items-center justify-between px-4 py-2 bg-navy-900 border-b border-navy-600">
-                    <div className="flex items-center gap-2 text-sm text-gray-400">
-                      <Box className="w-4 h-4" />
-                      <span>Live Preview</span>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-mono text-gray-500 bg-navy-800 px-2 py-1 rounded select-all">
-                        {`http://3000-${sandbox.id}.${sandbox.preview_domain || 'localhost'}`}
-                      </span>
-                      <a
-                        href={`http://3000-${sandbox.id}.${sandbox.preview_domain || 'localhost'}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-gray-500 hover:text-gray-300 transition-colors"
-                        title="Open in new tab"
-                      >
-                        <ExternalLink className="w-4 h-4" />
-                      </a>
-                    </div>
-                  </div>
-                  <iframe
-                    src={`http://3000-${sandbox.id}.${sandbox.preview_domain || 'localhost'}`}
-                    className="w-full flex-1 border-none bg-white"
-                    title={`Live Preview for ${sandbox.id}`}
-                    sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-modals"
-                  />
-                </div>
+                <PreviewTab sandbox={sandbox} activeTab={activeTab} expandedId={expandedId} />
               )}
               {activeTab === 'files' && (
                 <FileBrowser sandboxId={sandbox.id} />

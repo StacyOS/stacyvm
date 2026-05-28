@@ -1,18 +1,22 @@
-.PHONY: build build-agent build-android build-agent-arm64 test lint clean serve dev release-build release-build-all
+.PHONY: build build-agent build-android build-agent-arm64 test lint clean serve dev release-build release-build-all web build-desktop
 
 VERSION ?= $(shell git describe --tags --always 2>/dev/null || echo dev)
 DIST_DIR ?= dist
 
-# Build the server/CLI binary
-build:
+# Build the server/CLI binary (which includes the TUI and Web UI)
+build: web
 	go build -ldflags="-s -w -X main.version=$(VERSION)" -o stacyvm ./cmd/stacyvm
+
+# Build the desktop app using Wails
+build-desktop: web
+	cd desktop && wails build -tags webkit2_41
 
 # Build the guest agent (static, linux/amd64)
 build-agent:
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o bin/stacyvm-agent ./cmd/stacyvm-agent
 
 # Build for Android/ARM64 (static)
-build-android:
+build-android: web
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w -X main.version=$(VERSION)" -o dist/stacyvm-linux-arm64 ./cmd/stacyvm
 
 # Build the guest agent (static, linux/arm64)
@@ -20,7 +24,7 @@ build-agent-arm64:
 	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -ldflags="-s -w" -o bin/stacyvm-agent-arm64 ./cmd/stacyvm-agent
 
 # Build everything
-build-all: build build-agent
+build-all: build build-desktop build-agent
 
 # Run all tests
 test:

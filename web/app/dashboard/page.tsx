@@ -13,6 +13,7 @@ import {
   Plus,
   Egg,
 } from 'lucide-react';
+import Link from 'next/link';
 import {
   type HealthResponse,
   type MetricsResponse,
@@ -335,14 +336,14 @@ export default function Dashboard() {
 
       {/* Quick actions */}
       <div className="flex flex-wrap gap-3">
-        <a href="/sandboxes" className="btn-primary text-sm">
+        <Link href="/sandboxes" className="btn-primary text-sm">
           <Plus className="w-4 h-4" />
           Create Sandbox
-        </a>
-        <a href="/templates" className="btn-secondary text-sm">
+        </Link>
+        <Link href="/templates" className="btn-secondary text-sm">
           <FileCode2 className="w-4 h-4" />
           Manage Templates
-        </a>
+        </Link>
       </div>
     </div>
   );

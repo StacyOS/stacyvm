@@ -11,7 +11,7 @@ import (
 func newTUICmd() *cobra.Command {
 	return &cobra.Command{
 		Use:     "tui",
-		Aliases: []string{"ui", "dashboard"},
+		Aliases: []string{"dashboard"},
 		Short:   "Launch interactive terminal dashboard",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			model := tui.NewModel(serverURL, apiKey)
