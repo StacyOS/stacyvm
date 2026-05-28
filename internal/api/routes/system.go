@@ -6,8 +6,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"runtime"
 	"time"
+
+	"github.com/spf13/viper"
+
 
 	"github.com/StacyOs/stacyvm/internal/api/middleware"
 	"github.com/StacyOs/stacyvm/internal/httputil"
@@ -53,6 +58,7 @@ func (s *SystemRoutes) Routes() chi.Router {
 	r.Get("/metrics", s.Metrics)
 	r.Get("/metrics/prometheus", s.PrometheusMetrics)
 	r.Get("/events", s.Events)
+	r.Patch("/config", s.UpdateConfig)
 	return r
 }
 
@@ -491,3 +497,44 @@ func (s *SystemRoutes) Events(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 }
+
+// UpdateConfig updates the system configuration.
+//
+//	@Summary		Update system configuration
+//	@Description	Update providers and runtime configuration and persist to disk
+//	@Tags			system
+//	@Accept			json
+//	@Produce		json
+//	@Success		200	{object}	map[string]interface{}
+//	@Security		ApiKeyAuth
+//	@Router			/config [patch]
+func (s *SystemRoutes) UpdateConfig(w http.ResponseWriter, r *http.Request) {
+	var req map[string]interface{}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, httputil.CodeBadRequest, "invalid json body")
+		return
+	}
+
+	for k, v := range req {
+		viper.Set(k, v)
+	}
+
+	// Make sure we save it globally
+	home, err := os.UserHomeDir()
+	if err == nil {
+		configDir := filepath.Join(home, ".stacyvm")
+		os.MkdirAll(configDir, 0755)
+		viper.SetConfigFile(filepath.Join(configDir, "config.yaml"))
+		if err := viper.WriteConfigAs(filepath.Join(configDir, "config.yaml")); err != nil {
+			httputil.WriteError(w, http.StatusInternalServerError, httputil.CodeInternal, "failed to write config")
+			return
+		}
+	}
+
+	// Trigger a reload or send an event to orchestrator (Phase 1: tell user to restart)
+	httputil.WriteJSON(w, http.StatusOK, map[string]interface{}{
+		"status":  "updated",
+		"message": "Configuration saved successfully. Please restart StacyVM for changes to take effect.",
+	})
+}
+

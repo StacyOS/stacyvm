@@ -138,6 +138,24 @@ func checkDocker(ctx context.Context, cfg *config.Config) []doctorCheck {
 		checks = append(checks, doctorCheck{Name: "docker.daemon", Status: doctorFail, Message: strings.TrimSpace(err.Error() + " " + out), Remediation: "Start Docker and ensure the StacyVM user can reach the Docker daemon."})
 	} else {
 		checks = append(checks, doctorCheck{Name: "docker.daemon", Status: doctorPass, Message: "server " + strings.TrimSpace(out)})
+
+		// Verify configured runtime
+		runtime := cfg.Providers.Docker.Runtime
+		if runtime != "" && runtime != "runc" {
+			runtimesJSON, err := runDoctorCommand(ctx, 3*time.Second, "docker", "info", "--format", "{{json .Runtimes}}")
+			if err == nil {
+				if !strings.Contains(runtimesJSON, `"`+runtime+`"`) {
+					checks = append(checks, doctorCheck{
+						Name:        "docker.runtime",
+						Status:      doctorFail,
+						Message:     fmt.Sprintf("configured runtime %q is not registered in Docker daemon", runtime),
+						Remediation: fmt.Sprintf("Register %s runtime in /etc/docker/daemon.json, restart docker, or change providers.docker.runtime to 'runc'.", runtime),
+					})
+				} else {
+					checks = append(checks, doctorCheck{Name: "docker.runtime", Status: doctorPass, Message: fmt.Sprintf("%q is registered", runtime)})
+				}
+			}
+		}
 	}
 
 	if cfg.Providers.Docker.NetworkMode == "" {

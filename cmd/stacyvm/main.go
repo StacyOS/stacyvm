@@ -26,6 +26,7 @@ func main() {
 
 	root.AddCommand(
 		newServeCmd(),
+		newSetupCmd(),
 		newWorkerCmd(),
 		newSpawnCmd(),
 		newExecCmd(),
@@ -38,6 +39,8 @@ func main() {
 		newConfigCmd(),
 		newDBCmd(),
 		newUpgradeCmd(),
+		newUpdateCmd(),
+		newUninstallCmd(),
 		newSupportCmd(),
 	)
 

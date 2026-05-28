@@ -260,3 +260,20 @@ func (c *apiClient) deleteTemplate(name string) error {
 	}
 	return nil
 }
+
+func (c *apiClient) patchConfig(payload map[string]interface{}) (string, error) {
+	data, code, err := c.do("PATCH", "/api/v1/system/config", payload)
+	if err != nil {
+		return "", err
+	}
+	if code != 200 {
+		return "", fmt.Errorf("config patch failed (HTTP %d): %s", code, string(data))
+	}
+	var resp map[string]interface{}
+	json.Unmarshal(data, &resp)
+	if msg, ok := resp["message"].(string); ok {
+		return msg, nil
+	}
+	return "Configuration updated", nil
+}
+

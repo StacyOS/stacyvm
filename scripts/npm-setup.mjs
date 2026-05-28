@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { existsSync, readdirSync, statSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
+import { copyFileSync, chmodSync, mkdirSync, rmSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
@@ -29,6 +30,7 @@ Options:
   --skip-docker-check     Do not require Docker daemon access during setup checks.
   --skip-node-deps        Do not run npm install in web/sdk/example packages.
   --check-only            Only check the host and repo; do not download deps, build, or start.
+  --uninstall             Uninstall StacyVM binaries and config files from the system.
   --help                  Show this help.
 
 Environment:
@@ -50,6 +52,7 @@ function parseArgs(argv) {
     dockerCheck: true,
     nodeDeps: true,
     checkOnly: false,
+    uninstall: false,
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -80,6 +83,10 @@ function parseArgs(argv) {
         break;
       case "--check-only":
         options.checkOnly = true;
+        options.start = false;
+        break;
+      case "--uninstall":
+        options.uninstall = true;
         options.start = false;
         break;
       default:
@@ -245,18 +252,126 @@ function buildStacyVM(repoDir) {
   ], { cwd: repoDir });
 }
 
-function startServer(repoDir) {
-  const port = process.env.STACYVM_SERVER_PORT ?? "7423";
+function installGlobal(repoDir) {
+  logStep("Installing StacyVM globally");
+  const binaryName = process.platform === "win32" ? "stacyvm.exe" : "stacyvm";
+  const binaryPath = join(repoDir, binaryName);
+  
+  if (process.platform === "win32") {
+    const userProfile = process.env.USERPROFILE;
+    if (!userProfile) {
+      logWarn("USERPROFILE not found, skipping global install on Windows");
+      return;
+    }
+    const installDir = join(userProfile, ".stacyvm", "bin");
+    try {
+      if (!existsSync(installDir)) {
+        mkdirSync(installDir, { recursive: true });
+      }
+      copyFileSync(binaryPath, join(installDir, binaryName));
+      logOk(`Installed to ${installDir}`);
+      
+      // Attempt to add to PATH permanently using PowerShell
+      logStep("Adding to Windows PATH");
+      const psCommand = `[Environment]::SetEnvironmentVariable('Path', [Environment]::GetEnvironmentVariable('Path', 'User') + ';${installDir}', 'User')`;
+      run("powershell", ["-NoProfile", "-Command", psCommand], { allowFailure: true });
+      logOk("Added to PATH (may require terminal restart)");
+    } catch (e) {
+      logWarn(`Failed to install globally on Windows: ${e.message}`);
+    }
+  } else {
+    try {
+      const localBin = join(process.env.HOME || "", ".local", "bin");
+      if (existsSync(localBin)) {
+        const dest = join(localBin, binaryName);
+        if (existsSync(dest)) rmSync(dest, { force: true });
+        copyFileSync(binaryPath, dest);
+        chmodSync(dest, 0o755);
+        logOk(`Installed to ${localBin}`);
+      } else {
+        logStep("Attempting system-wide install (may require sudo password)");
+        const dest = "/usr/local/bin/stacyvm";
+        run("sudo", ["rm", "-f", dest], { allowFailure: true });
+        run("sudo", ["cp", binaryPath, dest]);
+        run("sudo", ["chmod", "+x", dest]);
+        logOk("Installed to /usr/local/bin");
+      }
+    } catch (e) {
+      logWarn(`Failed to install globally: ${e.message}`);
+      logWarn(`Please manually move ${binaryPath} to your PATH.`);
+    }
+  }
+}
+
+function runSetupWizard(repoDir) {
   const binary = process.platform === "win32" ? "stacyvm.exe" : "./stacyvm";
-  logStep("Starting StacyVM");
-  console.log(`API: http://localhost:${port}`);
-  console.log(`Health check: curl http://localhost:${port}/api/v1/live`);
+  logStep("Launching StacyVM Interactive Setup");
   console.log("");
-  run(binary, ["serve"], { cwd: repoDir });
+  run(binary, ["setup"], { cwd: repoDir });
+}
+
+function uninstallStacy() {
+  logStep("Uninstalling StacyVM");
+  const binaryName = process.platform === "win32" ? "stacyvm.exe" : "stacyvm";
+  
+  if (process.platform === "win32") {
+    const userProfile = process.env.USERPROFILE;
+    if (userProfile) {
+      const globalBin = join(userProfile, ".stacyvm", "bin", binaryName);
+      if (existsSync(globalBin)) {
+        try {
+          rmSync(globalBin);
+          logOk(`Removed ${globalBin}`);
+        } catch (e) {
+          logWarn(`Failed to remove global binary: ${e.message}`);
+        }
+      }
+    }
+  } else {
+    const localBin = join(process.env.HOME || "", ".local", "bin", binaryName);
+    const systemBin = "/usr/local/bin/stacyvm";
+    if (existsSync(localBin)) {
+      try {
+        rmSync(localBin);
+        logOk(`Removed ${localBin}`);
+      } catch (e) {
+        logWarn(`Failed to remove local binary: ${e.message}`);
+      }
+    }
+    if (existsSync(systemBin)) {
+      try {
+        logStep("Attempting to remove system-wide binary (may require sudo password)");
+        run("sudo", ["rm", "-f", systemBin]);
+        logOk(`Removed ${systemBin}`);
+      } catch (e) {
+        logWarn(`Failed to remove system binary: ${e.message}`);
+      }
+    }
+  }
+
+  const home = process.env.HOME || process.env.USERPROFILE || "";
+  if (home) {
+    const configDir = join(home, ".stacyvm");
+    if (existsSync(configDir)) {
+      try {
+        rmSync(configDir, { recursive: true, force: true });
+        logOk(`Removed configuration directory: ${configDir}`);
+      } catch (e) {
+        logWarn(`Failed to remove configuration directory: ${e.message}`);
+      }
+    }
+  }
+
+  logOk("Uninstall complete");
 }
 
 async function main() {
   const options = parseArgs(process.argv.slice(2));
+  if (options.uninstall) {
+    uninstallStacy();
+    return;
+  }
+
   const targetDir = resolveTargetDir(options);
 
   console.log("StacyVM setup");
@@ -275,10 +390,11 @@ async function main() {
   buildStacyVM(targetDir);
 
   if (options.start) {
-    startServer(targetDir);
+    installGlobal(targetDir);
+    runSetupWizard(targetDir);
   } else {
     logOk("Setup complete");
-    console.log(`Run next: cd ${targetDir} && ./stacyvm serve`);
+    console.log(`Run next: cd ${targetDir} && ./stacyvm setup`);
   }
 }
 

@@ -62,6 +62,7 @@ const (
 	tabTemplates
 	tabProviders
 	tabLogs
+	tabConfig
 )
 
 type mode int
@@ -74,6 +75,7 @@ const (
 	modeSpawn
 	modeSpawnTemplate
 	modeCreateTemplate
+	modeConfigEdit
 )
 
 // Messages
@@ -121,6 +123,9 @@ type Model struct {
 	confirmMsg  string
 	confirmFunc func() tea.Cmd
 	logs        []string
+
+	// Config
+	configCursor int
 }
 
 func NewModel(serverURL, apiKey string) Model {
@@ -249,6 +254,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.mode = modeNormal
 		return m, m.fetchSandboxes()
 
+	case configPatchedMsg:
+		m.statusMsg = string(msg)
+		m.addLog("CONFIG", string(msg))
+		return m, nil
+
 	case execMsg:
 		r := (*execResultData)(msg)
 		m.lastOutput = ""
@@ -364,6 +374,8 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.activeTab = tabProviders
 	case "5":
 		m.activeTab = tabLogs
+	case "6":
+		m.activeTab = tabConfig
 	case "r":
 		return m, tea.Batch(m.fetchSandboxes(), m.fetchHealth(), m.fetchProviders(), m.fetchTemplates())
 	}
@@ -376,6 +388,8 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleSandboxKey(key)
 	case tabTemplates:
 		return m.handleTemplateKey(key)
+	case tabConfig:
+		return m.handleConfigKey(key)
 	}
 
 	return m, nil
@@ -545,7 +559,7 @@ func (m Model) View() string {
 	b.WriteString(title + healthStr + "\n")
 
 	// Tabs
-	tabs := []string{"[1]Dashboard", "[2]Sandboxes", "[3]Templates", "[4]Providers", "[5]Logs"}
+	tabs := []string{"[1]Dashboard", "[2]Sandboxes", "[3]Templates", "[4]Providers", "[5]Logs", "[6]Config"}
 	var tabRow strings.Builder
 	for i, t := range tabs {
 		if tab(i) == m.activeTab {
@@ -576,6 +590,8 @@ func (m Model) View() string {
 		content = m.viewProviders(contentHeight, w)
 	case tabLogs:
 		content = m.viewLogs(contentHeight)
+	case tabConfig:
+		content = m.viewConfig(contentHeight, w)
 	}
 	b.WriteString(content)
 
