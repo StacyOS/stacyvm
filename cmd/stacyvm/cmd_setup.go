@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 
 	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
@@ -141,8 +142,71 @@ func runSetup() error {
 
 	viper.WriteConfigAs(filepath.Join(configDir, "config.yaml"))
 
+	// Autocomplete
+	var enableAutocomplete bool
+	autocompleteForm := huh.NewForm(
+		huh.NewGroup(
+			huh.NewConfirm().
+				Title("Install shell auto-completion?").
+				Description("Automatically configures autocomplete for Bash, Zsh, and Fish.").
+				Value(&enableAutocomplete),
+		),
+	).WithTheme(t)
+	_ = autocompleteForm.Run()
+
+	if enableAutocomplete {
+		installAutocomplete()
+	}
+
 	fmt.Println("\n" + successStyle.Render("✨ StacyVM Setup Complete!"))
 	fmt.Println("Config saved to ~/.stacyvm/config.yaml")
 
+	if enableAutocomplete {
+		fmt.Println("\n" + warningStyle.Render("Auto-completion installed! Please restart your terminal or run:"))
+		fmt.Println("  source ~/.zshrc  (or ~/.bashrc)")
+	}
+
 	return nil
 }
+
+func installAutocomplete() {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return
+	}
+
+	// Zsh
+	zshrc := filepath.Join(home, ".zshrc")
+	if _, err := os.Stat(zshrc); err == nil {
+		b, _ := os.ReadFile(zshrc)
+// Use strings.Contains below
+		if !strings.Contains(string(b), "stacyvm completion zsh") {
+			f, _ := os.OpenFile(zshrc, os.O_APPEND|os.O_WRONLY, 0644)
+			f.WriteString("\n# StacyVM Autocomplete\nsource <(stacyvm completion zsh)\n")
+			f.Close()
+		}
+	}
+
+	// Bash
+	bashrc := filepath.Join(home, ".bashrc")
+	if _, err := os.Stat(bashrc); err == nil {
+		b, _ := os.ReadFile(bashrc)
+		if !strings.Contains(string(b), "stacyvm completion bash") {
+			f, _ := os.OpenFile(bashrc, os.O_APPEND|os.O_WRONLY, 0644)
+			f.WriteString("\n# StacyVM Autocomplete\nsource <(stacyvm completion bash)\n")
+			f.Close()
+		}
+	}
+
+	// Fish
+	fishConfig := filepath.Join(home, ".config", "fish", "config.fish")
+	if _, err := os.Stat(fishConfig); err == nil {
+		b, _ := os.ReadFile(fishConfig)
+		if !strings.Contains(string(b), "stacyvm completion fish") {
+			f, _ := os.OpenFile(fishConfig, os.O_APPEND|os.O_WRONLY, 0644)
+			f.WriteString("\n# StacyVM Autocomplete\nstacyvm completion fish | source\n")
+			f.Close()
+		}
+	}
+}
+

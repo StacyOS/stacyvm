@@ -97,6 +97,35 @@ function parseArgs(argv) {
   return options;
 }
 
+//animation
+//loading spinner
+//
+class Spinner {
+  constructor(text) {
+    this.text = text;
+    this.frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
+    this.i = 0;
+    this.timer = null;
+  }
+  start() {
+    process.stdout.write("\x1b[?25l");
+    this.timer = setInterval(() => {
+      process.stdout.write(`\r\x1b[38;2;255;166;12m${this.frames[this.i]}\x1b[0m ${this.text}`);
+      this.i = (this.i + 1) % this.frames.length;
+    }, 80);
+  }
+  stop(successText) {
+    if (this.timer) clearInterval(this.timer);
+    process.stdout.write(`\r\x1b[K\x1b[32m✔\x1b[0m ${successText || this.text}\n`);
+    process.stdout.write("\x1b[?25h");
+  }
+  fail(errorText) {
+    if (this.timer) clearInterval(this.timer);
+    process.stdout.write(`\r\x1b[K\x1b[31m✖\x1b[0m ${errorText || this.text}\n`);
+    process.stdout.write("\x1b[?25h");
+  }
+}
+
 function logStep(message) {
   console.log(`\n\x1b[1m${message}\x1b[0m`);
 }
@@ -126,7 +155,9 @@ function run(command, args, options = {}) {
     throw result.error;
   }
   if (result.status !== 0 && !options.allowFailure) {
-    throw new Error(`${command} ${args.join(" ")} exited with ${result.status}`);
+    const output = (result.stderr || result.stdout || "").trim();
+    const extra = output ? `\n\nOutput:\n${output}` : "";
+    throw new Error(`${command} ${args.join(" ")} exited with ${result.status}${extra}`);
   }
   return result;
 }
@@ -175,7 +206,6 @@ function resolveTargetDir(options) {
 
 async function ensureRepo(targetDir, options) {
   if (isStacyRepo(targetDir)) {
-    logOk(`Using StacyVM checkout: ${targetDir}`);
     return;
   }
 
@@ -187,9 +217,11 @@ async function ensureRepo(targetDir, options) {
     fail(`git is required to clone StacyVM. ${hostHelp()}`);
   }
 
-  await mkdir(dirname(targetDir), { recursive: true });
-  logStep(`Cloning StacyVM into ${targetDir}`);
-  run("git", ["clone", "--depth", "1", "--branch", options.branch, options.repo, targetDir]);
+  const spinner = new Spinner(`Cloning StacyVM into ${targetDir}`);
+  spinner.start();
+  mkdirSync(dirname(targetDir), { recursive: true });
+  run("git", ["clone", "--depth", "1", "--branch", options.branch, options.repo, targetDir], { capture: true });
+  spinner.stop(`Cloned StacyVM to ${targetDir}`);
   options.didCloneRepo = true;
 }
 
@@ -233,30 +265,50 @@ function installNodeDeps(repoDir, options) {
     return;
   }
 
-  logStep("Installing Node package dependencies");
   for (const packageDir of PACKAGE_DIRS) {
     const fullDir = join(repoDir, packageDir);
     if (!existsSync(join(fullDir, "package.json"))) continue;
-    console.log(`npm install (${packageDir})`);
-    run("npm", ["install"], { cwd: fullDir });
+    const spinner = new Spinner(`Installing ${packageDir} dependencies`);
+    spinner.start();
+    try {
+      run("npm", ["install", "--no-audit", "--no-fund", "--silent"], { cwd: fullDir, capture: true });
+      spinner.stop(`${packageDir} dependencies installed`);
+    } catch (e) {
+      spinner.fail(`Failed to install ${packageDir} dependencies`);
+      throw e;
+    }
   }
 }
 
 function downloadGoDeps(repoDir) {
-  logStep("Downloading Go dependencies");
-  run("go", ["mod", "download"], { cwd: repoDir });
+  const spinner = new Spinner("Downloading Go dependencies");
+  spinner.start();
+  try {
+    run("go", ["mod", "download"], { cwd: repoDir, capture: true });
+    spinner.stop("Go dependencies downloaded");
+  } catch (e) {
+    spinner.fail("Failed to download Go dependencies");
+    throw e;
+  }
 }
 
 function buildStacyVM(repoDir) {
-  logStep("Building StacyVM");
-  const output = process.platform === "win32" ? "stacyvm.exe" : "stacyvm";
-  run("go", [
-    "build",
-    "-ldflags=-s -w -X main.version=dev",
-    "-o",
-    output,
-    "./cmd/stacyvm",
-  ], { cwd: repoDir });
+  const spinner = new Spinner("Building StacyVM");
+  spinner.start();
+  try {
+    const output = process.platform === "win32" ? "stacyvm.exe" : "stacyvm";
+    run("go", [
+      "build",
+      "-ldflags=-s -w -X main.version=dev",
+      "-o",
+      output,
+      "./cmd/stacyvm",
+    ], { cwd: repoDir, capture: true });
+    spinner.stop("StacyVM built successfully");
+  } catch (e) {
+    spinner.fail("Failed to build StacyVM");
+    throw e;
+  }
 }
 
 function installGlobal(repoDir) {
@@ -381,8 +433,7 @@ async function main() {
 
   const targetDir = resolveTargetDir(options);
 
-  console.log("StacyVM setup");
-  console.log(`Target: ${targetDir}`);
+  console.log("\x1b[1m\x1b[38;2;255;166;12mStacyVM Setup\x1b[0m\n");
 
   let serveProcess = null;
   let isCleanedUp = false;
