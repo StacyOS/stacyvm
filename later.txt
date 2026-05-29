@@ -1,0 +1,1 @@
+Full bidirectional PTY (stdin/resize/signals) is a tracked follow-up, not in this effort.

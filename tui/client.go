@@ -1,12 +1,14 @@
 package tui
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -49,9 +51,12 @@ type healthData struct {
 }
 
 type providerData struct {
-	Name      string `json:"name"`
-	IsDefault bool   `json:"is_default"`
-	Healthy   bool   `json:"healthy"`
+	Name         string   `json:"name"`
+	IsDefault    bool     `json:"default"`
+	Healthy      bool     `json:"healthy"`
+	LatencyMS    int64    `json:"latency_ms"`
+	Capabilities []string `json:"capabilities"`
+	RuntimeCount *int     `json:"runtime_count"`
 }
 
 type templateData struct {
@@ -259,6 +264,120 @@ func (c *apiClient) deleteTemplate(name string) error {
 		return fmt.Errorf("delete template failed (HTTP %d)", code)
 	}
 	return nil
+}
+
+// systemStats fetches real host telemetry from GET /api/v1/system/stats.
+func (c *apiClient) systemStats() (hostSnapshot, error) {
+	data, code, err := c.do("GET", "/api/v1/system/stats", nil)
+	if err != nil {
+		return hostSnapshot{}, err
+	}
+	if code != 200 {
+		return hostSnapshot{}, fmt.Errorf("system stats failed (HTTP %d)", code)
+	}
+	var raw struct {
+		CPUPct   float64 `json:"cpu_pct"`
+		MemPct   float64 `json:"mem_pct"`
+		DiskPct  float64 `json:"disk_pct"`
+		NetRxBps float64 `json:"net_rx_bps"`
+		NetTxBps float64 `json:"net_tx_bps"`
+		Load1    float64 `json:"load1"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return hostSnapshot{}, err
+	}
+	return hostSnapshot{
+		cpuPct:   raw.CPUPct,
+		memPct:   raw.MemPct,
+		diskPct:  raw.DiskPct,
+		netRxBps: raw.NetRxBps,
+		netTxBps: raw.NetTxBps,
+		load1:    raw.Load1,
+		ok:       true,
+	}, nil
+}
+
+// sandboxStats fetches real per-sandbox stats from /sandboxes/{id}/stats.
+func (c *apiClient) sandboxStats(id string) (sandboxStat, error) {
+	data, code, err := c.do("GET", "/api/v1/sandboxes/"+id+"/stats", nil)
+	if err != nil {
+		return sandboxStat{}, err
+	}
+	if code != 200 {
+		return sandboxStat{}, fmt.Errorf("sandbox stats failed (HTTP %d)", code)
+	}
+	var raw struct {
+		Supported   bool    `json:"supported"`
+		CPUPct      float64 `json:"cpu_pct"`
+		MemBytes    uint64  `json:"mem_bytes"`
+		MemLimit    uint64  `json:"mem_limit_bytes"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return sandboxStat{}, err
+	}
+	return sandboxStat{
+		cpuPct:    raw.CPUPct,
+		memBytes:  raw.MemBytes,
+		memLimit:  raw.MemLimit,
+		supported: raw.Supported,
+	}, nil
+}
+
+// subscribeEvents connects to the SSE event bus and pushes parsed events onto
+// ch. It blocks forever, reconnecting on error — run it in a goroutine.
+func (c *apiClient) subscribeEvents(ch chan<- eventEntry) {
+	for {
+		c.readEventStream(ch)
+		time.Sleep(2 * time.Second) // reconnect backoff
+	}
+}
+
+func (c *apiClient) readEventStream(ch chan<- eventEntry) {
+	req, err := http.NewRequest("GET", c.baseURL+"/api/v1/events", nil)
+	if err != nil {
+		return
+	}
+	req.Header.Set("Accept", "text/event-stream")
+	if c.apiKey != "" {
+		req.Header.Set("X-API-Key", c.apiKey)
+	}
+	// No client timeout for the stream.
+	streamClient := &http.Client{}
+	resp, err := streamClient.Do(req)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		return
+	}
+
+	scanner := bufio.NewScanner(resp.Body)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !strings.HasPrefix(line, "data:") {
+			continue
+		}
+		payload := strings.TrimSpace(strings.TrimPrefix(line, "data:"))
+		if payload == "" {
+			continue
+		}
+		var ev struct {
+			Type      string    `json:"type"`
+			SandboxID string    `json:"sandbox_id"`
+			Timestamp time.Time `json:"timestamp"`
+		}
+		if err := json.Unmarshal([]byte(payload), &ev); err != nil {
+			continue
+		}
+		kind, detail := kindFromEventType(ev.Type, ev.SandboxID)
+		ts := ev.Timestamp
+		if ts.IsZero() {
+			ts = time.Now()
+		}
+		ch <- eventEntry{ts: ts, kind: kind, detail: detail}
+	}
 }
 
 func (c *apiClient) patchConfig(payload map[string]interface{}) (string, error) {

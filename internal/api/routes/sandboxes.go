@@ -66,6 +66,7 @@ func (s *SandboxRoutes) RoutesWithScopeEnforcement(enforce bool) chi.Router {
 		r.With(readScope).Get("/files/stat", s.StatFile)
 		r.With(readScope).Get("/files/glob", s.GlobFiles)
 		r.With(readScope).Get("/logs", s.ConsoleLog)
+		r.With(readScope).Get("/stats", s.Stats)
 		// Mutating.
 		r.With(apiScope).Delete("/", s.Destroy)
 		r.With(apiScope).Post("/extend", s.Extend)
@@ -473,6 +474,39 @@ func (s *SandboxRoutes) ListFiles(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, files)
+}
+
+// Stats returns live per-sandbox resource usage (CPU%, memory).
+//
+//	@Summary		Sandbox stats
+//	@Description	Return live CPU% and memory usage for a sandbox when the provider supports it
+//	@Tags			sandboxes
+//	@Produce		json
+//	@Param			sandboxID	path		string	true	"Sandbox ID"
+//	@Success		200			{object}	map[string]interface{}
+//	@Failure		404			{object}	httputil.APIError
+//	@Security		ApiKeyAuth
+//	@Router			/sandboxes/{sandboxID}/stats [get]
+func (s *SandboxRoutes) Stats(w http.ResponseWriter, r *http.Request) {
+	id := chi.URLParam(r, "sandboxID")
+	if !s.checkTenantAccess(w, r, id) {
+		return
+	}
+	stats, err := s.manager.Stats(r.Context(), id)
+	if err != nil {
+		writeRouteError(w, err)
+		return
+	}
+	if stats == nil {
+		httputil.WriteJSON(w, http.StatusOK, map[string]interface{}{"supported": false})
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, map[string]interface{}{
+		"supported":       true,
+		"cpu_pct":         stats.CPUPercent,
+		"mem_bytes":       stats.MemoryBytes,
+		"mem_limit_bytes": stats.MemoryLimitBytes,
+	})
 }
 
 // DeleteFile deletes a file from a sandbox.

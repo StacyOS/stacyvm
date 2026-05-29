@@ -137,6 +137,20 @@ type RuntimeSandboxLister interface {
 	ListRuntimeSandboxes(ctx context.Context) ([]RuntimeSandbox, error)
 }
 
+// SandboxStats holds live resource usage for a single sandbox.
+type SandboxStats struct {
+	CPUPercent       float64
+	MemoryBytes      uint64
+	MemoryLimitBytes uint64
+}
+
+// StatsReporter is an optional interface for providers that can report live
+// per-sandbox resource usage (CPU%, memory). Providers that cannot (proot,
+// firecracker today) simply don't implement it; callers fall back to "—".
+type StatsReporter interface {
+	Stats(ctx context.Context, sandboxID string) (*SandboxStats, error)
+}
+
 func normalizeExecMode(mode string) (string, error) {
 	switch strings.TrimSpace(mode) {
 	case "", ExecModeShell:

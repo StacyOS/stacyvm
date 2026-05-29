@@ -134,6 +134,24 @@ type Model struct {
 	// Config
 	configCursor int
 
+	// Telemetry (real data → client-side ring buffers)
+	host     hostSnapshot
+	sbStats  map[string]sandboxStat
+	teleCPU  *ring
+	teleMEM  *ring
+	teleLOAD *ring
+	teleDISK *ring
+	teleNET  *ring
+	kpiSB    *ring
+	kpiTmpl  *ring
+	kpiProv  *ring
+	clock    time.Time
+	cursorOn bool
+
+	// Event stream (SSE bus)
+	events  []eventEntry
+	eventCh chan eventEntry
+
 	// Animation
 	slideSpring   harmonica.Spring
 	slidePos      float64
@@ -217,6 +235,20 @@ func NewModel(serverURL, apiKey string) Model {
 		logs: make([]string, 0, 100),
 		slideSpring:  harmonica.NewSpring(harmonica.FPS(60), 12.0, 0.8),
 		loaderSpring: harmonica.NewSpring(harmonica.FPS(60), 6.0, 0.2), // bouncy spring
+
+		// Telemetry rings + event stream
+		sbStats:  map[string]sandboxStat{},
+		teleCPU:  newRing(8),
+		teleMEM:  newRing(8),
+		teleLOAD: newRing(8),
+		teleDISK: newRing(8),
+		teleNET:  newRing(8),
+		kpiSB:    newRing(8),
+		kpiTmpl:  newRing(8),
+		kpiProv:  newRing(8),
+		cursorOn: true,
+		events:   make([]eventEntry, 0, 200),
+		eventCh:  make(chan eventEntry, 64),
 	}
 }
 
@@ -227,6 +259,11 @@ func (m Model) Init() tea.Cmd {
 		m.fetchProviders(),
 		m.fetchTemplates(),
 		m.tick(),
+		m.fetchHostStats(),
+		teleTick(),
+		blinkTick(),
+		m.streamEvents(),
+		m.waitEvent(),
 	)
 }
 
@@ -243,6 +280,28 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tickMsg:
 		return m, tea.Batch(m.fetchSandboxes(), m.fetchHealth(), m.fetchProviders(), m.fetchTemplates(), m.tick())
+
+	case teleTickMsg:
+		m.clock = time.Time(msg)
+		m.pushKPI()
+		return m, tea.Batch(m.fetchHostStats(), m.fetchAllSandboxStats(), teleTick())
+
+	case blinkMsg:
+		m.cursorOn = !m.cursorOn
+		return m, blinkTick()
+
+	case hostStatsMsg:
+		m.host = hostSnapshot(msg)
+		m.pushTelemetry()
+		return m, nil
+
+	case sandboxStatsMsg:
+		m.sbStats[msg.id] = msg.stat
+		return m, nil
+
+	case eventMsg:
+		m.addEvent(eventEntry(msg))
+		return m, m.waitEvent()
 
 	case frameMsg:
 		animating := false
@@ -680,230 +739,47 @@ func (m Model) View() string {
 
 	if m.width < 90 || m.height < 25 {
 		msg := fmt.Sprintf("Terminal too small: %dx%d\nPlease resize to at least 90x25 to use StacyVM TUI.", m.width, m.height)
-		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, errorStyle.Render(msg))
+		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, stErr.Render(msg))
 	}
 
 	w := m.width
 	h := m.height
 
-	// Create Sidebar (fixed width 25)
-	sidebarWidth := 25
-	contentWidth := w - sidebarWidth - 2 // 2 for padding
+	// Shared chrome: full-width telemetry ribbon, horizontal nav, status footer.
+	ribbon := m.renderRibbon(w)
+	nav := m.renderNav(w)
+	footer := m.renderStatusFooter(w)
 
-	sidebarStyle := lipgloss.NewStyle().
-		Width(sidebarWidth).
-		Height(h).
-		Padding(1, 1).
-		Border(lipgloss.NormalBorder(), false, true, false, false).
-		BorderForeground(lipgloss.Color("#444444"))
-
-	// Logo
-	logoStyle := lipgloss.NewStyle().
-		Bold(true).
-		Foreground(lipgloss.Color("#0C0C0C")).
-		Background(lipgloss.Color("#FFA60C")).
-		Padding(0, 1).
-		MarginBottom(2)
-	logo := logoStyle.Render(" STACYVM ")
-
-	// Nav items
-	tabs := []string{"[1] Dashboard", "[2] Sandboxes", "[3] Templates", "[4] Providers", "[5] Logs", "[6] Config"}
-	icons := []string{"🏠", "📦", "🧩", "⚡", "📝", "⚙️"}
-
-	var nav strings.Builder
-	for i, t := range tabs {
-		label := fmt.Sprintf("%s %s", icons[i], t)
-		if tab(i) == m.activeTab {
-			nav.WriteString(lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#FFA60C")).
-				Bold(true).
-				MarginBottom(1).
-				Render("█ " + label) + "\n")
-		} else {
-			nav.WriteString(lipgloss.NewStyle().
-				Foreground(lipgloss.Color("#888888")).
-				MarginBottom(1).
-				Render("  " + label) + "\n")
-		}
-	}
-
-	// Health status at bottom of sidebar
-	healthStr := ""
-	if m.health != nil {
-		healthStr = successStyle.Render("● ONLINE") + "\n" + dimStyle.Render("v"+m.health.Version)
-	} else {
-		healthStr = errorStyle.Render("● OFFLINE")
-	}
-	// push health to bottom using margin
-	navHeight := len(tabs) * 2
-	healthMargin := h - navHeight - 8
-	if healthMargin < 0 {
-		healthMargin = 0
-	}
-	healthBox := lipgloss.NewStyle().MarginTop(healthMargin).Render(healthStr)
-
-	sidebar := sidebarStyle.Render(lipgloss.JoinVertical(lipgloss.Left, logo, nav.String(), healthBox))
-
-	// Content area
-	contentHeight := h - 4 // subtract status bar/margins
-	if contentHeight < 5 {
-		contentHeight = 5
+	// Body fills the space between nav and footer (1 blank breathing row each side).
+	overhead := lipgloss.Height(ribbon) + lipgloss.Height(nav) + lipgloss.Height(footer) + 2
+	bodyH := h - overhead
+	if bodyH < 5 {
+		bodyH = 5
 	}
 
 	var content string
 	switch m.activeTab {
 	case tabDashboard:
-		content = m.viewDashboard(contentHeight, contentWidth)
+		content = m.viewDashboard(bodyH, w)
 	case tabSandboxes:
-		content = m.viewSandboxes(contentHeight, contentWidth)
+		content = m.viewSandboxes(bodyH, w)
 	case tabTemplates:
-		content = m.viewTemplates(contentHeight, contentWidth)
+		content = m.viewTemplates(bodyH, w)
 	case tabProviders:
-		content = m.viewProviders(contentHeight, contentWidth)
+		content = m.viewProviders(bodyH, w)
 	case tabLogs:
-		content = m.viewLogs(contentHeight, contentWidth)
+		content = m.viewLogs(bodyH, w)
 	case tabConfig:
-		content = m.viewConfig(contentHeight, contentWidth)
+		content = m.viewConfig(bodyH, w)
 	}
 
-	// Wrapper for content
-	contentWrapper := lipgloss.NewStyle().
-		Width(contentWidth).
-		Height(h - 3). 
-		Padding(1, 2).
-		Render(content)
+	// Clamp height so the footer stays pinned; content is already full-width.
+	body := lipgloss.NewStyle().Height(bodyH).MaxHeight(bodyH).Render(content)
 
-	// Status bar
-	statusStr := ""
-	if m.mode == modeConfirm {
-		statusStr = boldStyle.Render(m.confirmMsg)
-	} else if m.mode != modeNormal {
-		statusStr = dimStyle.Render("tab:next field  enter:submit  esc:cancel")
-	} else {
-		switch m.activeTab {
-		case tabDashboard:
-			statusStr = dimStyle.Render("1-6:nav  s:spawn  r:refresh  q:quit")
-		case tabSandboxes:
-			statusStr = dimStyle.Render("j/k:nav  s:spawn  e:exec  f:files  d:destroy  q:quit")
-		case tabTemplates:
-			statusStr = dimStyle.Render("j/k:nav  n:new  s:spawn  d:delete  q:quit")
-		case tabProviders, tabLogs, tabConfig:
-			statusStr = dimStyle.Render("r:refresh  q:quit")
-		}
-	}
-	if m.statusMsg != "" {
-		statusStr += "  " + successStyle.Render(m.statusMsg)
-	} else if m.lastError != "" {
-		statusStr += "  " + errorStyle.Render(truncate(m.lastError, 50))
-	}
-	
-	statsLeft := dimStyle.Render(fmt.Sprintf("%d sandboxes | %d templates", len(m.sandboxes), len(m.templateList)))
-	
-	// Right align status, left align stats
-	statusBarPad := contentWidth - lipgloss.Width(statsLeft) - lipgloss.Width(statusStr) - 4
-	if statusBarPad < 0 {
-		statusBarPad = 0
-	}
-	statusBarContent := statsLeft + strings.Repeat(" ", statusBarPad) + statusStr
-
-	statusBar := lipgloss.NewStyle().
-		Width(contentWidth).
-		Padding(0, 2).
-		Border(lipgloss.NormalBorder(), true, false, false, false). // Top border
-		BorderForeground(lipgloss.Color("#444444")).
-		Render(statusBarContent)
-
-	rightSide := lipgloss.JoinVertical(lipgloss.Left, contentWrapper, statusBar)
-
-	return lipgloss.JoinHorizontal(lipgloss.Top, sidebar, rightSide)
+	return lipgloss.JoinVertical(lipgloss.Left, ribbon, "", nav, body, footer)
 }
 
-// ── Dashboard View ───────────────────────────────────────
-
-func (m Model) viewDashboard(height, width int) string {
-	var b strings.Builder
-
-	// Stats row
-	active := 0
-	for _, sb := range m.sandboxes {
-		if sb.State == "running" {
-			active++
-		}
-	}
-	provCount := len(m.providerList)
-	tmplCount := len(m.templateList)
-
-	b.WriteString("\n")
-	stats := []string{
-		cardStyle.Render(fmt.Sprintf(" %s\n %s",
-			boldStyle.Render("Active Sandboxes"),
-			gaugeStyle.Render(fmt.Sprintf("%d", active)))),
-		cardStyle.Render(fmt.Sprintf(" %s\n %s",
-			boldStyle.Render("Templates"),
-			gaugeStyle.Render(fmt.Sprintf("%d", tmplCount)))),
-		cardStyle.Render(fmt.Sprintf(" %s\n %s",
-			boldStyle.Render("Providers"),
-			gaugeStyle.Render(fmt.Sprintf("%d", provCount)))),
-	}
-	if len(m.logs) > 0 {
-		lastLog := m.logs[len(m.logs)-1]
-		stats = append(stats, cardStyle.Render(fmt.Sprintf(" %s\n %s",
-			boldStyle.Render("Recent Activity"),
-			dimStyle.Render(truncate(lastLog, width/3)))))
-	}
-	b.WriteString("  " + lipgloss.JoinHorizontal(lipgloss.Top, stats...) + "\n\n")
-
-	// Resource summary
-	totalMem := 0
-	totalCPU := 0
-	for _, sb := range m.sandboxes {
-		if sb.State == "running" {
-			totalMem += sb.MemoryMB
-			totalCPU += sb.VCPUs
-		}
-	}
-	if active > 0 {
-		b.WriteString(boldStyle.Render("  Resource Usage") + "\n")
-		b.WriteString(fmt.Sprintf("  CPU cores: %s    Memory: %s\n",
-			gaugeStyle.Render(fmt.Sprintf("%d", totalCPU)),
-			gaugeStyle.Render(fmt.Sprintf("%d MB", totalMem))))
-		b.WriteString("\n")
-	}
-
-	// Recent sandboxes
-	b.WriteString(boldStyle.Render("  Recent Sandboxes") + "\n")
-	if len(m.sandboxes) == 0 {
-		b.WriteString(dimStyle.Render("  No sandboxes. Press [s] to spawn one.\n"))
-	} else {
-		max := min(5, len(m.sandboxes))
-		for _, sb := range m.sandboxes[:max] {
-			stateStr := stateIcon(sb.State) + " " + sb.State
-			ttlStr := formatTTL(sb.ExpiresAt)
-			b.WriteString(fmt.Sprintf("  %-12s  %-10s  %-20s  %s\n",
-				dimStyle.Render(sb.ID), stateStr, truncate(sb.Image, 20), ttlStr))
-		}
-	}
-
-	b.WriteString("\n")
-
-	// Quick spawn overlay
-	if m.mode == modeSpawn {
-		b.WriteString(boldStyle.Render("  Quick Spawn\n"))
-		b.WriteString(fmt.Sprintf("  Image: %s\n", m.inputs[0].View()))
-		b.WriteString(fmt.Sprintf("  TTL:   %s\n", m.inputs[1].View()))
-	}
-
-	// Recent activity
-	if len(m.logs) > 0 {
-		b.WriteString(boldStyle.Render("  Recent Activity") + "\n")
-		start := max(0, len(m.logs)-3)
-		for _, log := range m.logs[start:] {
-			b.WriteString(dimStyle.Render("  " + truncate(log, width-6)) + "\n")
-		}
-	}
-
-	return b.String()
-}
+// viewDashboard lives in dashboard.go (Mission Control restyle).
 
 // ── Sandboxes View ───────────────────────────────────────
 

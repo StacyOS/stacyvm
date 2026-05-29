@@ -2790,6 +2790,25 @@ func (m *Manager) getSandboxAndProvider(id string) (*Sandbox, providers.Provider
 	return sb, prov, nil
 }
 
+// Stats returns live per-sandbox resource usage when the provider supports it.
+// Returns (nil, nil) when stats are unavailable (remote-owned sandbox or a
+// provider that doesn't implement StatsReporter) so callers render a
+// placeholder instead of surfacing an error.
+func (m *Manager) Stats(ctx context.Context, sandboxID string) (*providers.SandboxStats, error) {
+	sb, prov, err := m.getSandboxAndProvider(sandboxID)
+	if err != nil {
+		return nil, err
+	}
+	if m.isRemoteOwnedSandbox(sb) {
+		return nil, nil
+	}
+	reporter, ok := prov.(providers.StatsReporter)
+	if !ok {
+		return nil, nil
+	}
+	return reporter.Stats(ctx, m.resolveVMID(sb))
+}
+
 func (m *Manager) getProvider(id string) (providers.Provider, error) {
 	m.mu.RLock()
 	sb, ok := m.sandboxes[id]

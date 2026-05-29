@@ -57,6 +57,7 @@ func (s *SystemRoutes) Routes() chi.Router {
 	r.Get("/diagnostics", s.Diagnostics)
 	r.Get("/metrics", s.Metrics)
 	r.Get("/metrics/prometheus", s.PrometheusMetrics)
+	r.Get("/system/stats", s.HostStats)
 	r.Get("/events", s.Events)
 	r.Patch("/config", s.UpdateConfig)
 	return r

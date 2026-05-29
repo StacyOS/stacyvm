@@ -118,6 +118,53 @@ func (d *DockerProvider) Healthy(ctx context.Context) bool {
 	return err == nil
 }
 
+// Stats reports live CPU% and memory for a sandbox via the Docker stats API.
+// The container name equals the sandbox ID. Implements providers.StatsReporter.
+func (d *DockerProvider) Stats(ctx context.Context, sandboxID string) (*SandboxStats, error) {
+	if _, err := d.getSandbox(sandboxID); err != nil {
+		return nil, err
+	}
+	resp, err := d.cli.ContainerStats(ctx, sandboxID, false)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var v container.StatsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&v); err != nil {
+		return nil, err
+	}
+
+	// CPU% = (Δcontainer / Δsystem) * onlineCPUs * 100, per the Docker docs.
+	cpuPct := 0.0
+	cpuDelta := float64(v.CPUStats.CPUUsage.TotalUsage) - float64(v.PreCPUStats.CPUUsage.TotalUsage)
+	sysDelta := float64(v.CPUStats.SystemUsage) - float64(v.PreCPUStats.SystemUsage)
+	if cpuDelta > 0 && sysDelta > 0 {
+		ncpu := float64(v.CPUStats.OnlineCPUs)
+		if ncpu == 0 {
+			ncpu = float64(len(v.CPUStats.CPUUsage.PercpuUsage))
+		}
+		if ncpu == 0 {
+			ncpu = 1
+		}
+		cpuPct = (cpuDelta / sysDelta) * ncpu * 100
+	}
+
+	// Memory: subtract page cache when reported (cgroup v1 "cache" / v2 "file").
+	memUsage := v.MemoryStats.Usage
+	if cache, ok := v.MemoryStats.Stats["cache"]; ok && cache <= memUsage {
+		memUsage -= cache
+	} else if file, ok := v.MemoryStats.Stats["file"]; ok && file <= memUsage {
+		memUsage -= file
+	}
+
+	return &SandboxStats{
+		CPUPercent:       cpuPct,
+		MemoryBytes:      memUsage,
+		MemoryLimitBytes: v.MemoryStats.Limit,
+	}, nil
+}
+
 func (d *DockerProvider) Spawn(ctx context.Context, opts SpawnOptions) (string, error) {
 	image := opts.Image
 	if image == "" {
