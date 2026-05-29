@@ -5,19 +5,18 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/huh"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
 
 var (
-	setupTitleStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FF6600")).MarginBottom(1)
-	promptStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#00CCFF"))
-	selectedStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#00FF00")).Bold(true)
-	normalStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#CCCCCC"))
+	setupTitleStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFA60C")).MarginBottom(1)
+	successStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#22C55E")).Bold(true)
+	warningStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFA60C"))
+	errorStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF3333"))
 )
 
 func newSetupCmd() *cobra.Command {
@@ -25,195 +24,125 @@ func newSetupCmd() *cobra.Command {
 		Use:   "setup",
 		Short: "Interactive setup wizard for StacyVM",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			m := initialSetupModel()
-			p := tea.NewProgram(m)
-			if _, err := p.Run(); err != nil {
-				return err
-			}
-			return nil
+			return runSetup()
 		},
 	}
 	return cmd
 }
 
-type setupStep int
+func runSetup() error {
+	fmt.Println(setupTitleStyle.Render("StacyVM Interactive Setup"))
 
-const (
-	stepProvider setupStep = iota
-	stepRuntime
-	stepPreviewDomain
-	stepDone
-)
-
-type setupModel struct {
-	step           setupStep
-	providerOpts   []string
-	providerCursor int
-	runtimeOpts    []string
-	runtimeCursor  int
-	previewDomain  string
-
-	// Host availability checks
-	dockerAvailable bool
-	kvmAvailable    bool
-	runscAvailable  bool
-	kataAvailable   bool
-}
-
-func initialSetupModel() setupModel {
 	_, dockerErr := exec.LookPath("docker")
 	_, runscErr := exec.LookPath("runsc")
 	_, kataErr := exec.LookPath("kata-runtime")
-
-	// Check if KVM is available
+	
 	kvmAvailable := false
 	if _, err := os.Stat("/dev/kvm"); err == nil {
 		kvmAvailable = true
 	}
 
-	return setupModel{
-		step:            stepProvider,
-		providerOpts:    []string{"Docker (Recommended)", "Firecracker (Advanced)", "PRoot (Userspace)"},
-		runtimeOpts:     []string{"runc (Standard)", "runsc (gVisor)", "kata (Kata Containers)"},
-		previewDomain:   "localhost",
-		dockerAvailable: dockerErr == nil,
-		kvmAvailable:    kvmAvailable,
-		runscAvailable:  runscErr == nil,
-		kataAvailable:   kataErr == nil,
+	var provider string
+	var runtime string
+	var domain string = "localhost"
+
+	// Define theme
+	t := huh.ThemeCharm()
+	t.Focused.Base = t.Focused.Base.BorderForeground(lipgloss.Color("#FFA60C"))
+	t.Focused.Title = t.Focused.Title.Foreground(lipgloss.Color("#FFA60C")).Bold(true)
+	t.Focused.SelectedOption = t.Focused.SelectedOption.Foreground(lipgloss.Color("#22C55E"))
+	t.Focused.Description = t.Focused.Description.Foreground(lipgloss.Color("#888888"))
+
+	dockerLabel := "Docker (Recommended) - Works on macOS, Windows (WSL), and Linux."
+	if dockerErr != nil {
+		dockerLabel += " ⚠️ Docker was not found in your PATH!"
 	}
-}
+	firecrackerLabel := "Firecracker (Advanced) - Requires native Linux host with KVM enabled. True microVMs."
+	if !kvmAvailable {
+		firecrackerLabel += " ⚠️ KVM is not available!"
+	}
+	prootLabel := "PRoot (Userspace) - Zero privileges needed. Fallback option."
 
-func (m setupModel) Init() tea.Cmd {
-	return nil
-}
+	// Create Form
+	form := huh.NewForm(
+		huh.NewGroup(
+			huh.NewSelect[string]().
+				Title("Select isolation provider:").
+				Options(
+					huh.NewOption(dockerLabel, "docker"),
+					huh.NewOption(firecrackerLabel, "firecracker"),
+					huh.NewOption(prootLabel, "proot"),
+				).
+				Value(&provider),
+		),
+	).WithTheme(t)
 
-func (m setupModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "ctrl+c", "q":
-			return m, tea.Quit
-		case "up", "k":
-			if m.step == stepProvider && m.providerCursor > 0 {
-				m.providerCursor--
-			} else if m.step == stepRuntime && m.runtimeCursor > 0 {
-				m.runtimeCursor--
-			}
-		case "down", "j":
-			if m.step == stepProvider && m.providerCursor < len(m.providerOpts)-1 {
-				m.providerCursor++
-			} else if m.step == stepRuntime && m.runtimeCursor < len(m.runtimeOpts)-1 {
-				m.runtimeCursor++
-			}
-		case "enter":
-			if m.step == stepProvider {
-				if m.providerCursor == 0 {
-					m.step = stepRuntime
-				} else {
-					m.step = stepPreviewDomain
-				}
-			} else if m.step == stepRuntime {
-				m.step = stepPreviewDomain
-			} else if m.step == stepPreviewDomain {
-				m.saveConfig()
-				m.step = stepDone
-				return m, tea.Quit
-			}
+	err := form.Run()
+	if err != nil {
+		return err
+	}
+
+	// If Docker, ask for runtime
+	if provider == "docker" {
+		runcLabel := "Standard container isolation (default)."
+		runscLabel := "runsc (gVisor) - Requires manual installation. Strong sandboxing."
+		if runscErr != nil {
+			runscLabel += " ⚠️ 'runsc' binary not found!"
+		}
+		kataLabel := "kata (Kata Containers) - Requires manual installation. VM-level isolation."
+		if kataErr != nil {
+			kataLabel += " ⚠️ 'kata-runtime' binary not found!"
+		}
+
+		runtimeForm := huh.NewForm(
+			huh.NewGroup(
+				huh.NewSelect[string]().
+					Title("Select Docker Runtime Security:").
+					Options(
+						huh.NewOption(runcLabel, "runc"),
+						huh.NewOption(runscLabel, "runsc"),
+						huh.NewOption(kataLabel, "kata"),
+					).
+					Value(&runtime),
+			),
+		).WithTheme(t)
+		
+		err = runtimeForm.Run()
+		if err != nil {
+			return err
 		}
 	}
-	return m, nil
-}
 
-func (m setupModel) saveConfig() {
+	// Domain
+	domainForm := huh.NewForm(
+		huh.NewGroup(
+			huh.NewInput().
+				Title("Setup preview domain").
+				Value(&domain),
+		),
+	).WithTheme(t)
+	
+	err = domainForm.Run()
+	if err != nil {
+		return err
+	}
+
+	// Save Config
 	home, _ := os.UserHomeDir()
 	configDir := filepath.Join(home, ".stacyvm")
 	os.MkdirAll(configDir, 0755)
 
 	viper.SetConfigFile(filepath.Join(configDir, "config.yaml"))
-
-	// Set defaults
-	viper.Set("server.preview_domain", m.previewDomain)
-
-	providerSelection := m.providerOpts[m.providerCursor]
-	if strings.Contains(providerSelection, "Docker") {
-		viper.Set("providers.default", "docker")
-		runtimeSelection := "runc"
-		if m.runtimeCursor == 1 {
-			runtimeSelection = "runsc"
-		} else if m.runtimeCursor == 2 {
-			runtimeSelection = "kata"
-		}
-		viper.Set("providers.docker.runtime", runtimeSelection)
-	} else if strings.Contains(providerSelection, "Firecracker") {
-		viper.Set("providers.default", "firecracker")
-	} else if strings.Contains(providerSelection, "PRoot") {
-		viper.Set("providers.default", "proot")
+	viper.Set("server.preview_domain", domain)
+	viper.Set("providers.default", provider)
+	if provider == "docker" {
+		viper.Set("providers.docker.runtime", runtime)
 	}
 
 	viper.WriteConfigAs(filepath.Join(configDir, "config.yaml"))
-}
 
-func (m setupModel) View() string {
-	if m.step == stepDone {
-		return setupTitleStyle.Render("✨ StacyVM Setup Complete!") + "\nConfig saved to ~/.stacyvm/config.yaml\n"
-	}
+	fmt.Println("\n" + successStyle.Render("✨ StacyVM Setup Complete!"))
+	fmt.Println("Config saved to ~/.stacyvm/config.yaml")
 
-	var b strings.Builder
-	b.WriteString(setupTitleStyle.Render("StacyVM Interactive Setup"))
-	b.WriteString("\n\n")
-
-	if m.step == stepProvider {
-		b.WriteString(promptStyle.Render("? Select isolation provider:"))
-		b.WriteString("\n")
-		providerDescs := []string{
-			"Works on macOS, Windows (WSL), and Linux.",
-			"Requires native Linux host with KVM enabled. True microVMs.",
-			"Zero privileges needed. Fallback option if others fail.",
-		}
-		for i, opt := range m.providerOpts {
-			cursor := "  "
-			style := normalStyle
-			warning := ""
-			if m.providerCursor == i {
-				cursor = "> "
-				style = selectedStyle
-				if i == 0 && !m.dockerAvailable {
-					warning = "\n     " + lipgloss.NewStyle().Foreground(lipgloss.Color("#FF3333")).Render("⚠️  Docker was not found in your PATH!")
-				} else if i == 1 && !m.kvmAvailable {
-					warning = "\n     " + lipgloss.NewStyle().Foreground(lipgloss.Color("#FF3333")).Render("⚠️  KVM is not available! Firecracker requires native Linux with /dev/kvm.")
-				}
-			}
-			b.WriteString(fmt.Sprintf("%s%s\n     %s%s\n", cursor, style.Render(opt), lipgloss.NewStyle().Foreground(lipgloss.Color("#777777")).Render(providerDescs[i]), warning))
-		}
-	} else if m.step == stepRuntime {
-		b.WriteString(promptStyle.Render("? Select Docker Runtime Security:"))
-		b.WriteString("\n")
-		runtimeDescs := []string{
-			"Standard container isolation (default).",
-			"Requires manual 'runsc' installation & Docker config on host. Strong sandboxing.",
-			"Requires manual 'kata-runtime' installation. VM-level isolation.",
-		}
-		for i, opt := range m.runtimeOpts {
-			cursor := "  "
-			style := normalStyle
-			warning := ""
-			if m.runtimeCursor == i {
-				cursor = "> "
-				style = selectedStyle
-				if i == 1 && !m.runscAvailable {
-					warning = "\n     " + lipgloss.NewStyle().Foreground(lipgloss.Color("#FFAA00")).Render("⚠️  'runsc' (gVisor) binary not found! You must install it manually first.")
-				} else if i == 2 && !m.kataAvailable {
-					warning = "\n     " + lipgloss.NewStyle().Foreground(lipgloss.Color("#FFAA00")).Render("⚠️  'kata-runtime' binary not found! You must install it manually first.")
-				}
-			}
-			b.WriteString(fmt.Sprintf("%s%s\n     %s%s\n", cursor, style.Render(opt), lipgloss.NewStyle().Foreground(lipgloss.Color("#777777")).Render(runtimeDescs[i]), warning))
-		}
-	} else if m.step == stepPreviewDomain {
-		b.WriteString(promptStyle.Render("? Setup preview domain [press enter]: "))
-		b.WriteString(m.previewDomain)
-		b.WriteString("\n")
-	}
-
-	b.WriteString("\n(Use arrow keys to move, Enter to select, q to quit)\n")
-	return b.String()
+	return nil
 }

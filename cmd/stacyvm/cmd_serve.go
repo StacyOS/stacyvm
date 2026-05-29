@@ -38,7 +38,7 @@ func runServe() error {
 	// Logger
 	var logger zerolog.Logger
 	if cfg.Logging.Format == "pretty" {
-		logger = zerolog.New(zerolog.ConsoleWriter{Out: os.Stdout}).With().Timestamp().Logger()
+		logger = zerolog.New(NewCharmWriter()).With().Timestamp().Logger()
 	} else {
 		logger = zerolog.New(os.Stdout).With().Timestamp().Logger()
 	}

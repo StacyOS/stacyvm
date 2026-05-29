@@ -2,29 +2,33 @@ package tui
 
 import (
 	"fmt"
+	"math"
 	"strings"
 	"time"
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/glamour"
+	"github.com/charmbracelet/harmonica"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/lipgloss/table"
 )
 
 // Styles
 var (
 	titleStyle = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(lipgloss.Color("#FF6600")).
-			Background(lipgloss.Color("#1a1a2e")).
+			Foreground(lipgloss.Color("#0C0C0C")).
+			Background(lipgloss.Color("#FFA60C")).
 			Padding(0, 2)
 
 	statusBarStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#FFFDF5")).
-			Background(lipgloss.Color("#333366"))
+			Foreground(lipgloss.Color("#F9F7F3")).
+			Background(lipgloss.Color("#0C0C0C"))
 
 	tabActiveStyle = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(lipgloss.Color("#FF6600")).
+			Foreground(lipgloss.Color("#FFA60C")).
 			Underline(true).
 			Padding(0, 1)
 
@@ -34,24 +38,24 @@ var (
 
 	selectedRowStyle = lipgloss.NewStyle().
 				Bold(true).
-				Foreground(lipgloss.Color("#FF6600"))
+				Foreground(lipgloss.Color("#FFA60C"))
 
 	normalRowStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.Color("#CCCCCC"))
+			Foreground(lipgloss.Color("#F9F7F3"))
 
 	headerStyle = lipgloss.NewStyle().
 			Bold(true).
-			Foreground(lipgloss.Color("#AAAAFF")).
+			Foreground(lipgloss.Color("#FFA60C")).
 			Underline(true)
 
-	successStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#00FF00"))
-	errorStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF0000"))
-	warnStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFAA00"))
-	dimStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#666666"))
-	boldStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#FFFFFF"))
-	outputStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#88CCFF"))
-	cardStyle    = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#444466")).Padding(0, 1)
-	gaugeStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#00CCFF"))
+	successStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("#22C55E"))
+	errorStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#FF3333"))
+	warnStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("#FFA60C"))
+	dimStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("#888888"))
+	boldStyle    = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("#F9F7F3"))
+	outputStyle  = lipgloss.NewStyle().Foreground(lipgloss.Color("#D7F6E2"))
+	cardStyle    = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(lipgloss.Color("#FFA60C")).Padding(0, 1)
+	gaugeStyle   = lipgloss.NewStyle().Foreground(lipgloss.Color("#22C55E"))
 )
 
 type tab int
@@ -73,6 +77,8 @@ const (
 	modeConfirm
 	modeExec
 	modeSpawn
+	modeSpawning
+	modeSandboxAction
 	modeSpawnTemplate
 	modeCreateTemplate
 	modeConfigEdit
@@ -92,6 +98,7 @@ type fileReadMsg string
 type templateCreatedMsg struct{}
 type templateDeletedMsg string
 type errMsg error
+type frameMsg time.Time
 
 type Model struct {
 	client  *apiClient
@@ -126,6 +133,19 @@ type Model struct {
 
 	// Config
 	configCursor int
+
+	// Animation
+	slideSpring   harmonica.Spring
+	slidePos      float64
+	slideVelocity float64
+
+	modalPos      float64
+	modalVelocity float64
+
+	loaderSpring   harmonica.Spring
+	loaderPos      float64
+	loaderVelocity float64
+	loaderTarget   float64
 }
 
 func NewModel(serverURL, apiKey string) Model {
@@ -195,6 +215,8 @@ func NewModel(serverURL, apiKey string) Model {
 			tmplNameInput, tmplImageInput, tmplDescInput, tmplMemInput, tmplCPUInput, tmplTTLInput,
 		},
 		logs: make([]string, 0, 100),
+		slideSpring:  harmonica.NewSpring(harmonica.FPS(60), 12.0, 0.8),
+		loaderSpring: harmonica.NewSpring(harmonica.FPS(60), 6.0, 0.2), // bouncy spring
 	}
 }
 
@@ -221,6 +243,34 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tickMsg:
 		return m, tea.Batch(m.fetchSandboxes(), m.fetchHealth(), m.fetchProviders(), m.fetchTemplates(), m.tick())
+
+	case frameMsg:
+		animating := false
+
+		if math.Abs(m.modalPos) > 0.5 || math.Abs(m.modalVelocity) > 0.5 {
+			m.modalPos, m.modalVelocity = m.slideSpring.Update(m.modalPos, m.modalVelocity, 0)
+			animating = true
+		} else {
+			m.modalPos = 0
+			m.modalVelocity = 0
+		}
+
+		if m.mode == modeSpawning {
+			m.loaderPos, m.loaderVelocity = m.loaderSpring.Update(m.loaderPos, m.loaderVelocity, m.loaderTarget)
+			if math.Abs(m.loaderPos-m.loaderTarget) < 1.0 {
+				if m.loaderTarget == 20.0 {
+					m.loaderTarget = 0.0
+				} else {
+					m.loaderTarget = 20.0
+				}
+			}
+			animating = true
+		}
+
+		if animating {
+			return m, tickFrame()
+		}
+		return m, nil
 
 	case sandboxesMsg:
 		m.sandboxes = []sandboxData(msg)
@@ -320,6 +370,68 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 	}
 
+	if m.mode == modeNormal {
+		// Global keys
+		if msg.String() >= "1" && msg.String() <= "6" {
+			newTab := tab(msg.String()[0] - '1')
+			if newTab != m.activeTab {
+				m.activeTab = newTab
+				return m, nil
+			}
+			return m, nil
+		}
+		
+		if key == "left" || key == "right" {
+			newTab := m.activeTab
+			if key == "left" && m.activeTab > 0 {
+				newTab--
+			} else if key == "right" && m.activeTab < tabConfig {
+				newTab++
+			}
+			if newTab != m.activeTab {
+				m.activeTab = newTab
+				return m, nil
+			}
+			return m, nil
+		}
+	}
+
+	// Sandbox Action Mode
+	if m.mode == modeSandboxAction {
+		switch key {
+		case "esc":
+			m.mode = modeNormal
+			return m, tickFrame()
+		case "e":
+			m.mode = modeExec
+			m.modalPos = 20.0
+			m.modalVelocity = 0
+			m.inputs[2].SetValue("")
+			m.inputs[2].Focus()
+			return m, tickFrame()
+		case "f":
+			m.mode = modeInput
+			m.modalPos = 20.0
+			m.modalVelocity = 0
+			m.inputs[3].SetValue("")
+			m.inputs[4].SetValue("")
+			m.inputFocus = 0
+			m.inputs[3].Focus()
+			return m, tickFrame()
+		case "d":
+			if len(m.sandboxes) > 0 && m.cursor < len(m.sandboxes) {
+				sb := m.sandboxes[m.cursor]
+				m.mode = modeConfirm
+				m.confirmMsg = fmt.Sprintf(" Destroy sandbox %s? (y/N) ", sb.ID)
+				m.confirmFunc = func() tea.Cmd {
+					return m.destroySandbox(sb.ID)
+				}
+				return m, tickFrame()
+			}
+		}
+		return m, nil
+	}
+
 	// Confirm mode
 	if m.mode == modeConfirm {
 		switch key {
@@ -364,18 +476,6 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch key {
 	case "q":
 		return m, tea.Quit
-	case "1":
-		m.activeTab = tabDashboard
-	case "2":
-		m.activeTab = tabSandboxes
-	case "3":
-		m.activeTab = tabTemplates
-	case "4":
-		m.activeTab = tabProviders
-	case "5":
-		m.activeTab = tabLogs
-	case "6":
-		m.activeTab = tabConfig
 	case "r":
 		return m, tea.Batch(m.fetchSandboxes(), m.fetchHealth(), m.fetchProviders(), m.fetchTemplates())
 	}
@@ -397,11 +497,18 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m *Model) handleDashboardKey(key string) (tea.Model, tea.Cmd) {
 	switch key {
-	case "s", "n":
-		m.mode = modeSpawn
-		m.inputFocus = 0
-		m.inputs[0].Focus()
-	}
+	case "enter":
+		if m.mode == modeSpawn {
+			m.mode = modeSpawning
+			m.loaderPos = 0
+			m.loaderVelocity = 0
+			m.loaderTarget = 20.0
+			return m, tea.Batch(m.spawnSandbox(m.inputs[0].Value(), m.inputs[1].Value()), tickFrame())
+		}
+		if m.mode == modeExec {
+            return m, nil
+        }
+    }
 	return m, nil
 }
 
@@ -424,21 +531,43 @@ func (m *Model) handleSandboxKey(key string) (tea.Model, tea.Cmd) {
 				return m.destroySandbox(sb.ID)
 			}
 		}
-	case "e", "enter":
-		if len(m.sandboxes) > 0 {
-			m.mode = modeExec
-			m.inputFocus = 0
-			m.inputs[2].Focus()
+	case "enter":
+		if m.activeTab == tabSandboxes && len(m.sandboxes) > 0 {
+			m.mode = modeSandboxAction
+			m.modalPos = 20.0
+			m.modalVelocity = 0
+			return m, tickFrame()
 		}
-	case "s", "n":
-		m.mode = modeSpawn
-		m.inputFocus = 0
-		m.inputs[0].Focus()
+	case "s":
+		if m.activeTab == tabSandboxes {
+			m.mode = modeSpawn
+			m.modalPos = -20.0 // slide down from top
+			m.modalVelocity = 0
+			m.inputs[0].SetValue("")
+			m.inputs[1].SetValue("")
+			m.inputFocus = 0
+			m.inputs[0].Focus()
+			return m, tickFrame()
+		}
+	case "e":
+		if m.activeTab == tabSandboxes && len(m.sandboxes) > 0 {
+			m.mode = modeExec
+			m.modalPos = 20.0
+			m.modalVelocity = 0
+			m.inputs[2].SetValue("")
+			m.inputs[2].Focus()
+			return m, tickFrame()
+		}
 	case "f":
-		if len(m.sandboxes) > 0 {
+		if m.activeTab == tabSandboxes && len(m.sandboxes) > 0 {
 			m.mode = modeInput
+			m.modalPos = 20.0
+			m.modalVelocity = 0
+			m.inputs[3].SetValue("")
+			m.inputs[4].SetValue("")
 			m.inputFocus = 0
 			m.inputs[3].Focus()
+			return m, tickFrame()
 		}
 	}
 	return m, nil
@@ -545,35 +674,78 @@ func (m Model) View() string {
 		return "Loading..."
 	}
 
-	var b strings.Builder
-	w := min(m.width, 120)
+	if m.width < 10 || m.height < 5 {
+		return "Too small"
+	}
 
-	// Title bar
-	title := titleStyle.Render(" HATCHIT ")
+	if m.width < 90 || m.height < 25 {
+		msg := fmt.Sprintf("Terminal too small: %dx%d\nPlease resize to at least 90x25 to use StacyVM TUI.", m.width, m.height)
+		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, errorStyle.Render(msg))
+	}
+
+	w := m.width
+	h := m.height
+
+	// Create Sidebar (fixed width 25)
+	sidebarWidth := 25
+	contentWidth := w - sidebarWidth - 2 // 2 for padding
+
+	sidebarStyle := lipgloss.NewStyle().
+		Width(sidebarWidth).
+		Height(h).
+		Padding(1, 1).
+		Border(lipgloss.NormalBorder(), false, true, false, false).
+		BorderForeground(lipgloss.Color("#444444"))
+
+	// Logo
+	logoStyle := lipgloss.NewStyle().
+		Bold(true).
+		Foreground(lipgloss.Color("#0C0C0C")).
+		Background(lipgloss.Color("#FFA60C")).
+		Padding(0, 1).
+		MarginBottom(2)
+	logo := logoStyle.Render(" STACYVM ")
+
+	// Nav items
+	tabs := []string{"[1] Dashboard", "[2] Sandboxes", "[3] Templates", "[4] Providers", "[5] Logs", "[6] Config"}
+	icons := []string{"🏠", "📦", "🧩", "⚡", "📝", "⚙️"}
+
+	var nav strings.Builder
+	for i, t := range tabs {
+		label := fmt.Sprintf("%s %s", icons[i], t)
+		if tab(i) == m.activeTab {
+			nav.WriteString(lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#FFA60C")).
+				Bold(true).
+				MarginBottom(1).
+				Render("█ " + label) + "\n")
+		} else {
+			nav.WriteString(lipgloss.NewStyle().
+				Foreground(lipgloss.Color("#888888")).
+				MarginBottom(1).
+				Render("  " + label) + "\n")
+		}
+	}
+
+	// Health status at bottom of sidebar
 	healthStr := ""
 	if m.health != nil {
-		healthStr = successStyle.Render(" ONLINE") + dimStyle.Render(fmt.Sprintf(" | up %s | v%s", m.health.Uptime, m.health.Version))
+		healthStr = successStyle.Render("● ONLINE") + "\n" + dimStyle.Render("v"+m.health.Version)
 	} else {
-		healthStr = errorStyle.Render(" OFFLINE")
+		healthStr = errorStyle.Render("● OFFLINE")
 	}
-	b.WriteString(title + healthStr + "\n")
+	// push health to bottom using margin
+	navHeight := len(tabs) * 2
+	healthMargin := h - navHeight - 8
+	if healthMargin < 0 {
+		healthMargin = 0
+	}
+	healthBox := lipgloss.NewStyle().MarginTop(healthMargin).Render(healthStr)
 
-	// Tabs
-	tabs := []string{"[1]Dashboard", "[2]Sandboxes", "[3]Templates", "[4]Providers", "[5]Logs", "[6]Config"}
-	var tabRow strings.Builder
-	for i, t := range tabs {
-		if tab(i) == m.activeTab {
-			tabRow.WriteString(tabActiveStyle.Render(t))
-		} else {
-			tabRow.WriteString(tabInactiveStyle.Render(t))
-		}
-		tabRow.WriteString(" ")
-	}
-	b.WriteString(tabRow.String() + "\n")
-	b.WriteString(strings.Repeat("─", w) + "\n")
+	sidebar := sidebarStyle.Render(lipgloss.JoinVertical(lipgloss.Left, logo, nav.String(), healthBox))
 
 	// Content area
-	contentHeight := m.height - 7
+	contentHeight := h - 4 // subtract status bar/margins
 	if contentHeight < 5 {
 		contentHeight = 5
 	}
@@ -581,46 +753,69 @@ func (m Model) View() string {
 	var content string
 	switch m.activeTab {
 	case tabDashboard:
-		content = m.viewDashboard(contentHeight, w)
+		content = m.viewDashboard(contentHeight, contentWidth)
 	case tabSandboxes:
-		content = m.viewSandboxes(contentHeight, w)
+		content = m.viewSandboxes(contentHeight, contentWidth)
 	case tabTemplates:
-		content = m.viewTemplates(contentHeight, w)
+		content = m.viewTemplates(contentHeight, contentWidth)
 	case tabProviders:
-		content = m.viewProviders(contentHeight, w)
+		content = m.viewProviders(contentHeight, contentWidth)
 	case tabLogs:
-		content = m.viewLogs(contentHeight)
+		content = m.viewLogs(contentHeight, contentWidth)
 	case tabConfig:
-		content = m.viewConfig(contentHeight, w)
+		content = m.viewConfig(contentHeight, contentWidth)
 	}
-	b.WriteString(content)
+
+	// Wrapper for content
+	contentWrapper := lipgloss.NewStyle().
+		Width(contentWidth).
+		Height(h - 3). 
+		Padding(1, 2).
+		Render(content)
 
 	// Status bar
-	b.WriteString("\n")
-	b.WriteString(statusBarStyle.Render(m.viewStatusBar(w)))
-
-	// Help line
-	b.WriteString("\n")
+	statusStr := ""
 	if m.mode == modeConfirm {
-		b.WriteString(boldStyle.Render(m.confirmMsg))
+		statusStr = boldStyle.Render(m.confirmMsg)
 	} else if m.mode != modeNormal {
-		b.WriteString(dimStyle.Render("tab:next field  enter:submit  esc:cancel"))
+		statusStr = dimStyle.Render("tab:next field  enter:submit  esc:cancel")
 	} else {
 		switch m.activeTab {
 		case tabDashboard:
-			b.WriteString(dimStyle.Render("1-5:tabs  s:spawn  r:refresh  q:quit"))
+			statusStr = dimStyle.Render("1-6:nav  s:spawn  r:refresh  q:quit")
 		case tabSandboxes:
-			b.WriteString(dimStyle.Render("j/k:nav  s:spawn  e/enter:exec  f:files  d:destroy  r:refresh  q:quit"))
+			statusStr = dimStyle.Render("j/k:nav  s:spawn  e:exec  f:files  d:destroy  q:quit")
 		case tabTemplates:
-			b.WriteString(dimStyle.Render("j/k:nav  n:new template  s/enter:spawn from template  d:delete  q:quit"))
-		case tabProviders:
-			b.WriteString(dimStyle.Render("r:refresh  q:quit"))
-		case tabLogs:
-			b.WriteString(dimStyle.Render("r:refresh  q:quit"))
+			statusStr = dimStyle.Render("j/k:nav  n:new  s:spawn  d:delete  q:quit")
+		case tabProviders, tabLogs, tabConfig:
+			statusStr = dimStyle.Render("r:refresh  q:quit")
 		}
 	}
+	if m.statusMsg != "" {
+		statusStr += "  " + successStyle.Render(m.statusMsg)
+	} else if m.lastError != "" {
+		statusStr += "  " + errorStyle.Render(truncate(m.lastError, 50))
+	}
+	
+	statsLeft := dimStyle.Render(fmt.Sprintf("%d sandboxes | %d templates", len(m.sandboxes), len(m.templateList)))
+	
+	// Right align status, left align stats
+	statusBarPad := contentWidth - lipgloss.Width(statsLeft) - lipgloss.Width(statusStr) - 4
+	if statusBarPad < 0 {
+		statusBarPad = 0
+	}
+	statusBarContent := statsLeft + strings.Repeat(" ", statusBarPad) + statusStr
 
-	return b.String()
+	statusBar := lipgloss.NewStyle().
+		Width(contentWidth).
+		Padding(0, 2).
+		Border(lipgloss.NormalBorder(), true, false, false, false). // Top border
+		BorderForeground(lipgloss.Color("#444444")).
+		Render(statusBarContent)
+
+	rightSide := lipgloss.JoinVertical(lipgloss.Left, contentWrapper, statusBar)
+
+	return lipgloss.JoinHorizontal(lipgloss.Top, sidebar, rightSide)
 }
 
 // ── Dashboard View ───────────────────────────────────────
@@ -649,6 +844,12 @@ func (m Model) viewDashboard(height, width int) string {
 		cardStyle.Render(fmt.Sprintf(" %s\n %s",
 			boldStyle.Render("Providers"),
 			gaugeStyle.Render(fmt.Sprintf("%d", provCount)))),
+	}
+	if len(m.logs) > 0 {
+		lastLog := m.logs[len(m.logs)-1]
+		stats = append(stats, cardStyle.Render(fmt.Sprintf(" %s\n %s",
+			boldStyle.Render("Recent Activity"),
+			dimStyle.Render(truncate(lastLog, width/3)))))
 	}
 	b.WriteString("  " + lipgloss.JoinHorizontal(lipgloss.Top, stats...) + "\n\n")
 
@@ -696,8 +897,8 @@ func (m Model) viewDashboard(height, width int) string {
 	if len(m.logs) > 0 {
 		b.WriteString(boldStyle.Render("  Recent Activity") + "\n")
 		start := max(0, len(m.logs)-3)
-		for _, line := range m.logs[start:] {
-			b.WriteString("  " + line + "\n")
+		for _, log := range m.logs[start:] {
+			b.WriteString(dimStyle.Render("  " + truncate(log, width-6)) + "\n")
 		}
 	}
 
@@ -709,12 +910,38 @@ func (m Model) viewDashboard(height, width int) string {
 func (m Model) viewSandboxes(height, width int) string {
 	var b strings.Builder
 
-	if m.mode == modeSpawn {
-		b.WriteString(boldStyle.Render("\n  Spawn New Sandbox\n\n"))
-		b.WriteString(fmt.Sprintf("  Image: %s\n", m.inputs[0].View()))
-		b.WriteString(fmt.Sprintf("  TTL:   %s\n", m.inputs[1].View()))
-		b.WriteString(dimStyle.Render("\n  Press Enter to spawn, Esc to cancel\n"))
+	if m.mode == modeSpawning {
+		b.WriteString(boldStyle.Render("\n  Spawning Sandbox...\n\n"))
+		pos := int(m.loaderPos)
+		if pos < 0 {
+			pos = 0
+		}
+		if pos > 20 {
+			pos = 20
+		}
+		padLeft := strings.Repeat(" ", pos)
+		padRight := strings.Repeat(" ", 20-pos)
+		b.WriteString(fmt.Sprintf("  [%s%s%s]\n", padLeft, successStyle.Render("●"), padRight))
+		b.WriteString(dimStyle.Render("\n  Please wait...\n"))
+		
 		return b.String()
+	}
+
+	if m.mode == modeSpawn {
+		content := boldStyle.Render("\n  Spawn New Sandbox\n\n")
+		content += fmt.Sprintf("  Image: %s\n", m.inputs[0].View())
+		content += fmt.Sprintf("  TTL:   %s\n", m.inputs[1].View())
+		content += dimStyle.Render("\n  Press Enter to spawn, Esc to cancel\n")
+		
+		if math.Abs(m.modalPos) > 0.5 {
+			offset := int(m.modalPos)
+			if offset < 0 {
+				content = strings.Repeat("\n", -offset) + content
+			} else {
+				content = lipgloss.NewStyle().MarginTop(offset).Render(content)
+			}
+		}
+		return content
 	}
 
 	if m.mode == modeExec {
@@ -723,46 +950,74 @@ func (m Model) viewSandboxes(height, width int) string {
 			sb := m.sandboxes[m.cursor]
 			target = fmt.Sprintf("%s (%s)", sb.ID, sb.Image)
 		}
-		b.WriteString(boldStyle.Render(fmt.Sprintf("\n  Execute in: %s\n\n", target)))
-		b.WriteString(fmt.Sprintf("  Command: %s\n", m.inputs[2].View()))
+		content := boldStyle.Render(fmt.Sprintf("\n  Execute in: %s\n\n", target))
+		content += fmt.Sprintf("  Command: %s\n", m.inputs[2].View())
 		if m.lastOutput != "" {
-			b.WriteString(boldStyle.Render("\n  Output:\n"))
+			content += boldStyle.Render("\n  Output:\n")
 			lines := strings.Split(m.lastOutput, "\n")
 			maxLines := height - 8
 			for i, line := range lines {
 				if i >= maxLines {
-					b.WriteString(dimStyle.Render(fmt.Sprintf("  ... (%d more lines)", len(lines)-i)) + "\n")
+					content += dimStyle.Render(fmt.Sprintf("  ... (%d more lines)", len(lines)-i)) + "\n"
 					break
 				}
-				b.WriteString("  " + outputStyle.Render(line) + "\n")
+				content += "  " + outputStyle.Render(line) + "\n"
 			}
 		}
-		return b.String()
+		
+		if math.Abs(m.modalPos) > 0.5 {
+			offset := int(m.modalPos)
+			if offset > 0 {
+				content = lipgloss.NewStyle().MarginTop(offset).Render(content)
+			}
+		}
+		return content
+	}
+
+	if m.mode == modeSandboxAction {
+		sb := m.sandboxes[m.cursor]
+		content := boldStyle.Render(fmt.Sprintf("\n  Sandbox Details: %s\n\n", sb.ID))
+		content += fmt.Sprintf("  Image:    %s\n", sb.Image)
+		content += fmt.Sprintf("  Created:  %s\n", sb.CreatedAt.Format("2006-01-02 15:04:05"))
+		content += fmt.Sprintf("  Expires:  %s\n", formatTTL(sb.ExpiresAt))
+		content += fmt.Sprintf("  Memory:   %d MB\n", sb.MemoryMB)
+		content += fmt.Sprintf("  CPUs:     %d\n", sb.VCPUs)
+		content += fmt.Sprintf("  State:    %s\n", sb.State)
+		content += dimStyle.Render("\n  Press Esc to close\n")
+		return content
 	}
 
 	if m.mode == modeInput {
 		target := "(none)"
 		if len(m.sandboxes) > 0 && m.cursor < len(m.sandboxes) {
-			sb := m.sandboxes[m.cursor]
-			target = fmt.Sprintf("%s (%s)", sb.ID, sb.Image)
+			target = m.sandboxes[m.cursor].ID
 		}
-		b.WriteString(boldStyle.Render(fmt.Sprintf("\n  Files in: %s\n\n", target)))
-		b.WriteString(fmt.Sprintf("  Path:    %s\n", m.inputs[3].View()))
-		b.WriteString(fmt.Sprintf("  Content: %s\n", m.inputs[4].View()))
-		b.WriteString(dimStyle.Render("\n  Enter path only = read, path+content = write\n"))
-		if m.lastOutput != "" {
-			b.WriteString(boldStyle.Render("\n  File contents:\n"))
+		content := boldStyle.Render(fmt.Sprintf("\n  Manage Files in: %s\n\n", target))
+		content += fmt.Sprintf("  Path:    %s\n", m.inputs[3].View())
+		content += fmt.Sprintf("  Content: %s\n", m.inputs[4].View())
+		content += dimStyle.Render("\n  Leave content empty to READ file.\n")
+		content += dimStyle.Render("  Provide content to WRITE file.\n")
+		
+		if m.lastOutput != "" && m.inputs[4].Value() == "" {
+			content += boldStyle.Render("\n  File Content:\n")
 			lines := strings.Split(m.lastOutput, "\n")
-			maxLines := height - 10
+			maxLines := height - 12
 			for i, line := range lines {
 				if i >= maxLines {
-					b.WriteString(dimStyle.Render(fmt.Sprintf("  ... (%d more lines)", len(lines)-i)) + "\n")
+					content += dimStyle.Render(fmt.Sprintf("  ... (%d more lines)", len(lines)-i)) + "\n"
 					break
 				}
-				b.WriteString("  " + outputStyle.Render(line) + "\n")
+				content += "  " + outputStyle.Render(line) + "\n"
 			}
 		}
-		return b.String()
+		
+		if math.Abs(m.modalPos) > 0.5 {
+			offset := int(m.modalPos)
+			if offset > 0 {
+				content = lipgloss.NewStyle().MarginTop(offset).Render(content)
+			}
+		}
+		return content
 	}
 
 	// Normal list view
@@ -771,34 +1026,44 @@ func (m Model) viewSandboxes(height, width int) string {
 		return b.String()
 	}
 
-	header := fmt.Sprintf("  %-14s %-10s %-10s %-20s %-10s %-12s",
-		"ID", "STATE", "PROVIDER", "IMAGE", "CREATED", "TTL")
-	b.WriteString(headerStyle.Render(header) + "\n")
-
+	var rows [][]string
+	imageWidth := max(10, width-55) // Calculate dynamic width for Image column
 	for i, sb := range m.sandboxes {
 		ttlStr := formatTTL(sb.ExpiresAt)
-
-		line := fmt.Sprintf("  %-14s %-10s %-10s %-20s %-10s %-12s",
+		rows = append(rows, []string{
 			sb.ID, sb.State, sb.Provider,
-			truncate(sb.Image, 20),
+			truncate(sb.Image, imageWidth),
 			sb.CreatedAt.Format("15:04:05"),
 			ttlStr,
-		)
+		})
 
-		if i == m.cursor {
-			b.WriteString(selectedRowStyle.Render("▸ "+line[2:]) + "\n")
-		} else {
-			b.WriteString(normalRowStyle.Render(line) + "\n")
-		}
-
-		if i >= height-3 {
+		if i >= height-8 {
 			remaining := len(m.sandboxes) - i - 1
 			if remaining > 0 {
-				b.WriteString(dimStyle.Render(fmt.Sprintf("  ... and %d more", remaining)) + "\n")
+				rows = append(rows, []string{"...", "...", "...", fmt.Sprintf("and %d more", remaining), "...", "..."})
 			}
 			break
 		}
 	}
+
+	t := table.New().
+		Border(lipgloss.NormalBorder()).
+		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("#888888"))).
+		BorderRow(false).
+		BorderColumn(true).
+		Headers("ID", "STATE", "PROVIDER", "IMAGE", "CREATED", "TTL").
+		Rows(rows...).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			if row == table.HeaderRow {
+				return headerStyle
+			}
+			if row == m.cursor {
+				return selectedRowStyle
+			}
+			return normalRowStyle
+		})
+
+	b.WriteString("\n  " + strings.ReplaceAll(t.Render(), "\n", "\n  ") + "\n")
 
 	return b.String()
 }
@@ -825,27 +1090,44 @@ func (m Model) viewTemplates(height, width int) string {
 		return b.String()
 	}
 
-	header := fmt.Sprintf("  %-20s %-25s %-8s %-6s %-8s %-6s",
-		"NAME", "IMAGE", "MEM(MB)", "CPUS", "TTL(s)", "POOL")
-	b.WriteString(headerStyle.Render(header) + "\n")
+	var rows [][]string
+	availableWidth := max(20, width-55) // Calculate dynamic width for Name and Image columns
+	nameWidth := max(10, availableWidth*2/5)
+	imageWidth := max(15, availableWidth*3/5)
 
-	for i, t := range m.templateList {
-		line := fmt.Sprintf("  %-20s %-25s %-8d %-6d %-8d %-6d",
-			truncate(t.Name, 20),
-			truncate(t.Image, 25),
-			t.MemoryMB, t.CPUCores, t.TTLSeconds, t.PoolSize,
-		)
+	for i, tmpl := range m.templateList {
+		rows = append(rows, []string{
+			truncate(tmpl.Name, nameWidth),
+			truncate(tmpl.Image, imageWidth),
+			fmt.Sprintf("%d", tmpl.MemoryMB),
+			fmt.Sprintf("%d", tmpl.CPUCores),
+			fmt.Sprintf("%d", tmpl.TTLSeconds),
+			fmt.Sprintf("%d", tmpl.PoolSize),
+		})
 
-		if i == m.templateCursor {
-			b.WriteString(selectedRowStyle.Render("▸ "+line[2:]) + "\n")
-		} else {
-			b.WriteString(normalRowStyle.Render(line) + "\n")
-		}
-
-		if i >= height-3 {
+		if i >= height-10 {
 			break
 		}
 	}
+
+	t := table.New().
+		Border(lipgloss.NormalBorder()).
+		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("#888888"))).
+		BorderRow(false).
+		BorderColumn(true).
+		Headers("NAME", "IMAGE", "MEM(MB)", "CPUS", "TTL(s)", "POOL").
+		Rows(rows...).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			if row == table.HeaderRow {
+				return headerStyle
+			}
+			if row == m.templateCursor {
+				return selectedRowStyle
+			}
+			return normalRowStyle
+		})
+
+	b.WriteString("\n  " + strings.ReplaceAll(t.Render(), "\n", "\n  ") + "\n")
 
 	// Detail panel for selected template
 	if m.templateCursor < len(m.templateList) {
@@ -853,7 +1135,12 @@ func (m Model) viewTemplates(height, width int) string {
 		b.WriteString("\n")
 		b.WriteString(boldStyle.Render(fmt.Sprintf("  Template: %s", t.Name)) + "\n")
 		if t.Description != "" {
-			b.WriteString(dimStyle.Render(fmt.Sprintf("  %s", t.Description)) + "\n")
+			out, err := glamour.Render(t.Description, "dark")
+			if err == nil {
+				b.WriteString(strings.ReplaceAll(out, "\n", "\n  "))
+			} else {
+				b.WriteString(dimStyle.Render(fmt.Sprintf("  %s", t.Description)) + "\n")
+			}
 		}
 		b.WriteString(fmt.Sprintf("  Image: %s  |  Memory: %dMB  |  CPUs: %d  |  TTL: %ds\n",
 			t.Image, t.MemoryMB, t.CPUCores, t.TTLSeconds))
@@ -868,14 +1155,11 @@ func (m Model) viewProviders(height, width int) string {
 	var b strings.Builder
 
 	if len(m.providerList) == 0 {
-		b.WriteString(dimStyle.Render("\n  No providers configured.\n"))
+		b.WriteString(dimStyle.Render("No providers configured.\n"))
 		return b.String()
 	}
 
-	header := fmt.Sprintf("  %-20s %-10s %-10s",
-		"NAME", "DEFAULT", "HEALTHY")
-	b.WriteString(headerStyle.Render(header) + "\n")
-
+	var rows [][]string
 	for _, p := range m.providerList {
 		defaultStr := ""
 		if p.IsDefault {
@@ -886,18 +1170,32 @@ func (m Model) viewProviders(height, width int) string {
 			healthStr = errorStyle.Render("unhealthy")
 		}
 
-		line := fmt.Sprintf("  %-20s %-10s %-10s",
+		rows = append(rows, []string{
 			p.Name, defaultStr, healthStr,
-		)
-		b.WriteString(normalRowStyle.Render(line) + "\n")
+		})
 	}
 
+	t := table.New().
+		Border(lipgloss.NormalBorder()).
+		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("#888888"))).
+		BorderRow(false).
+		BorderColumn(true).
+		Headers("NAME", "DEFAULT", "HEALTHY").
+		Rows(rows...).
+		StyleFunc(func(row, col int) lipgloss.Style {
+			if row == table.HeaderRow {
+				return headerStyle
+			}
+			return normalRowStyle
+		})
+
+	b.WriteString("\n  " + strings.ReplaceAll(t.Render(), "\n", "\n  ") + "\n")
 	return b.String()
 }
 
 // ── Logs View ────────────────────────────────────────────
 
-func (m Model) viewLogs(height int) string {
+func (m Model) viewLogs(height, width int) string {
 	var b strings.Builder
 	b.WriteString(boldStyle.Render("\n  Activity Log\n\n"))
 
@@ -911,7 +1209,7 @@ func (m Model) viewLogs(height int) string {
 		start = 0
 	}
 	for _, line := range m.logs[start:] {
-		b.WriteString("  " + line + "\n")
+		b.WriteString("  " + truncate(line, width-4) + "\n")
 	}
 
 	return b.String()
@@ -936,6 +1234,12 @@ func (m Model) viewStatusBar(width int) string {
 }
 
 // ── Commands ─────────────────────────────────────────────
+
+func tickFrame() tea.Cmd {
+	return tea.Tick(time.Second/60, func(t time.Time) tea.Msg {
+		return frameMsg(t)
+	})
+}
 
 func (m Model) tick() tea.Cmd {
 	return tea.Tick(3*time.Second, func(t time.Time) tea.Msg {
