@@ -61,6 +61,23 @@ func TestWorkspaceRenders(t *testing.T) {
 	}
 }
 
+func TestTreeViewportKeepsCursorVisible(t *testing.T) {
+	nodes := make([]fileNode, 40)
+	for i := range nodes {
+		nodes[i] = fileNode{name: "f" + itoa(i), fpath: "/workspace/f" + itoa(i)}
+	}
+	f := fileState{dir: "/workspace", nodes: nodes, cursor: 30}
+	rows := treeRows(&f, 30, 10) // width 30, 10 visible rows
+	// The selected node name must be present in the windowed output.
+	joined := strings.Join(rows, "\n")
+	if !strings.Contains(joined, "f30") {
+		t.Errorf("cursor row f30 not visible in viewport:\n%s", joined)
+	}
+	if len(rows) > 10 {
+		t.Errorf("viewport returned %d rows, want <= 10", len(rows))
+	}
+}
+
 func TestBatch2Renders(t *testing.T) {
 	// Providers cards
 	m := seedModel()

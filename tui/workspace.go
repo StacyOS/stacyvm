@@ -5,6 +5,7 @@ package tui
 // living inside one sandbox. Tab cycles focus; the focused pane is accented.
 
 import (
+	"path"
 	"strings"
 	"time"
 
@@ -151,6 +152,12 @@ func (m *Model) workspaceTreeKey(key string) (tea.Model, tea.Cmd) {
 	switch key {
 	case "esc":
 		m.mode = modeNormal
+	case "-", "h", "left":
+		parent := path.Dir(f.dir)
+		f.cursor = 0
+		return m, m.listFilesCmd(m.workspace.sandboxID, parent)
+	case "R":
+		return m, m.listFilesCmd(m.workspace.sandboxID, f.dir)
 	case "j", "down":
 		if f.cursor < len(f.nodes)-1 {
 			f.cursor++
@@ -301,26 +308,14 @@ func ttlPct(sb sandboxData) float64 {
 
 func (m Model) workspaceTree(width, height int) string {
 	f := m.workspace.files
-	var rows []string
-	rows = append(rows, stDim.Render(truncate(f.dir, width-4)))
-	for i, n := range f.nodes {
-		icon := stFaint.Render(glyphTreeFile)
-		name := stDim.Render(n.name)
-		if n.isDir {
-			icon = stHi.Render(glyphTreeClosed)
-			name = stInk.Render(n.name)
-		}
-		if i == f.cursor {
-			rows = append(rows, selectedRow(n.name, width-4))
-		} else {
-			rows = append(rows, icon+" "+name)
-		}
-	}
+	// panelH reserves 2 border rows + 1 title row; treeRows fills the rest.
+	rows := treeRows(&f, width, height-3)
 	hint := ""
 	if m.workspace.focus == wsFocusTree {
 		hint = "FOCUS"
 	}
-	return panel(glyphPaneFiles+" FILES · lazytree", hint, strings.Join(rows, "\n"), width, m.workspace.focus == wsFocusTree)
+	return panelH(glyphPaneFiles+" FILES · netrw", hint,
+		strings.Join(rows, "\n"), width, height, m.workspace.focus == wsFocusTree)
 }
 
 func (m Model) workspaceEditor(width, height int) string {

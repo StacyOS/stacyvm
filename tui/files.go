@@ -80,6 +80,49 @@ func (m *Model) applyFilesListed(msg filesListedMsg) {
 	}
 }
 
+// treeRows renders the netrw-style listing for f as at most `visible` rows
+// (including the directory-path header row), windowed around the cursor so the
+// selection is always shown. Pure: the window is derived from f.cursor only.
+func treeRows(f *fileState, width, visible int) []string {
+	if visible < 2 {
+		visible = 2
+	}
+	rowsForList := visible - 1 // first row shows the dir path
+	if rowsForList < 1 {
+		rowsForList = 1
+	}
+	// Window the list so the cursor is always visible (cursor sits at the
+	// bottom of the window once we've scrolled past the first page).
+	scroll := 0
+	if f.cursor >= rowsForList {
+		scroll = f.cursor - rowsForList + 1
+	}
+
+	out := []string{stDim.Render(truncate(f.dir, width-4))}
+	end := scroll + rowsForList
+	if end > len(f.nodes) {
+		end = len(f.nodes)
+	}
+	for i := scroll; i < end; i++ {
+		n := f.nodes[i]
+		if i == f.cursor {
+			out = append(out, selectedRow(n.name, width-4))
+			continue
+		}
+		icon := stFaint.Render(glyphTreeFile)
+		name := stDim.Render(n.name)
+		if n.isDir {
+			icon = stHi.Render(glyphTreeClosed)
+			name = stInk.Render(n.name)
+		}
+		out = append(out, icon+" "+name)
+	}
+	if len(f.nodes) == 0 {
+		out = append(out, stFaint.Render("(empty)"))
+	}
+	return out
+}
+
 // handleFilesKey drives the files browser (navigation + READ/WRITE toggle).
 func (m *Model) handleFilesKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
