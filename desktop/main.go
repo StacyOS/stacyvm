@@ -2,18 +2,16 @@ package main
 
 import (
 	"context"
-	"embed"
+	"io/fs"
 	"os"
 
+	"github.com/StacyOs/stacyvm/web"
 	"github.com/rs/zerolog"
 	"github.com/wailsapp/wails/v2"
 	"github.com/wailsapp/wails/v2/pkg/options"
 	"github.com/wailsapp/wails/v2/pkg/options/assetserver"
 	"github.com/wailsapp/wails/v2/pkg/options/linux"
 )
-
-//go:embed all:frontend/out
-var assets embed.FS
 
 // App struct
 type App struct {
@@ -65,8 +63,16 @@ func main() {
 	// Create an instance of the app structure
 	app := NewApp()
 
+	// Reuse the web UI assets embedded by the `web` package (web/embed.go's
+	// `//go:embed all:out`). The frontend is built into web/out by the
+	// `frontend:build` step in wails.json before this binary is compiled.
+	assets, err := fs.Sub(web.Assets, "out")
+	if err != nil {
+		app.logger.Fatal().Err(err).Msg("failed to load embedded web assets")
+	}
+
 	// Create application with options
-	err := wails.Run(&options.App{
+	err = wails.Run(&options.App{
 		Title:  "StacyVM Desktop",
 		Width:  1280,
 		Height: 800,

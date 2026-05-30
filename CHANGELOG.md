@@ -1,5 +1,86 @@
 # Changelog
 
+## Interactive Experience: CLI, TUI, Web UI & Desktop - 2026-05-31
+
+Covers `0e54925` → `5d708d8`. This release reshapes how people *use* StacyVM:
+a styled CLI, a full terminal UI (TUI), a new Next.js web dashboard embedded
+directly in the binary, a Wails desktop app, and a one-command installer. No
+changes to the sandbox/runtime engine — this is the operator-facing surface.
+
+### Added
+
+- **One-command installer** (`scripts/npm-setup.mjs`, published as the
+  `stacyvm-setup` npm bin) — `npx stacyvm-setup@latest` clones, builds the web
+  UI + CLI, installs `stacyvm` onto the user's PATH, runs the setup wizard, and
+  removes the downloaded checkout. Flags: `--dir`, `--branch`, `--repo`,
+  `--no-start`, `--skip-docker-check`, `--skip-node-deps`, `--check-only`,
+  `--uninstall`.
+- **`stacyvm setup`** — interactive setup wizard (huh forms): pick isolation
+  provider (Docker / Firecracker / PRoot), Docker runtime (runc/runsc/kata),
+  preview domain, and optional shell auto-completion. Writes
+  `~/.stacyvm/config.yaml`.
+- **`stacyvm tui`** — full-screen interactive terminal UI (Bubble Tea) with six
+  screens: **Dashboard**, **Sandboxes**, **Templates**, **Providers**, **Logs**,
+  **Config**. Global keys: `1`–`6` switch screens, `Ctrl+K` command palette,
+  `r` refresh, `q`/`Ctrl+C` quit. Sandbox actions: `s` spawn, `e` exec,
+  `f` workspace/files, `l` logs, `d` destroy. Includes a boot splash, brand
+  theme, and context-aware footer key hints.
+- **TUI workspace + modal editor** — netrw-style scrolling file tree (parent /
+  refresh keys), a modal text editor (`Ctrl+S` to save), editor-majority layout
+  with a toggleable terminal pane, and automatic tree refresh after exec/save.
+- **`stacyvm web-ui`** (alias `ui`) — serves the embedded Next.js dashboard from
+  the binary and opens a browser. Default port `5749` (`--port`/`-p`).
+- **Next.js web dashboard** (`web/`) — new self-contained frontend with pages:
+  Dashboard, Sandboxes, Templates, Providers, Environments, Operations,
+  Tenants, Settings. Built as a static export (`output: 'export'`) and embedded
+  into the CLI via `//go:embed all:out` (`web/embed.go`).
+- **Desktop app** (`desktop/`, Wails) — packages the web dashboard and runs the
+  StacyVM API daemon in-process. Build: `make build-desktop`; output:
+  `desktop/build/bin/StacyVM`.
+- **`stacyvm update`** — self-update the installed binary. **`stacyvm uninstall`**
+  — remove installed binaries and `~/.stacyvm` config.
+- **Shell auto-completion** setup for bash, zsh, and fish (wired into `setup`).
+- **Config tab / CLI configuration commands** — view and edit StacyVM config
+  from both the TUI Config screen and the CLI.
+
+### Changed
+
+- **CLI styling** migrated to `charmbracelet/fang` with a StacyVM brand color
+  scheme; the setup wizard migrated to the `huh` form library; long-running
+  steps now show interactive spinners.
+- **Branding refresh** — new logos, refreshed color palette, and replaced icon
+  placeholders across the Next.js frontend.
+- **Build system** — `make build` now builds the web UI (`npm run build` →
+  `web/out`) before compiling the Go binary; new `build-desktop` target.
+
+### Fixed
+
+- **TUI ANSI leakage** — stopped styled-in-styled nesting from leaking raw ANSI
+  escape codes in navigation and selection rows; added a regression test that
+  detects leaks via `ansi.Strip`.
+- **TUI navigation** — arrow keys now act within the active screen instead of
+  hijacking tab switching; `1`–`6` switch screens.
+
+### Removed / Deprecated
+
+- The previous Vite-based web frontend was moved to `deprecated/web/`, and an
+  earlier standalone desktop frontend was removed in favor of the Wails app.
+
+### Build & Packaging (launch-prep fixes)
+
+- **`scripts/npm-setup.mjs`**: now builds the web UI (`npm install` **and**
+  `npm run build`) before `go build`, since the CLI embeds `web/out` — this was
+  the missing step that previously forced a manual `make build` first. The
+  cloned checkout is now removed **only after** a successful global install
+  (otherwise it is kept so the user is never left without a binary), and the
+  setup/serve/web-ui steps run the installed binary so they survive cleanup.
+- **Desktop (Wails) build fixed**: `desktop/main.go` now reuses the web
+  package's embedded assets (`web.Assets`) instead of a non-existent
+  `frontend/out`, and `desktop/go.sum` was updated (`go mod tidy`) for the new
+  `gopsutil/v4` dependency. `wails build -tags webkit2_41` now succeeds.
+
+---
+
 ## Phase 14 Public-Readiness Repair - 2026-05-10
 
 Security fixes required before public launch. No new features.

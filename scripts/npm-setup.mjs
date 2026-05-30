@@ -9,7 +9,9 @@ import { spawnSync, spawn } from "node:child_process";
 const REPO_URL = "https://github.com/StacyOS/stacyvm.git";
 const DEFAULT_BRANCH = process.env.STACYVM_SETUP_BRANCH ?? "main";
 const DEFAULT_DIR = "stacyvm";
-const PACKAGE_DIRS = ["web", "sdk/js", "examples/code-runner-typescript"];
+// The CLI binary embeds the web UI via `//go:embed all:out` in web/embed.go,
+// so the web frontend MUST be built (npm run build -> web/out) before `go build`.
+const WEB_DIR = "web";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
 const bundledRepoRoot = resolve(scriptDir, "..");
@@ -28,7 +30,7 @@ Options:
   --repo <url>            Git repository URL. Default: ${REPO_URL}
   --no-start              Set up and build, but do not start the server.
   --skip-docker-check     Do not require Docker daemon access during setup checks.
-  --skip-node-deps        Do not run npm install in web/sdk/example packages.
+  --skip-node-deps        Skip the web UI install/build. Only safe if web/out is already built.
   --check-only            Only check the host and repo; do not download deps, build, or start.
   --uninstall             Uninstall StacyVM binaries and config files from the system.
   --help                  Show this help.
@@ -53,6 +55,8 @@ function parseArgs(argv) {
     nodeDeps: true,
     checkOnly: false,
     uninstall: false,
+    didCloneRepo: false,
+    binaryInstalled: null,
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -182,6 +186,11 @@ function isStacyRepo(dir) {
   return existsSync(join(dir, "go.mod")) && existsSync(join(dir, "cmd", "stacyvm"));
 }
 
+function isDirOnPath(dir) {
+  const sep = process.platform === "win32" ? ";" : ":";
+  return (process.env.PATH || "").split(sep).filter(Boolean).includes(dir);
+}
+
 function isEmptyDir(dir) {
   if (!existsSync(dir)) return true;
   return statSync(dir).isDirectory() && readdirSync(dir).length === 0;
@@ -255,28 +264,59 @@ function checkHost(options) {
   }
 }
 
-function installNodeDeps(repoDir, options) {
-  if (!options.nodeDeps) {
-    logWarn("Skipping npm install for repo packages");
-    return;
-  }
-  if (!commandExists("npm")) {
-    logWarn("npm is not installed; skipping web/sdk/example package installs.");
+// Build the embedded web UI. The Go binary will not compile without web/out
+// (it is referenced by `//go:embed all:out`), so this step is REQUIRED — this
+// is the step whose absence forced an earlier `make build` to be run first.
+function buildWebUI(repoDir, options) {
+  const webDir = join(repoDir, WEB_DIR);
+  const outDir = join(webDir, "out");
+
+  if (!existsSync(join(webDir, "package.json"))) {
+    // No web frontend in this checkout; nothing to embed.
     return;
   }
 
-  for (const packageDir of PACKAGE_DIRS) {
-    const fullDir = join(repoDir, packageDir);
-    if (!existsSync(join(fullDir, "package.json"))) continue;
-    const spinner = new Spinner(`Installing ${packageDir} dependencies`);
-    spinner.start();
-    try {
-      run("npm", ["install", "--no-audit", "--no-fund", "--silent"], { cwd: fullDir, capture: true });
-      spinner.stop(`${packageDir} dependencies installed`);
-    } catch (e) {
-      spinner.fail(`Failed to install ${packageDir} dependencies`);
-      throw e;
+  if (!options.nodeDeps) {
+    if (!existsSync(outDir)) {
+      fail(
+        "--skip-node-deps was set but web/out is not built. The CLI embeds the web UI, " +
+        "so it cannot compile without it. Re-run without --skip-node-deps, or build it " +
+        "manually first: `npm --prefix web install && npm --prefix web run build`."
+      );
     }
+    logWarn("Skipping web UI install/build (web/out already present)");
+    return;
+  }
+
+  if (!commandExists("npm")) {
+    fail(`npm (bundled with Node.js) is required to build the embedded web UI. ${hostHelp()}`);
+  }
+
+  const installSpinner = new Spinner("Installing web UI dependencies");
+  installSpinner.start();
+  try {
+    run("npm", ["install", "--no-audit", "--no-fund", "--silent"], { cwd: webDir, capture: true });
+    installSpinner.stop("Web UI dependencies installed");
+  } catch (e) {
+    installSpinner.fail("Failed to install web UI dependencies");
+    throw e;
+  }
+
+  const buildSpinner = new Spinner("Building web UI (next build → web/out)");
+  buildSpinner.start();
+  try {
+    run("npm", ["run", "build"], { cwd: webDir, capture: true });
+    buildSpinner.stop("Web UI built");
+  } catch (e) {
+    buildSpinner.fail("Failed to build web UI");
+    throw e;
+  }
+
+  if (!existsSync(outDir)) {
+    fail(
+      "Web build finished but web/out was not produced, so the CLI cannot embed the web UI. " +
+      "Check web/next.config.ts (expected `output: 'export'`)."
+    );
   }
 }
 
@@ -311,32 +351,38 @@ function buildStacyVM(repoDir) {
   }
 }
 
+// Install the built binary to a directory on the user's PATH so the cloned
+// repo can be safely removed afterwards. Returns the absolute installed path on
+// success, or null on failure (caller must then keep the repo as a fallback).
 function installGlobal(repoDir) {
   logStep("Installing StacyVM globally");
   const binaryName = process.platform === "win32" ? "stacyvm.exe" : "stacyvm";
   const binaryPath = join(repoDir, binaryName);
-  
+
   if (process.platform === "win32") {
     const userProfile = process.env.USERPROFILE;
     if (!userProfile) {
       logWarn("USERPROFILE not found, skipping global install on Windows");
-      return;
+      return null;
     }
     const installDir = join(userProfile, ".stacyvm", "bin");
     try {
       if (!existsSync(installDir)) {
         mkdirSync(installDir, { recursive: true });
       }
-      copyFileSync(binaryPath, join(installDir, binaryName));
+      const dest = join(installDir, binaryName);
+      copyFileSync(binaryPath, dest);
       logOk(`Installed to ${installDir}`);
-      
+
       // Attempt to add to PATH permanently using PowerShell
       logStep("Adding to Windows PATH");
       const psCommand = `[Environment]::SetEnvironmentVariable('Path', [Environment]::GetEnvironmentVariable('Path', 'User') + ';${installDir}', 'User')`;
       run("powershell", ["-NoProfile", "-Command", psCommand], { allowFailure: true });
       logOk("Added to PATH (may require terminal restart)");
+      return dest;
     } catch (e) {
       logWarn(`Failed to install globally on Windows: ${e.message}`);
+      return null;
     }
   } else {
     try {
@@ -347,6 +393,11 @@ function installGlobal(repoDir) {
         copyFileSync(binaryPath, dest);
         chmodSync(dest, 0o755);
         logOk(`Installed to ${localBin}`);
+        if (!isDirOnPath(localBin)) {
+          logWarn(`${localBin} is not on your PATH. Add it so the \`stacyvm\` command works:`);
+          logWarn(`  export PATH="$HOME/.local/bin:$PATH"   (add to ~/.bashrc or ~/.zshrc)`);
+        }
+        return dest;
       } else {
         logStep("Attempting system-wide install (may require sudo password)");
         const dest = "/usr/local/bin/stacyvm";
@@ -354,19 +405,35 @@ function installGlobal(repoDir) {
         run("sudo", ["cp", binaryPath, dest]);
         run("sudo", ["chmod", "+x", dest]);
         logOk("Installed to /usr/local/bin");
+        return dest;
       }
     } catch (e) {
       logWarn(`Failed to install globally: ${e.message}`);
-      logWarn(`Please manually move ${binaryPath} to your PATH.`);
+      logWarn(`The built binary is at ${binaryPath} — move it onto your PATH manually.`);
+      return null;
     }
   }
 }
 
-function runSetupWizard(repoDir) {
-  const binary = process.platform === "win32" ? "stacyvm.exe" : "./stacyvm";
+function runSetupWizard(cli) {
   logStep("Launching StacyVM Interactive Setup");
   console.log("");
-  run(binary, ["setup"], { cwd: repoDir });
+  run(cli, ["setup"]);
+}
+
+// Remove the cloned repository. Idempotent: clears the didCloneRepo flag so it
+// is never deleted twice (explicit call + cleanup safety net).
+function removeClonedRepo(targetDir, options) {
+  if (!options.didCloneRepo) return;
+  options.didCloneRepo = false;
+  console.log("");
+  logStep("Cleaning up downloaded repository");
+  try {
+    rmSync(targetDir, { recursive: true, force: true });
+    logOk(`Removed ${targetDir}`);
+  } catch (e) {
+    logWarn(`Failed to remove repository: ${e.message}`);
+  }
 }
 
 function uninstallStacy() {
@@ -448,15 +515,12 @@ async function main() {
       } catch (e) {}
     }
 
-    if (options.didCloneRepo) {
-      console.log("");
-      logStep("Cleaning up downloaded repository");
-      try {
-        rmSync(targetDir, { recursive: true, force: true });
-        logOk(`Removed ${targetDir}`);
-      } catch (e) {
-        logWarn(`Failed to remove repository: ${e.message}`);
-      }
+    // Only delete the clone if a self-contained binary lives outside it.
+    // Deleting it after a failed/absent global install would strand the user.
+    if (options.didCloneRepo && options.binaryInstalled) {
+      removeClonedRepo(targetDir, options);
+    } else if (options.didCloneRepo) {
+      logWarn(`Keeping ${targetDir}: StacyVM was not installed globally and the built binary is inside it.`);
     }
   };
 
@@ -479,29 +543,38 @@ async function main() {
       return;
     }
 
-    installNodeDeps(targetDir, options);
+    buildWebUI(targetDir, options);
     downloadGoDeps(targetDir);
     buildStacyVM(targetDir);
 
+    // Install onto the PATH. The binary embeds the web UI and is fully
+    // self-contained, so once installed the clone is no longer needed.
+    options.binaryInstalled = installGlobal(targetDir);
+    const binaryName = process.platform === "win32" ? "stacyvm.exe" : "stacyvm";
+    const cli = options.binaryInstalled || join(targetDir, binaryName);
+
+    if (options.didCloneRepo && options.binaryInstalled) {
+      removeClonedRepo(targetDir, options);
+    }
+
     if (options.start) {
-      installGlobal(targetDir);
-      runSetupWizard(targetDir);
-      
+      runSetupWizard(cli);
+
       logStep("Starting StacyVM Server");
-      const globalBin = process.platform === "win32" ? "stacyvm.exe" : "stacyvm";
-      
-      serveProcess = spawn(globalBin, ["serve"], {
-        stdio: "ignore"
-      });
+      serveProcess = spawn(cli, ["serve"], { stdio: "ignore" });
       logOk("Server started in the background");
 
       logStep("Launching Web UI");
-      spawnSync(globalBin, ["web-ui"], {
-        stdio: "inherit"
-      });
+      spawnSync(cli, ["web-ui"], { stdio: "inherit" });
     } else {
-      logOk("Setup complete");
-      console.log(`Run next: cd ${targetDir} && ./stacyvm setup`);
+      logStep("Setup complete");
+      if (options.binaryInstalled) {
+        logOk(`StacyVM is installed at ${options.binaryInstalled}`);
+        console.log("Run next: stacyvm setup");
+      } else {
+        logOk(`StacyVM binary built at ${cli}`);
+        console.log(`Run next: cd ${targetDir} && ./stacyvm setup`);
+      }
     }
   } finally {
     performCleanup();
