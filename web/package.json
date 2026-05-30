@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
-    "build:wails": "NEXT_PUBLIC_API_URL=http://127.0.0.1:7423/api/v1 next build",
+    "build:wails": "cross-env NEXT_PUBLIC_API_URL=http://127.0.0.1:7423/api/v1 next build",
     "start": "next start",
     "lint": "eslint"
   },
@@ -21,6 +21,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "cross-env": "^7.0.3",
     "eslint": "^9",
     "eslint-config-next": "16.2.6",
     "tailwindcss": "^4",
