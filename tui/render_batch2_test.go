@@ -1,9 +1,31 @@
 package tui
 
 import (
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 )
+
+// TestNoAnsiLeak guards against the styled-in-styled bug where an embedded
+// escape's ESC byte is stripped, leaking a bare "[38;2;..m" into visible text.
+// Every "[38;2;" must be part of a real escape sequence "\x1b[38;2;".
+func TestNoAnsiLeak(t *testing.T) {
+	lipgloss.SetColorProfile(termenv.TrueColor) // force color so the leak reproduces
+	t.Cleanup(func() { lipgloss.SetColorProfile(termenv.Ascii) }) // restore for other tests
+	m := seedModel()
+	for _, tb := range []tab{tabDashboard, tabSandboxes, tabTemplates, tabProviders, tabLogs, tabConfig} {
+		m.activeTab = tb
+		out := m.View()
+		total := strings.Count(out, "[38;2;")
+		real := strings.Count(out, "\x1b[38;2;")
+		if total != real {
+			t.Errorf("tab %d: %d bare '[38;2;' leaked (total=%d real=%d)", tb, total-real, total, real)
+		}
+	}
+}
 
 func TestBatch2Renders(t *testing.T) {
 	// Providers cards

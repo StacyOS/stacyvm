@@ -140,10 +140,16 @@ func selText(m Model, i int, id string) string {
 	return stBold.Render(id)
 }
 
-// selectedRow tints a fully-composed row: leading orange bar + faint-orange bg.
+// selectedRow renders a highlighted selection row from RAW text. It applies the
+// accent foreground + selection background in a single style so no pre-styled
+// fragment is nested (which would strip embedded escapes).
 func selectedRow(row string, inner int) string {
 	bar := stHi.Render("▌")
-	return bar + lipgloss.NewStyle().Background(colNavActiveBg).Render(padRight(row, inner-1))
+	body := lipgloss.NewStyle().
+		Foreground(colOrange).
+		Background(colNavActiveBg).
+		Render(padRight(row, inner-1))
+	return bar + body
 }
 
 func (m Model) cpuCell(sb sandboxData, w int) string {

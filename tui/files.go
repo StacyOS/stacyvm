@@ -179,7 +179,7 @@ func (m Model) filesTree(width int) string {
 		}
 		row := icon + " " + name
 		if i == m.files.cursor {
-			rows = append(rows, selectedRow(stHi.Render(n.name), width-4))
+			rows = append(rows, selectedRow(n.name, width-4))
 		} else {
 			rows = append(rows, row)
 		}

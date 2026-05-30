@@ -334,7 +334,7 @@ func (m Model) workspaceTree(width, height int) string {
 			name = stInk.Render(n.name)
 		}
 		if i == f.cursor {
-			rows = append(rows, selectedRow(stHi.Render(n.name), width-4))
+			rows = append(rows, selectedRow(n.name, width-4))
 		} else {
 			rows = append(rows, icon+" "+name)
 		}

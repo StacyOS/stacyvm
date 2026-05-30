@@ -69,21 +69,22 @@ func (m Model) onlineBadge() string {
 func (m Model) renderNav(width int) string {
 	var b strings.Builder
 	for i, it := range navItems {
-		num := stFaint.Render(itoa(i+1)) + " "
+		// Build the raw segment text first; render ONCE so no pre-styled
+		// fragment is nested inside another style (that nesting strips the
+		// embedded ESC byte and leaks literal "[38;2;..m").
+		seg := itoa(i+1) + " " + it
 		if tab(i) == m.activeTab {
-			seg := lipgloss.NewStyle().
+			b.WriteString(lipgloss.NewStyle().
 				Foreground(colOrange).
 				Background(colNavActiveBg).
 				Underline(true).
 				Padding(0, 1).
-				Render(num + it)
-			b.WriteString(seg)
+				Render(seg))
 		} else {
-			seg := lipgloss.NewStyle().
+			b.WriteString(lipgloss.NewStyle().
 				Foreground(colDim).
 				Padding(0, 1).
-				Render(num + it)
-			b.WriteString(seg)
+				Render(seg))
 		}
 	}
 	left := b.String()
