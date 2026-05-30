@@ -910,10 +910,19 @@ The dashboard talks to the same REST API documented above — useful as a workin
 npx stacyvm-setup@latest
 ```
 
-**Safe verification without starting the server:**
-```bash
-npx stacyvm-setup@latest --dir ./stacyvm --no-start
-```
+**Desktop app (download & run — no terminal needed):**
+
+Prebuilt installers for Linux, macOS, and Windows are attached to each
+[release](https://github.com/StacyOS/stacyvm/releases/latest):
+
+- **Windows** — `StacyVM-amd64-installer.exe`
+- **macOS** — `StacyVM-macos-universal.dmg` (universal — Apple Silicon + Intel)
+- **Linux** — `StacyVM-x86_64.AppImage`
+
+The desktop app bundles the dashboard and the API daemon in a single window; you
+still need **Docker** running to spawn sandboxes. Full guide:
+[docs/desktop-app.md](docs/desktop-app.md). Builds are currently unsigned, so
+macOS/Windows show a one-time "unidentified developer" prompt on first launch.
 
 **Existing source checkout:**
 ```bash
@@ -947,10 +956,10 @@ sudo install -m 0755 stacyvm /usr/local/bin/stacyvm
 For public installs, verify the release first:
 
 ```bash
-scripts/post-release-validate.sh v0.14.4
+scripts/post-release-validate.sh v0.15.0
 ```
 
-Replace `v0.14.4` with the release tag you plan to deploy. The installer verifies Sigstore signatures automatically when `cosign` is installed. Set `STACYVM_REQUIRE_SIGNATURES=true` to fail closed when signature verification is unavailable.
+Replace `v0.15.0` with the release tag you plan to deploy. The installer verifies Sigstore signatures automatically when `cosign` is installed. Set `STACYVM_REQUIRE_SIGNATURES=true` to fail closed when signature verification is unavailable.
 
 ---
 

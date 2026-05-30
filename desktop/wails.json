@@ -3,6 +3,14 @@
   "name": "StacyVM",
   "outputfilename": "StacyVM",
   "frontend:dir": "../web",
+  "frontend:install": "npm ci",
   "frontend:build": "npm run build:wails",
-  "wailsjsdir": "wailsjs"
+  "wailsjsdir": "wailsjs",
+  "info": {
+    "companyName": "StacyOS",
+    "productName": "StacyVM",
+    "productVersion": "0.15.0",
+    "copyright": "Copyright © 2026 StacyOS",
+    "comments": "microVM sandbox orchestrator for LLMs"
+  }
 }

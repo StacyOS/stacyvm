@@ -1,11 +1,17 @@
 # Changelog
 
-## Interactive Experience: CLI, TUI, Web UI & Desktop - 2026-05-31
+## 0.15.0 — Interactive Experience & Cross-Platform Desktop - 2026-05-31
 
-Covers `0e54925` → `5d708d8`. This release reshapes how people *use* StacyVM:
-a styled CLI, a full terminal UI (TUI), a new Next.js web dashboard embedded
-directly in the binary, a Wails desktop app, and a one-command installer. No
-changes to the sandbox/runtime engine — this is the operator-facing surface.
+Covers `0e54925` → `5d708d8` plus the cross-platform desktop work. This release
+reshapes how people *use* StacyVM: a styled CLI, a full terminal UI (TUI), a new
+Next.js web dashboard embedded directly in the binary, a cross-platform Wails
+desktop app, and a one-command installer. The sandbox/runtime engine is
+unchanged — this is the operator-facing surface.
+
+Bumped **0.14.x → 0.15.0**: the install/build flow and frontend layout changed
+(the web UI is now built and embedded; the old Vite frontend moved to
+`deprecated/web/`), so this is a minor release carrying breaking build/packaging
+changes rather than a patch. See **Upgrade notes** below.
 
 ### Added
 
@@ -78,6 +84,39 @@ changes to the sandbox/runtime engine — this is the operator-facing surface.
   package's embedded assets (`web.Assets`) instead of a non-existent
   `frontend/out`, and `desktop/go.sum` was updated (`go mod tidy`) for the new
   `gopsutil/v4` dependency. `wails build -tags webkit2_41` now succeeds.
+
+### Cross-platform desktop builds
+
+- **`.github/workflows/desktop.yml`** — new GitHub Actions matrix that builds the
+  desktop app natively on Linux, macOS, and Windows (Wails cannot be
+  cross-compiled — each OS links its own webview), packages a per-OS installer
+  (AppImage + tarball, universal `.dmg`, NSIS `.exe`), and attaches them to the
+  GitHub Release on `v*` tags (also `workflow_dispatch`).
+- **Committed Wails packaging scaffold** (`desktop/build/`) — StacyVM app icon
+  (`appicon.png`), Windows `icon.ico` + version metadata, NSIS installer config,
+  and macOS `Info.plist` (bundle id `com.stacyos.stacyvm`) — so installer
+  branding/output is reproducible. `.gitignore` updated to track the scaffold
+  while keeping `desktop/build/bin/` ignored.
+- **Portable `make build-desktop`** — auto-applies the Linux-only
+  `-tags webkit2_41` build tag via host OS detection, so the target builds on
+  macOS and Windows too.
+- **`desktop/wails.json`** — added `frontend:install` (`npm ci`) so clean CI
+  checkouts build the embedded frontend, plus an `info` block (product / company
+  / version) that fills the macOS plist and Windows version resource.
+- Prebuilt desktop installers are documented in `docs/desktop-app.md`. They are
+  **unsigned** for this release (macOS Gatekeeper / Windows SmartScreen show a
+  one-time prompt); signing is a planned follow-up.
+
+### Upgrade notes
+
+- **Version:** `0.14.x → 0.15.0` (`package.json`, `desktop/wails.json`).
+- **Building from source** now requires building the web UI first: `make build`
+  and `npx stacyvm-setup` do this automatically, but a bare
+  `go build ./cmd/stacyvm` needs `web/out` to exist (the embedded dashboard).
+- **Frontend relocation:** the old Vite frontend is now `deprecated/web/`; the
+  active dashboard is the Next.js app in `web/`.
+- **Desktop app** is a separate prebuilt download (GitHub Releases),
+  intentionally **not** produced by `scripts/npm-setup.mjs` (which builds the CLI).
 
 ---
 

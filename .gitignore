@@ -48,6 +48,9 @@ venv/
 node_modules/
 web/dist/
 
+# Wails frontend change-detection hash (generated during desktop builds)
+web/package.json.md5
+
 # Environment
 .env
 .env.local
@@ -72,3 +75,10 @@ htmlcov/
 
 # Gradle
 .gradle/
+
+# Wails desktop packaging scaffold — committed so installer branding/output is
+# reproducible. The `build/` rule above would otherwise ignore it; only the
+# build OUTPUT (bin/) stays ignored.
+!desktop/build/
+!desktop/build/**
+desktop/build/bin/

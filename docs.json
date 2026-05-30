@@ -52,7 +52,8 @@
           "docs/getting-started/prerequisites",
           "docs/getting-started/quickstart",
           "docs/getting-started/installation",
-          "docs/getting-started/core-concepts"
+          "docs/getting-started/core-concepts",
+          "docs/desktop-app"
         ]
       },
       {
@@ -107,6 +108,7 @@
       {
         "group": "Release Notes",
         "pages": [
+          "docs/releases/v0-15-0",
           "docs/releases/week-of-2026-05-22",
           "docs/releases/week-of-2026-05-15",
           "docs/releases/phase-14-worker-identity-hardening",

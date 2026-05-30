@@ -3,13 +3,21 @@
 VERSION ?= $(shell git describe --tags --always 2>/dev/null || echo dev)
 DIST_DIR ?= dist
 
+# Wails needs the webkit2gtk build tag on Linux only; macOS (WKWebView) and
+# Windows (WebView2) use their native webview. Detect the host so that
+# `make build-desktop` works on every OS.
+UNAME_S := $(shell uname -s)
+WAILS_TAGS := $(if $(filter Linux,$(UNAME_S)),-tags webkit2_41,)
+
 # Build the server/CLI binary (which includes the TUI and Web UI)
 build: web
 	go build -ldflags="-s -w -X main.version=$(VERSION)" -o stacyvm ./cmd/stacyvm
 
-# Build the desktop app using Wails
-build-desktop: web
-	cd desktop && wails build -tags webkit2_41
+# Build the desktop app using Wails. The frontend (web/out) is installed and
+# built by the frontend:install/frontend:build steps in desktop/wails.json, so
+# no `web` prerequisite is needed here.
+build-desktop:
+	cd desktop && wails build $(WAILS_TAGS)
 
 # Build the guest agent (static, linux/amd64)
 build-agent:
