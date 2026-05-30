@@ -252,7 +252,7 @@ func (m *Model) appendTermResult(r *execResultData) {
 func (m Model) renderWorkspace(height, width int) string {
 	ctx := m.workspaceContextBar(width)
 
-	paneH := height - 2
+	paneH := height - 2 // context bar + breathing row
 	if paneH < 8 {
 		paneH = 8
 	}
@@ -263,13 +263,19 @@ func (m Model) renderWorkspace(height, width int) string {
 	rightW := width - 1 - treeW
 
 	tree := m.workspaceTree(treeW, paneH)
-	editorH := paneH * 3 / 5
-	termH := paneH - editorH - 1
-	editor := m.workspaceEditor(rightW, editorH)
-	term := m.workspaceTerminal(rightW, termH)
-	right := lipgloss.JoinVertical(lipgloss.Left, editor, term)
-	panes := lipgloss.JoinHorizontal(lipgloss.Top, tree, " ", right)
 
+	var right string
+	if m.workspace.showTerm {
+		editorH := paneH * 7 / 10 // editor gets the majority
+		termH := paneH - editorH
+		editor := m.workspaceEditor(rightW, editorH)
+		term := m.workspaceTerminal(rightW, termH)
+		right = lipgloss.JoinVertical(lipgloss.Left, editor, term)
+	} else {
+		right = m.workspaceEditor(rightW, paneH) // full-height editor
+	}
+
+	panes := lipgloss.JoinHorizontal(lipgloss.Top, tree, " ", right)
 	return ctx + "\n" + panes
 }
 
@@ -361,9 +367,9 @@ func (m Model) workspaceEditor(width, height int) string {
 
 func (m Model) workspaceTerminal(width, height int) string {
 	focused := m.workspace.focus == wsFocusTerm
-	maxLines := height - 6
-	if maxLines < 2 {
-		maxLines = 2
+	maxLines := height - 3 // border (2) + active prompt (1)
+	if maxLines < 1 {
+		maxLines = 1
 	}
 	start := len(m.workspace.termLines) - maxLines
 	if start < 0 {
@@ -373,7 +379,6 @@ func (m Model) workspaceTerminal(width, height int) string {
 	for _, ln := range m.workspace.termLines[start:] {
 		b.WriteString(ln + "\n")
 	}
-	// Active prompt line.
 	prompt := m.termPrompt()
 	if focused {
 		prompt += m.workspace.termInput.View() + cursorBar(m.cursorOn)
@@ -386,7 +391,8 @@ func (m Model) workspaceTerminal(width, height int) string {
 	if focused {
 		hint = "FOCUS"
 	}
-	return panel(glyphPaneTerm+" TERMINAL · "+m.workspace.sandboxID+" (in-VM)", hint, b.String(), width, focused)
+	return panelH(glyphPaneTerm+" TERMINAL · "+m.workspace.sandboxID+" (in-VM)", hint,
+		b.String(), width, height, focused)
 }
 
 func filename(p string) string {

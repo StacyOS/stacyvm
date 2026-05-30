@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
@@ -75,6 +76,25 @@ func TestTreeViewportKeepsCursorVisible(t *testing.T) {
 	}
 	if len(rows) > 10 {
 		t.Errorf("viewport returned %d rows, want <= 10", len(rows))
+	}
+}
+
+func TestWorkspaceTerminalToggle(t *testing.T) {
+	m := seedModel()
+	m.cursor = 0
+	m.openWorkspace()
+	withTerm := m.View()
+	if !strings.Contains(withTerm, "TERMINAL") {
+		t.Fatalf("terminal pane should be visible by default")
+	}
+	// Toggle the terminal off.
+	m.handleWorkspaceKey(tea.KeyMsg{Type: tea.KeyCtrlT})
+	if m.workspace.showTerm {
+		t.Fatalf("ctrl+t did not hide the terminal")
+	}
+	without := m.View()
+	if strings.Contains(without, "TERMINAL ·") {
+		t.Errorf("terminal pane still rendered after toggle off")
 	}
 }
 
