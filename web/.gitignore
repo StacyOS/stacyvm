@@ -15,7 +15,11 @@
 
 # next.js
 /.next/
-/out/
+# out/ is a generated build artifact, but web/embed.go embeds it via
+# `//go:embed all:out`, so a committed placeholder must exist for the Go build
+# to compile on a fresh checkout. Ignore the generated contents, keep .gitkeep.
+/out/*
+!/out/.gitkeep
 
 # production
 /build

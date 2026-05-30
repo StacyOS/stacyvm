@@ -81,6 +81,35 @@ const docTemplate = `{
                 }
             }
         },
+        "/config": {
+            "patch": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Update providers and runtime configuration and persist to disk",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "system"
+                ],
+                "summary": "Update system configuration",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/diagnostics": {
             "get": {
                 "security": [
@@ -1215,6 +1244,47 @@ const docTemplate = `{
                 }
             }
         },
+        "/sandboxes/{sandboxID}/stats": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Return live CPU% and memory usage for a sandbox when the provider supports it",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sandboxes"
+                ],
+                "summary": "Sandbox stats",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Sandbox ID",
+                        "name": "sandboxID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError"
+                        }
+                    }
+                }
+            }
+        },
         "/snapshots": {
             "get": {
                 "security": [
@@ -1238,6 +1308,31 @@ const docTemplate = `{
                             "items": {
                                 "$ref": "#/definitions/github_com_StacyOs_stacyvm_internal_providers.SnapshotSummary"
                             }
+                        }
+                    }
+                }
+            }
+        },
+        "/system/stats": {
+            "get": {
+                "security": [
+                    {
+                        "ApiKeyAuth": []
+                    }
+                ],
+                "description": "Return live host CPU/MEM/DISK/NET/load for the dashboard",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "system"
+                ],
+                "summary": "Host telemetry",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/internal_api_routes.hostStatsSnapshot"
                         }
                     }
                 }
@@ -2756,6 +2851,29 @@ const docTemplate = `{
                 "updated_at": {
                     "type": "string",
                     "example": "2026-05-09T10:30:00Z"
+                }
+            }
+        },
+        "internal_api_routes.hostStatsSnapshot": {
+            "type": "object",
+            "properties": {
+                "cpu_pct": {
+                    "type": "number"
+                },
+                "disk_pct": {
+                    "type": "number"
+                },
+                "load1": {
+                    "type": "number"
+                },
+                "mem_pct": {
+                    "type": "number"
+                },
+                "net_rx_bps": {
+                    "type": "number"
+                },
+                "net_tx_bps": {
+                    "type": "number"
                 }
             }
         }

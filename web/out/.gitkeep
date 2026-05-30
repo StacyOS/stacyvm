@@ -1,0 +1,6 @@
+# This placeholder keeps web/out/ present in the repo so the Go build can satisfy
+# `//go:embed all:out` (web/embed.go) on a fresh checkout — before the Next.js
+# frontend has been built. Real builds (`make build`, `make web`, npm-setup,
+# Dockerfile, CI release, wails) overwrite this directory with the actual export.
+#
+# Do not rely on the committed contents of web/out — they are a placeholder only.

@@ -743,6 +743,21 @@ definitions:
         example: "2026-05-09T10:30:00Z"
         type: string
     type: object
+  internal_api_routes.hostStatsSnapshot:
+    properties:
+      cpu_pct:
+        type: number
+      disk_pct:
+        type: number
+      load1:
+        type: number
+      mem_pct:
+        type: number
+      net_rx_bps:
+        type: number
+      net_tx_bps:
+        type: number
+    type: object
 host: localhost:7423
 info:
   contact: {}
@@ -792,6 +807,24 @@ paths:
       summary: List admin audit logs
       tags:
       - admin
+  /config:
+    patch:
+      consumes:
+      - application/json
+      description: Update providers and runtime configuration and persist to disk
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+      summary: Update system configuration
+      tags:
+      - system
   /diagnostics:
     get:
       description: Return redacted build, store, provider, sandbox, event, and operation
@@ -1473,6 +1506,33 @@ paths:
       summary: Get console logs
       tags:
       - sandboxes
+  /sandboxes/{sandboxID}/stats:
+    get:
+      description: Return live CPU% and memory usage for a sandbox when the provider
+        supports it
+      parameters:
+      - description: Sandbox ID
+        in: path
+        name: sandboxID
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/github_com_StacyOs_stacyvm_internal_httputil.APIError'
+      security:
+      - ApiKeyAuth: []
+      summary: Sandbox stats
+      tags:
+      - sandboxes
   /sandboxes/admission:
     post:
       consumes:
@@ -1523,6 +1583,21 @@ paths:
       summary: List snapshots
       tags:
       - snapshots
+  /system/stats:
+    get:
+      description: Return live host CPU/MEM/DISK/NET/load for the dashboard
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/internal_api_routes.hostStatsSnapshot'
+      security:
+      - ApiKeyAuth: []
+      summary: Host telemetry
+      tags:
+      - system
   /templates:
     get:
       description: Return all registered templates

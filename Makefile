@@ -64,7 +64,8 @@ lint:
 	go vet ./...
 
 # Build static release binaries + checksums (amd64 only)
-release-build:
+# Depends on `web` so the embedded UI (web/out) is the real build, not the placeholder.
+release-build: web
 	mkdir -p $(DIST_DIR)
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w -X main.version=$(VERSION)" -o $(DIST_DIR)/stacyvm-linux-amd64 ./cmd/stacyvm
 	CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o $(DIST_DIR)/stacyvm-agent-linux-amd64 ./cmd/stacyvm-agent
