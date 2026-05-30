@@ -100,11 +100,11 @@ type errMsg error
 type frameMsg time.Time
 
 type Model struct {
-	client  *apiClient
-	width   int
-	height  int
+	client    *apiClient
+	width     int
+	height    int
 	activeTab tab
-	mode    mode
+	mode      mode
 
 	// Sandbox list
 	sandboxes []sandboxData
@@ -266,9 +266,9 @@ func NewModel(serverURL, apiKey string) Model {
 	}
 
 	return Model{
-		client: client,
-		inputs: ins,
-		logs:   make([]string, 0, 100),
+		client:       client,
+		inputs:       ins,
+		logs:         make([]string, 0, 100),
 		slideSpring:  harmonica.NewSpring(harmonica.FPS(60), 12.0, 0.8),
 		loaderSpring: harmonica.NewSpring(harmonica.FPS(60), 6.0, 0.2), // bouncy spring
 
@@ -458,9 +458,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		r := (*execResultData)(msg)
 		if m.mode == modeWorkspace && m.workspace.termBusy {
 			m.appendTermResult(r)
-		} else {
-			m.lastExec = r
+			m.lastError = ""
+			m.addLog("EXEC", fmt.Sprintf("exit=%d dur=%s", r.ExitCode, r.Duration))
+			// A command may have created/removed files — refresh the tree.
+			return m, m.listFilesCmd(m.workspace.sandboxID, m.workspace.files.dir)
 		}
+		m.lastExec = r
 		m.lastError = ""
 		m.addLog("EXEC", fmt.Sprintf("exit=%d dur=%s", r.ExitCode, r.Duration))
 
@@ -472,6 +475,9 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.files.editorOn = false
 		}
 		m.addLog("WRITE", "file written")
+		if m.mode == modeWorkspace {
+			return m, m.listFilesCmd(m.workspace.sandboxID, m.workspace.files.dir)
+		}
 
 	case fileReadMsg:
 		if m.mode == modeWorkspace {
@@ -564,7 +570,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		}
-		
+
 		if key == "left" || key == "right" {
 			newTab := m.activeTab
 			if key == "left" && m.activeTab > 0 {
@@ -925,8 +931,6 @@ func (m Model) View() string {
 }
 
 // viewDashboard lives in dashboard.go (Mission Control restyle).
-
-
 
 // ── Status Bar ───────────────────────────────────────────
 
