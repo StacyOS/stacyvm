@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbles/textarea"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -23,12 +22,12 @@ const (
 type workspaceState struct {
 	sandboxID string
 	focus     int
-	files     fileState // tree + content + INSERT-mode textarea
-	cmdline   string    // vim ":" command buffer
-	cmdlineOn bool
+	files     fileState // tree + current dir + open file content
+	editor    Editor    // the modal editor for the open file
 	termLines []string
 	termInput textinput.Model
 	termBusy  bool
+	showTerm  bool // terminal pane visible (toggle with ctrl+t)
 }
 
 // openWorkspace enters the Workspace for the selected sandbox.
@@ -41,11 +40,14 @@ func (m *Model) openWorkspace() tea.Cmd {
 	ti.Prompt = ""
 	ti.Placeholder = "run a command…"
 	ti.Focus()
+	ed := NewTextareaEditor()
 	m.workspace = workspaceState{
 		sandboxID: id,
 		focus:     wsFocusTree,
 		files:     fileState{sandboxID: id, dir: "/workspace"},
+		editor:    ed,
 		termInput: ti,
+		showTerm:  true,
 		termLines: []string{stDim.Render("# in-VM shell · commands run for real via exec")},
 	}
 	m.mode = modeWorkspace
@@ -64,29 +66,63 @@ func (m Model) findSandbox(id string) (sandboxData, bool) {
 
 // ── keys ────────────────────────────────────────────────────────────────────
 
+// setWSFocus moves pane focus and keeps the editor's textarea focus in sync.
+func (m *Model) setWSFocus(n int) {
+	ws := &m.workspace
+	ws.focus = n
+	if ws.editor == nil {
+		return
+	}
+	if n == wsFocusEditor {
+		ws.editor.Focus()
+	} else {
+		ws.editor.Blur()
+	}
+}
+
 func (m *Model) handleWorkspaceKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	key := msg.String()
 	ws := &m.workspace
 
-	// Global within the workspace.
+	// Pane focus ring (consistent across multi-pane screens).
 	switch key {
 	case "tab":
-		ws.focus = (ws.focus + 1) % 3
+		next := (ws.focus + 1) % m.wsPaneCount()
+		m.setWSFocus(next)
+		return m, nil
+	case "shift+tab":
+		next := (ws.focus - 1 + m.wsPaneCount()) % m.wsPaneCount()
+		m.setWSFocus(next)
 		return m, nil
 	case "ctrl+w":
 		m.mode = modeNormal
 		return m, nil
+	case "ctrl+t":
+		ws.showTerm = !ws.showTerm
+		if !ws.showTerm && ws.focus == wsFocusTerm {
+			m.setWSFocus(wsFocusEditor)
+		}
+		return m, nil
 	}
-	if !ws.files.write && !ws.cmdlineOn && ws.focus != wsFocusTerm {
+
+	// Direct pane jumps (workspace-only; global 1-6 screen switching is
+	// suspended while the workspace owns keys). Editor keeps digits in INSERT.
+	inInsert := false
+	if me, ok := ws.editor.(modalEditor); ok && me.Mode() == editorInsert {
+		inInsert = true
+	}
+	if !inInsert {
 		switch key {
 		case "1":
-			ws.focus = wsFocusTree
+			m.setWSFocus(wsFocusTree)
 			return m, nil
 		case "2":
-			ws.focus = wsFocusEditor
+			m.setWSFocus(wsFocusEditor)
 			return m, nil
 		case "3":
-			ws.focus = wsFocusTerm
+			if ws.showTerm {
+				m.setWSFocus(wsFocusTerm)
+			}
 			return m, nil
 		}
 	}
@@ -100,6 +136,14 @@ func (m *Model) handleWorkspaceKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.workspaceTermKey(msg)
 	}
 	return m, nil
+}
+
+// wsPaneCount is 3 with the terminal visible, else 2 (tree + editor).
+func (m Model) wsPaneCount() int {
+	if m.workspace.showTerm {
+		return 3
+	}
+	return 2
 }
 
 func (m *Model) workspaceTreeKey(key string) (tea.Model, tea.Cmd) {
@@ -123,8 +167,7 @@ func (m *Model) workspaceTreeKey(key string) (tea.Model, tea.Cmd) {
 				return m, m.listFilesCmd(m.workspace.sandboxID, n.fpath)
 			}
 			f.openPath = n.fpath
-			f.write = false
-			m.workspace.focus = wsFocusEditor
+			m.setWSFocus(wsFocusEditor)
 			return m, m.readFileCmd(m.workspace.sandboxID, n.fpath)
 		}
 	}
@@ -132,63 +175,25 @@ func (m *Model) workspaceTreeKey(key string) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) workspaceEditorKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	f := &m.workspace.files
-	key := msg.String()
-
-	// Vim ":" command line.
-	if m.workspace.cmdlineOn {
-		switch key {
-		case "esc":
-			m.workspace.cmdlineOn = false
-			m.workspace.cmdline = ""
-		case "enter":
-			cmd := m.workspace.cmdline
-			m.workspace.cmdlineOn = false
-			m.workspace.cmdline = ""
-			return m, m.runVimCommand(cmd)
-		case "backspace":
-			if len(m.workspace.cmdline) > 1 {
-				m.workspace.cmdline = m.workspace.cmdline[:len(m.workspace.cmdline)-1]
-			}
-		default:
-			if len(key) == 1 {
-				m.workspace.cmdline += key
-			}
-		}
-		return m, nil
-	}
-
-	// INSERT mode: the textarea owns keys.
-	if f.write {
-		switch key {
-		case "esc":
-			f.content = f.editor.Value()
-			f.write = false
+	ws := &m.workspace
+	switch msg.String() {
+	case "ctrl+s":
+		if ws.files.openPath == "" {
 			return m, nil
 		}
-		var cmd tea.Cmd
-		f.editor, cmd = f.editor.Update(msg)
-		return m, cmd
-	}
-
-	// NORMAL mode.
-	switch key {
+		content := ws.editor.Value()
+		ws.files.content = content
+		return m, m.writeFileCmd(ws.sandboxID, ws.files.openPath, content)
 	case "esc":
-		m.mode = modeNormal
-	case "i":
-		if f.openPath != "" {
-			ta := textarea.New()
-			ta.SetValue(f.content)
-			ta.Focus()
-			f.editor = ta
-			f.write = true
-			return m, textarea.Blink
+		// Esc returns INSERT->NORMAL inside the editor; a second Esc (in
+		// NORMAL) leaves the workspace.
+		if me, ok := ws.editor.(modalEditor); ok && me.Mode() == editorInsert {
+			return m, ws.editor.Update(msg)
 		}
-	case ":":
-		m.workspace.cmdlineOn = true
-		m.workspace.cmdline = ":"
+		m.mode = modeNormal
+		return m, nil
 	}
-	return m, nil
+	return m, ws.editor.Update(msg)
 }
 
 func (m *Model) workspaceTermKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -212,33 +217,6 @@ func (m *Model) workspaceTermKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// runVimCommand handles :w (save), :q (close), :wq.
-func (m *Model) runVimCommand(cmd string) tea.Cmd {
-	f := &m.workspace.files
-	switch strings.TrimPrefix(cmd, ":") {
-	case "w":
-		if f.openPath != "" {
-			content := f.content
-			if f.write {
-				content = f.editor.Value()
-			}
-			f.content = content
-			return m.writeFileCmd(m.workspace.sandboxID, f.openPath, content)
-		}
-	case "q":
-		m.mode = modeNormal
-	case "wq", "x":
-		m.mode = modeNormal
-		if f.openPath != "" {
-			content := f.content
-			if f.write {
-				content = f.editor.Value()
-			}
-			return m.writeFileCmd(m.workspace.sandboxID, f.openPath, content)
-		}
-	}
-	return nil
-}
 
 func (m Model) termPrompt() string {
 	return stHi.Render("stacy") + stSteel.Render("@") + stOK.Render(m.workspace.sandboxID) +
@@ -347,53 +325,44 @@ func (m Model) workspaceTree(width, height int) string {
 }
 
 func (m Model) workspaceEditor(width, height int) string {
-	f := m.workspace.files
-	focused := m.workspace.focus == wsFocusEditor
-	title := glyphPaneEditor + " " + orDash(f.openPath)
+	ws := m.workspace
+	focused := ws.focus == wsFocusEditor
+	title := glyphPaneEditor + " " + orDash(ws.files.openPath)
 
+	// Reserve 2 rows inside the box for the title + modeline; editor fills rest.
+	editorH := height - 4
+	if editorH < 1 {
+		editorH = 1
+	}
 	var body string
-	if f.openPath == "" {
+	if ws.files.openPath == "" {
 		body = stFaint.Render("open a file from the tree (↵)")
-	} else if f.write {
-		f.editor.SetWidth(width - 6)
-		f.editor.SetHeight(max(3, height-6))
-		body = f.editor.View()
+		body = padLines(body, editorH)
 	} else {
-		lines := strings.Split(strings.TrimRight(f.content, "\n"), "\n")
-		maxLines := height - 6
-		if maxLines < 2 {
-			maxLines = 2
-		}
-		var b strings.Builder
-		for i, ln := range lines {
-			if i >= maxLines {
-				b.WriteString(stFaint.Render("  …\n"))
-				break
-			}
-			b.WriteString(stFaint.Render(padLeft(itoa(i+1), 3)) + "  " + highlightLine(ln) + "\n")
-		}
-		body = strings.TrimRight(b.String(), "\n")
+		ws.editor.SetSize(width-4, editorH)
+		body = ws.editor.View()
 	}
 
-	// Modeline.
-	var badge string
-	if f.write {
+	mode := editorNormal
+	if me, ok := ws.editor.(modalEditor); ok {
+		mode = me.Mode()
+	}
+	var badge, hints string
+	if mode == editorInsert {
 		badge = lipgloss.NewStyle().Foreground(colBg).Background(colGreen).Render(" -- INSERT -- ")
+		hints = stDim.Render("type to edit · esc normal")
 	} else {
 		badge = lipgloss.NewStyle().Foreground(colBg).Background(colOrange).Render(" NORMAL ")
+		hints = stDim.Render("i insert · ^s save · esc back")
 	}
-	mode := stDim.Render(" " + filename(f.openPath) + " · utf-8 · unix")
-	right := stDim.Render("i insert · :w save · :q close")
-	if m.workspace.cmdlineOn {
-		right = stHi.Render(m.workspace.cmdline) + cursorBar(m.cursorOn)
-	}
-	modeline := spread(badge+mode, right, width-4)
+	info := stDim.Render(" " + filename(ws.files.openPath) + " · utf-8 · unix")
+	modeline := spread(badge+info, hints, width-4)
 
 	hint := ""
 	if focused {
 		hint = "FOCUS"
 	}
-	return panel(title, hint, body+"\n"+modeline, width, focused)
+	return panelH(title, hint, body+"\n"+modeline, width, height, focused)
 }
 
 func (m Model) workspaceTerminal(width, height int) string {

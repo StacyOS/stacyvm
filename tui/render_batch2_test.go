@@ -44,6 +44,23 @@ func TestPanelHFillsHeight(t *testing.T) {
 	}
 }
 
+func TestWorkspaceRenders(t *testing.T) {
+	m := seedModel()
+	m.cursor = 0
+	if cmd := m.openWorkspace(); cmd != nil {
+		_ = cmd // listFiles cmd not run in test
+	}
+	m.workspace.files.openPath = "/workspace/main.py"
+	m.workspace.editor.SetContent("print('hi')\n")
+	m.setWSFocus(wsFocusEditor)
+	out := m.View()
+	for _, want := range []string{"FILES", "TERMINAL", "NORMAL", "main.py", "^s save"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("workspace render missing %q", want)
+		}
+	}
+}
+
 func TestBatch2Renders(t *testing.T) {
 	// Providers cards
 	m := seedModel()
@@ -89,13 +106,16 @@ func TestBatch2Renders(t *testing.T) {
 	m = seedModel()
 	m.activeTab = tabSandboxes
 	m.mode = modeWorkspace
+	ed := NewTextareaEditor()
+	ed.SetContent("import os\n\ndef main():\n    print(\"hi\")  # go\n")
 	m.workspace = workspaceState{
 		sandboxID: "sb-7f3a91",
 		focus:     wsFocusEditor,
+		editor:    ed,
+		showTerm:  true,
 		files: fileState{
 			sandboxID: "sb-7f3a91", dir: "/workspace", openPath: "/workspace/main.py",
-			content: "import os\n\ndef main():\n    print(\"hi\")  # go\n",
-			nodes:   []fileNode{{name: "src", fpath: "/workspace/src", isDir: true}, {name: "main.py", fpath: "/workspace/main.py"}},
+			nodes: []fileNode{{name: "src", fpath: "/workspace/src", isDir: true}, {name: "main.py", fpath: "/workspace/main.py"}},
 		},
 		termLines: []string{"$ python -m pytest -q", "24 passed in 1.83s"},
 	}

@@ -474,7 +474,12 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.addLog("WRITE", "file written")
 
 	case fileReadMsg:
-		if m.mode == modeInput || m.mode == modeWorkspace {
+		if m.mode == modeWorkspace {
+			m.workspace.files.content = string(msg)
+			if m.workspace.editor != nil {
+				m.workspace.editor.SetContent(string(msg))
+			}
+		} else if m.mode == modeInput {
 			f := m.activeFiles()
 			f.content = string(msg)
 			f.write = false
