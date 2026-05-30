@@ -78,9 +78,9 @@ func (e *TextareaEditor) SetSize(w, h int) {
 	e.ta.SetHeight(h)
 }
 
-func (e *TextareaEditor) Focus() { e.ta.Focus() }
-func (e *TextareaEditor) Blur()  { e.ta.Blur() }
-func (e *TextareaEditor) View() string { return e.ta.View() }
+func (e *TextareaEditor) Focus()           { e.ta.Focus() }
+func (e *TextareaEditor) Blur()            { e.ta.Blur() }
+func (e *TextareaEditor) View() string     { return e.ta.View() }
 func (e *TextareaEditor) Mode() editorMode { return e.mode }
 
 // Update routes a message based on the current mode.

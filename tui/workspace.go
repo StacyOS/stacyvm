@@ -217,7 +217,6 @@ func (m *Model) workspaceTermKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-
 func (m Model) termPrompt() string {
 	return stHi.Render("stacy") + stSteel.Render("@") + stOK.Render(m.workspace.sandboxID) +
 		stSteel.Render(":") + stSteel.Render("/workspace") + stSteel.Render("$ ")
