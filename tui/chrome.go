@@ -27,13 +27,18 @@ func (m Model) renderRibbon(width int) string {
 	// Right: live CPU/MEM/LOAD sparklines + clock + online badge.
 	cpuPct := m.host.cpuPct
 	memPct := m.host.memPct
-	right := strings.Join([]string{
-		stDim.Render("CPU") + " " + spark(m.teleCPU.slice(), 8, stHi) + " " + stHi.Render(itoa(int(cpuPct+0.5)) + "%"),
-		stDim.Render("MEM") + " " + spark(m.teleMEM.slice(), 8, stHi) + " " + stHi.Render(itoa(int(memPct+0.5)) + "%"),
-		stDim.Render("LOAD") + " " + spark(m.teleLOAD.slice(), 8, stOK),
+	segs := []string{}
+	if sr := m.spawnRibbon(); sr != "" { // background spawn progress, visible anywhere
+		segs = append(segs, sr)
+	}
+	segs = append(segs,
+		stDim.Render("CPU")+" "+spark(m.teleCPU.slice(), 8, stHi)+" "+stHi.Render(itoa(int(cpuPct+0.5))+"%"),
+		stDim.Render("MEM")+" "+spark(m.teleMEM.slice(), 8, stHi)+" "+stHi.Render(itoa(int(memPct+0.5))+"%"),
+		stDim.Render("LOAD")+" "+spark(m.teleLOAD.slice(), 8, stOK),
 		stDim.Render(m.clockString()),
 		m.onlineBadge(),
-	}, "  ")
+	)
+	right := strings.Join(segs, "  ")
 
 	row := spread(left, right, width)
 	rule := stFaint.Render(strings.Repeat("─", max(0, width)))
@@ -107,6 +112,12 @@ func (m Model) renderStatusFooter(width int) string {
 	switch {
 	case m.mode == modeConfirm:
 		hints = []hint{{"y", "yes"}, {"n", "no"}}
+	case m.mode == modeSpawning:
+		hints = []hint{{glyphReplay, "replay"}, {"esc", "back"}, {"1-6", "nav"}}
+	case m.mode == modeInput:
+		hints = []hint{{"j/k", "move"}, {glyphEnter, "open"}, {"^o", "read"}, {"^s", "save"}, {"esc", "back"}}
+	case m.mode == modeExec:
+		hints = []hint{{glyphEnter, "run"}, {"↑", "history"}, {"esc", "back"}}
 	case m.mode != modeNormal:
 		hints = []hint{{glyphTab, "next field"}, {glyphEnter, "submit"}, {"esc", "cancel"}}
 	default:

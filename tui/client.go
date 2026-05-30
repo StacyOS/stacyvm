@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"time"
@@ -112,10 +113,13 @@ func (c *apiClient) listSandboxes() ([]sandboxData, error) {
 	return sbs, nil
 }
 
-func (c *apiClient) spawn(image, ttl string) (*sandboxData, error) {
+func (c *apiClient) spawn(image, ttl, provider string) (*sandboxData, error) {
 	body := map[string]string{"image": image}
 	if ttl != "" {
 		body["ttl"] = ttl
+	}
+	if provider != "" {
+		body["provider"] = provider
 	}
 	data, code, err := c.do("POST", "/api/v1/sandboxes", body)
 	if err != nil {
@@ -264,6 +268,33 @@ func (c *apiClient) deleteTemplate(name string) error {
 		return fmt.Errorf("delete template failed (HTTP %d)", code)
 	}
 	return nil
+}
+
+type fileInfoData struct {
+	Path    string `json:"path"`
+	Size    int64  `json:"size"`
+	Mode    string `json:"mode"`
+	IsDir   bool   `json:"is_dir"`
+	ModTime string `json:"mod_time"`
+}
+
+// listFiles lists files at path in a sandbox (GET /sandboxes/{id}/files/list).
+func (c *apiClient) listFiles(id, path string) ([]fileInfoData, error) {
+	if path == "" {
+		path = "/"
+	}
+	data, code, err := c.do("GET", "/api/v1/sandboxes/"+id+"/files/list?path="+url.QueryEscape(path), nil)
+	if err != nil {
+		return nil, err
+	}
+	if code != 200 {
+		return nil, fmt.Errorf("list files failed (HTTP %d)", code)
+	}
+	var files []fileInfoData
+	if err := json.Unmarshal(data, &files); err != nil {
+		return nil, err
+	}
+	return files, nil
 }
 
 // systemStats fetches real host telemetry from GET /api/v1/system/stats.

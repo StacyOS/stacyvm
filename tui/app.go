@@ -8,7 +8,6 @@ import (
 
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/harmonica"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/lipgloss/table"
@@ -152,6 +151,20 @@ type Model struct {
 	events  []eventEntry
 	eventCh chan eventEntry
 
+	// Spawn modal (quick form) + animated spawn sequence
+	spawnProviderIdx int // 0 docker · 1 firecracker · 2 proot
+	spawnTemplateIdx int // -1 none, else index into templateList
+	spawn            spawnState
+
+	// Exec
+	lastExec    *execResultData
+	lastExecCmd string
+	execHistory []string
+	execHistIdx int
+
+	// Files browser
+	files fileState
+
 	// Animation
 	slideSpring   harmonica.Spring
 	slidePos      float64
@@ -226,13 +239,18 @@ func NewModel(serverURL, apiKey string) Model {
 	tmplTTLInput.CharLimit = 10
 	tmplTTLInput.Width = 10
 
+	ins := []textinput.Model{
+		imageInput, ttlInput, cmdInput, filePathInput, fileContentInput,
+		tmplNameInput, tmplImageInput, tmplDescInput, tmplMemInput, tmplCPUInput, tmplTTLInput,
+	}
+	for i := range ins {
+		ins[i].Prompt = "" // we render our own prompts (e.g. "$ ")
+	}
+
 	return Model{
 		client: client,
-		inputs: []textinput.Model{
-			imageInput, ttlInput, cmdInput, filePathInput, fileContentInput,
-			tmplNameInput, tmplImageInput, tmplDescInput, tmplMemInput, tmplCPUInput, tmplTTLInput,
-		},
-		logs: make([]string, 0, 100),
+		inputs: ins,
+		logs:   make([]string, 0, 100),
 		slideSpring:  harmonica.NewSpring(harmonica.FPS(60), 12.0, 0.8),
 		loaderSpring: harmonica.NewSpring(harmonica.FPS(60), 6.0, 0.2), // bouncy spring
 
@@ -249,6 +267,9 @@ func NewModel(serverURL, apiKey string) Model {
 		cursorOn: true,
 		events:   make([]eventEntry, 0, 200),
 		eventCh:  make(chan eventEntry, 64),
+
+		spawnProviderIdx: 0,
+		spawnTemplateIdx: -1,
 	}
 }
 
@@ -303,6 +324,19 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.addEvent(eventEntry(msg))
 		return m, m.waitEvent()
 
+	case spawnTickMsg:
+		if m.spawn.active && !m.spawn.done {
+			m.advanceSpawn(time.Time(msg))
+			if !m.spawn.done {
+				return m, spawnTick()
+			}
+		}
+		return m, nil
+
+	case filesListedMsg:
+		m.applyFilesListed(msg)
+		return m, nil
+
 	case frameMsg:
 		animating := false
 
@@ -353,6 +387,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		sb := (*sandboxData)(msg)
 		m.statusMsg = fmt.Sprintf("Spawned %s (%s)", sb.ID, sb.Image)
 		m.addLog("SPAWN", fmt.Sprintf("%s image=%s", sb.ID, sb.Image))
+		if m.spawn.active {
+			// Feed the real result into the animated sequence; let it finish.
+			m.spawn.result = sb
+			return m, m.fetchSandboxes()
+		}
 		m.activeTab = tabSandboxes
 		m.mode = modeNormal
 		return m, m.fetchSandboxes()
@@ -370,24 +409,26 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case execMsg:
 		r := (*execResultData)(msg)
-		m.lastOutput = ""
-		if r.Stdout != "" {
-			m.lastOutput += r.Stdout
-		}
-		if r.Stderr != "" {
-			m.lastOutput += errorStyle.Render(r.Stderr)
-		}
-		m.lastOutput += dimStyle.Render(fmt.Sprintf("\n[exit %d, %s]", r.ExitCode, r.Duration))
+		m.lastExec = r
 		m.lastError = ""
 		m.addLog("EXEC", fmt.Sprintf("exit=%d dur=%s", r.ExitCode, r.Duration))
 
 	case fileWrittenMsg:
-		m.statusMsg = "File written successfully"
+		m.statusMsg = "File written"
 		m.lastError = ""
+		if m.mode == modeInput {
+			m.files.write = false
+			m.files.editorOn = false
+		}
 		m.addLog("WRITE", "file written")
 
 	case fileReadMsg:
-		m.lastOutput = string(msg)
+		if m.mode == modeInput {
+			m.files.content = string(msg)
+			m.files.write = false
+		} else {
+			m.lastOutput = string(msg)
+		}
 		m.lastError = ""
 		m.addLog("READ", fmt.Sprintf("%d bytes", len(msg)))
 
@@ -406,11 +447,14 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case errMsg:
 		m.lastError = msg.Error()
 		m.statusMsg = ""
+		if m.spawn.active && !m.spawn.done {
+			m.spawn.err = msg.Error()
+		}
 		m.addLog("ERROR", msg.Error())
 	}
 
-	// Update active text input
-	if m.mode == modeInput || m.mode == modeExec || m.mode == modeSpawn || m.mode == modeCreateTemplate {
+	// Keep the active text input live (cursor blink, etc.) for the text forms.
+	if m.mode == modeExec || m.mode == modeSpawn || m.mode == modeCreateTemplate {
 		var cmd tea.Cmd
 		idx := m.activeInputIndex()
 		if idx >= 0 && idx < len(m.inputs) {
@@ -455,42 +499,6 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
-	// Sandbox Action Mode
-	if m.mode == modeSandboxAction {
-		switch key {
-		case "esc":
-			m.mode = modeNormal
-			return m, tickFrame()
-		case "e":
-			m.mode = modeExec
-			m.modalPos = 20.0
-			m.modalVelocity = 0
-			m.inputs[2].SetValue("")
-			m.inputs[2].Focus()
-			return m, tickFrame()
-		case "f":
-			m.mode = modeInput
-			m.modalPos = 20.0
-			m.modalVelocity = 0
-			m.inputs[3].SetValue("")
-			m.inputs[4].SetValue("")
-			m.inputFocus = 0
-			m.inputs[3].Focus()
-			return m, tickFrame()
-		case "d":
-			if len(m.sandboxes) > 0 && m.cursor < len(m.sandboxes) {
-				sb := m.sandboxes[m.cursor]
-				m.mode = modeConfirm
-				m.confirmMsg = fmt.Sprintf(" Destroy sandbox %s? (y/N) ", sb.ID)
-				m.confirmFunc = func() tea.Cmd {
-					return m.destroySandbox(sb.ID)
-				}
-				return m, tickFrame()
-			}
-		}
-		return m, nil
-	}
-
 	// Confirm mode
 	if m.mode == modeConfirm {
 		switch key {
@@ -506,8 +514,37 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 
-	// Input modes
-	if m.mode == modeInput || m.mode == modeExec || m.mode == modeSpawn || m.mode == modeCreateTemplate || m.mode == modeSpawnTemplate {
+	// Animated spawn sequence: dismiss / replay / background (nav away).
+	if m.mode == modeSpawning {
+		switch {
+		case key == "esc" || key == "enter":
+			m.mode = modeNormal
+			if m.spawn.done {
+				m.spawn.active = false
+			}
+			return m, m.fetchSandboxes()
+		case key == "r" || key == "↻":
+			return m, m.startSpawn(m.spawn.req)
+		case key >= "1" && key <= "6":
+			m.activeTab = tab(key[0] - '1')
+			m.mode = modeNormal // background; ribbon keeps showing progress
+			return m, nil
+		}
+		return m, nil
+	}
+
+	// Spawn modal (quick form) — its own field/segmented handling.
+	if m.mode == modeSpawn {
+		return m.handleSpawnModalKey(msg)
+	}
+
+	// Files browser — tree navigation + READ/WRITE editor.
+	if m.mode == modeInput {
+		return m.handleFilesKey(msg)
+	}
+
+	// Text-input forms: exec + create-template.
+	if m.mode == modeExec || m.mode == modeCreateTemplate {
 		switch key {
 		case "esc":
 			m.mode = modeNormal
@@ -521,6 +558,16 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case "enter":
 			return m.submitInput()
+		case "up":
+			if m.mode == modeExec {
+				m.execHistoryRecall(-1)
+				return m, nil
+			}
+		case "down":
+			if m.mode == modeExec {
+				m.execHistoryRecall(1)
+				return m, nil
+			}
 		}
 		idx := m.activeInputIndex()
 		if idx >= 0 && idx < len(m.inputs) {
@@ -554,20 +601,29 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+// handleDashboardKey: the dashboard's ACTIVE SANDBOXES table shares actions
+// with the Sandboxes screen.
 func (m *Model) handleDashboardKey(key string) (tea.Model, tea.Cmd) {
 	switch key {
-	case "enter":
-		if m.mode == modeSpawn {
-			m.mode = modeSpawning
-			m.loaderPos = 0
-			m.loaderVelocity = 0
-			m.loaderTarget = 20.0
-			return m, tea.Batch(m.spawnSandbox(m.inputs[0].Value(), m.inputs[1].Value()), tickFrame())
+	case "j", "down":
+		if len(m.sandboxes) > 0 {
+			m.cursor = min(m.cursor+1, len(m.sandboxes)-1)
 		}
-		if m.mode == modeExec {
-            return m, nil
-        }
-    }
+	case "k", "up":
+		if m.cursor > 0 {
+			m.cursor--
+		}
+	case "s":
+		return m, m.openSpawnModal()
+	case "e":
+		return m, m.openExec()
+	case "f":
+		return m, m.openFiles()
+	case "d":
+		m.confirmKill()
+	case "enter":
+		// open workspace — built in Batch 2; no-op for now.
+	}
 	return m, nil
 }
 
@@ -582,54 +638,79 @@ func (m *Model) handleSandboxKey(key string) (tea.Model, tea.Cmd) {
 			m.cursor--
 		}
 	case "d", "delete":
-		if len(m.sandboxes) > 0 {
-			sb := m.sandboxes[m.cursor]
-			m.confirmMsg = fmt.Sprintf("Destroy sandbox %s? (y/n)", sb.ID)
-			m.mode = modeConfirm
-			m.confirmFunc = func() tea.Cmd {
-				return m.destroySandbox(sb.ID)
-			}
-		}
-	case "enter":
-		if m.activeTab == tabSandboxes && len(m.sandboxes) > 0 {
-			m.mode = modeSandboxAction
-			m.modalPos = 20.0
-			m.modalVelocity = 0
-			return m, tickFrame()
-		}
+		m.confirmKill()
 	case "s":
-		if m.activeTab == tabSandboxes {
-			m.mode = modeSpawn
-			m.modalPos = -20.0 // slide down from top
-			m.modalVelocity = 0
-			m.inputs[0].SetValue("")
-			m.inputs[1].SetValue("")
-			m.inputFocus = 0
-			m.inputs[0].Focus()
-			return m, tickFrame()
-		}
+		return m, m.openSpawnModal()
 	case "e":
-		if m.activeTab == tabSandboxes && len(m.sandboxes) > 0 {
-			m.mode = modeExec
-			m.modalPos = 20.0
-			m.modalVelocity = 0
-			m.inputs[2].SetValue("")
-			m.inputs[2].Focus()
-			return m, tickFrame()
-		}
+		return m, m.openExec()
 	case "f":
-		if m.activeTab == tabSandboxes && len(m.sandboxes) > 0 {
-			m.mode = modeInput
-			m.modalPos = 20.0
-			m.modalVelocity = 0
-			m.inputs[3].SetValue("")
-			m.inputs[4].SetValue("")
-			m.inputFocus = 0
-			m.inputs[3].Focus()
-			return m, tickFrame()
-		}
+		return m, m.openFiles()
+	case "l":
+		m.activeTab = tabLogs
+	case "enter":
+		// inspect drawer is always shown; ↵ opens Workspace (Batch 2).
 	}
 	return m, nil
+}
+
+// ── shared sandbox actions ──────────────────────────────────────────────────
+
+func (m *Model) openSpawnModal() tea.Cmd {
+	m.mode = modeSpawn
+	m.inputFocus = 0
+	m.spawnTemplateIdx = -1
+	m.spawnProviderIdx = 0
+	m.inputs[0].SetValue("")
+	m.inputs[1].SetValue("")
+	m.blurAllInputs()
+	m.inputs[0].Focus()
+	return nil
+}
+
+func (m *Model) openExec() tea.Cmd {
+	if len(m.sandboxes) == 0 {
+		return nil
+	}
+	m.mode = modeExec
+	m.inputs[2].SetValue("")
+	m.execHistIdx = len(m.execHistory)
+	m.inputs[2].Focus()
+	return nil
+}
+
+func (m *Model) openFiles() tea.Cmd {
+	if len(m.sandboxes) == 0 || m.cursor >= len(m.sandboxes) {
+		return nil
+	}
+	return m.startFiles(m.sandboxes[m.cursor].ID)
+}
+
+func (m *Model) confirmKill() {
+	if len(m.sandboxes) == 0 || m.cursor >= len(m.sandboxes) {
+		return
+	}
+	sb := m.sandboxes[m.cursor]
+	m.confirmMsg = fmt.Sprintf("Destroy sandbox %s? (y/N)", sb.ID)
+	m.mode = modeConfirm
+	m.confirmFunc = func() tea.Cmd { return m.destroySandbox(sb.ID) }
+}
+
+// execHistoryRecall steps through previously run commands (↑/↓).
+func (m *Model) execHistoryRecall(dir int) {
+	if len(m.execHistory) == 0 {
+		return
+	}
+	m.execHistIdx += dir
+	if m.execHistIdx < 0 {
+		m.execHistIdx = 0
+	}
+	if m.execHistIdx >= len(m.execHistory) {
+		m.execHistIdx = len(m.execHistory)
+		m.inputs[2].SetValue("")
+		return
+	}
+	m.inputs[2].SetValue(m.execHistory[m.execHistIdx])
+	m.inputs[2].CursorEnd()
 }
 
 func (m *Model) handleTemplateKey(key string) (tea.Model, tea.Cmd) {
@@ -658,7 +739,8 @@ func (m *Model) handleTemplateKey(key string) (tea.Model, tea.Cmd) {
 	case "s", "enter":
 		if len(m.templateList) > 0 {
 			t := m.templateList[m.templateCursor]
-			return m, m.spawnFromTemplate(t.Name)
+			m.activeTab = tabSandboxes
+			return m, m.startSpawn(spawnReq{template: t.Name, image: t.Image})
 		}
 	}
 	return m, nil
@@ -666,46 +748,17 @@ func (m *Model) handleTemplateKey(key string) (tea.Model, tea.Cmd) {
 
 func (m *Model) submitInput() (tea.Model, tea.Cmd) {
 	switch m.mode {
-	case modeSpawn:
-		image := m.inputs[0].Value()
-		if image == "" {
-			image = "alpine:latest"
-		}
-		ttl := m.inputs[1].Value()
-		if ttl == "" {
-			ttl = "30m"
-		}
-		m.inputs[0].SetValue("")
-		m.inputs[1].SetValue("")
-		m.blurAllInputs()
-		return m, m.spawnSandbox(image, ttl)
-
 	case modeExec:
 		cmd := m.inputs[2].Value()
 		if cmd == "" || len(m.sandboxes) == 0 {
 			return m, nil
 		}
 		sb := m.sandboxes[m.cursor]
+		m.lastExecCmd = cmd
+		m.execHistory = append(m.execHistory, cmd)
+		m.execHistIdx = len(m.execHistory)
 		m.inputs[2].SetValue("")
 		return m, m.execCommand(sb.ID, cmd)
-
-	case modeInput:
-		// File operations
-		path := m.inputs[3].Value()
-		content := m.inputs[4].Value()
-		if path == "" || len(m.sandboxes) == 0 {
-			return m, nil
-		}
-		sb := m.sandboxes[m.cursor]
-		if content != "" {
-			m.inputs[3].SetValue("")
-			m.inputs[4].SetValue("")
-			m.blurAllInputs()
-			return m, m.writeFileCmd(sb.ID, path, content)
-		}
-		m.inputs[3].SetValue("")
-		m.blurAllInputs()
-		return m, m.readFileCmd(sb.ID, path)
 
 	case modeCreateTemplate:
 		name := m.inputs[5].Value()
@@ -781,249 +834,6 @@ func (m Model) View() string {
 
 // viewDashboard lives in dashboard.go (Mission Control restyle).
 
-// ── Sandboxes View ───────────────────────────────────────
-
-func (m Model) viewSandboxes(height, width int) string {
-	var b strings.Builder
-
-	if m.mode == modeSpawning {
-		b.WriteString(boldStyle.Render("\n  Spawning Sandbox...\n\n"))
-		pos := int(m.loaderPos)
-		if pos < 0 {
-			pos = 0
-		}
-		if pos > 20 {
-			pos = 20
-		}
-		padLeft := strings.Repeat(" ", pos)
-		padRight := strings.Repeat(" ", 20-pos)
-		b.WriteString(fmt.Sprintf("  [%s%s%s]\n", padLeft, successStyle.Render("●"), padRight))
-		b.WriteString(dimStyle.Render("\n  Please wait...\n"))
-		
-		return b.String()
-	}
-
-	if m.mode == modeSpawn {
-		content := boldStyle.Render("\n  Spawn New Sandbox\n\n")
-		content += fmt.Sprintf("  Image: %s\n", m.inputs[0].View())
-		content += fmt.Sprintf("  TTL:   %s\n", m.inputs[1].View())
-		content += dimStyle.Render("\n  Press Enter to spawn, Esc to cancel\n")
-		
-		if math.Abs(m.modalPos) > 0.5 {
-			offset := int(m.modalPos)
-			if offset < 0 {
-				content = strings.Repeat("\n", -offset) + content
-			} else {
-				content = lipgloss.NewStyle().MarginTop(offset).Render(content)
-			}
-		}
-		return content
-	}
-
-	if m.mode == modeExec {
-		target := "(none)"
-		if len(m.sandboxes) > 0 && m.cursor < len(m.sandboxes) {
-			sb := m.sandboxes[m.cursor]
-			target = fmt.Sprintf("%s (%s)", sb.ID, sb.Image)
-		}
-		content := boldStyle.Render(fmt.Sprintf("\n  Execute in: %s\n\n", target))
-		content += fmt.Sprintf("  Command: %s\n", m.inputs[2].View())
-		if m.lastOutput != "" {
-			content += boldStyle.Render("\n  Output:\n")
-			lines := strings.Split(m.lastOutput, "\n")
-			maxLines := height - 8
-			for i, line := range lines {
-				if i >= maxLines {
-					content += dimStyle.Render(fmt.Sprintf("  ... (%d more lines)", len(lines)-i)) + "\n"
-					break
-				}
-				content += "  " + outputStyle.Render(line) + "\n"
-			}
-		}
-		
-		if math.Abs(m.modalPos) > 0.5 {
-			offset := int(m.modalPos)
-			if offset > 0 {
-				content = lipgloss.NewStyle().MarginTop(offset).Render(content)
-			}
-		}
-		return content
-	}
-
-	if m.mode == modeSandboxAction {
-		sb := m.sandboxes[m.cursor]
-		content := boldStyle.Render(fmt.Sprintf("\n  Sandbox Details: %s\n\n", sb.ID))
-		content += fmt.Sprintf("  Image:    %s\n", sb.Image)
-		content += fmt.Sprintf("  Created:  %s\n", sb.CreatedAt.Format("2006-01-02 15:04:05"))
-		content += fmt.Sprintf("  Expires:  %s\n", formatTTL(sb.ExpiresAt))
-		content += fmt.Sprintf("  Memory:   %d MB\n", sb.MemoryMB)
-		content += fmt.Sprintf("  CPUs:     %d\n", sb.VCPUs)
-		content += fmt.Sprintf("  State:    %s\n", sb.State)
-		content += dimStyle.Render("\n  Press Esc to close\n")
-		return content
-	}
-
-	if m.mode == modeInput {
-		target := "(none)"
-		if len(m.sandboxes) > 0 && m.cursor < len(m.sandboxes) {
-			target = m.sandboxes[m.cursor].ID
-		}
-		content := boldStyle.Render(fmt.Sprintf("\n  Manage Files in: %s\n\n", target))
-		content += fmt.Sprintf("  Path:    %s\n", m.inputs[3].View())
-		content += fmt.Sprintf("  Content: %s\n", m.inputs[4].View())
-		content += dimStyle.Render("\n  Leave content empty to READ file.\n")
-		content += dimStyle.Render("  Provide content to WRITE file.\n")
-		
-		if m.lastOutput != "" && m.inputs[4].Value() == "" {
-			content += boldStyle.Render("\n  File Content:\n")
-			lines := strings.Split(m.lastOutput, "\n")
-			maxLines := height - 12
-			for i, line := range lines {
-				if i >= maxLines {
-					content += dimStyle.Render(fmt.Sprintf("  ... (%d more lines)", len(lines)-i)) + "\n"
-					break
-				}
-				content += "  " + outputStyle.Render(line) + "\n"
-			}
-		}
-		
-		if math.Abs(m.modalPos) > 0.5 {
-			offset := int(m.modalPos)
-			if offset > 0 {
-				content = lipgloss.NewStyle().MarginTop(offset).Render(content)
-			}
-		}
-		return content
-	}
-
-	// Normal list view
-	if len(m.sandboxes) == 0 {
-		b.WriteString(dimStyle.Render("\n  No sandboxes running. Press [s] to spawn one.\n"))
-		return b.String()
-	}
-
-	var rows [][]string
-	imageWidth := max(10, width-55) // Calculate dynamic width for Image column
-	for i, sb := range m.sandboxes {
-		ttlStr := formatTTL(sb.ExpiresAt)
-		rows = append(rows, []string{
-			sb.ID, sb.State, sb.Provider,
-			truncate(sb.Image, imageWidth),
-			sb.CreatedAt.Format("15:04:05"),
-			ttlStr,
-		})
-
-		if i >= height-8 {
-			remaining := len(m.sandboxes) - i - 1
-			if remaining > 0 {
-				rows = append(rows, []string{"...", "...", "...", fmt.Sprintf("and %d more", remaining), "...", "..."})
-			}
-			break
-		}
-	}
-
-	t := table.New().
-		Border(lipgloss.NormalBorder()).
-		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("#888888"))).
-		BorderRow(false).
-		BorderColumn(true).
-		Headers("ID", "STATE", "PROVIDER", "IMAGE", "CREATED", "TTL").
-		Rows(rows...).
-		StyleFunc(func(row, col int) lipgloss.Style {
-			if row == table.HeaderRow {
-				return headerStyle
-			}
-			if row == m.cursor {
-				return selectedRowStyle
-			}
-			return normalRowStyle
-		})
-
-	b.WriteString("\n  " + strings.ReplaceAll(t.Render(), "\n", "\n  ") + "\n")
-
-	return b.String()
-}
-
-// ── Templates View ───────────────────────────────────────
-
-func (m Model) viewTemplates(height, width int) string {
-	var b strings.Builder
-
-	if m.mode == modeCreateTemplate {
-		b.WriteString(boldStyle.Render("\n  Create Template\n\n"))
-		b.WriteString(fmt.Sprintf("  Name:        %s\n", m.inputs[5].View()))
-		b.WriteString(fmt.Sprintf("  Image:       %s\n", m.inputs[6].View()))
-		b.WriteString(fmt.Sprintf("  Description: %s\n", m.inputs[7].View()))
-		b.WriteString(fmt.Sprintf("  Memory (MB): %s\n", m.inputs[8].View()))
-		b.WriteString(fmt.Sprintf("  CPU Cores:   %s\n", m.inputs[9].View()))
-		b.WriteString(fmt.Sprintf("  TTL (secs):  %s\n", m.inputs[10].View()))
-		b.WriteString(dimStyle.Render("\n  Press Enter to create, Esc to cancel\n"))
-		return b.String()
-	}
-
-	if len(m.templateList) == 0 {
-		b.WriteString(dimStyle.Render("\n  No templates configured. Press [n] to create one.\n"))
-		return b.String()
-	}
-
-	var rows [][]string
-	availableWidth := max(20, width-55) // Calculate dynamic width for Name and Image columns
-	nameWidth := max(10, availableWidth*2/5)
-	imageWidth := max(15, availableWidth*3/5)
-
-	for i, tmpl := range m.templateList {
-		rows = append(rows, []string{
-			truncate(tmpl.Name, nameWidth),
-			truncate(tmpl.Image, imageWidth),
-			fmt.Sprintf("%d", tmpl.MemoryMB),
-			fmt.Sprintf("%d", tmpl.CPUCores),
-			fmt.Sprintf("%d", tmpl.TTLSeconds),
-			fmt.Sprintf("%d", tmpl.PoolSize),
-		})
-
-		if i >= height-10 {
-			break
-		}
-	}
-
-	t := table.New().
-		Border(lipgloss.NormalBorder()).
-		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("#888888"))).
-		BorderRow(false).
-		BorderColumn(true).
-		Headers("NAME", "IMAGE", "MEM(MB)", "CPUS", "TTL(s)", "POOL").
-		Rows(rows...).
-		StyleFunc(func(row, col int) lipgloss.Style {
-			if row == table.HeaderRow {
-				return headerStyle
-			}
-			if row == m.templateCursor {
-				return selectedRowStyle
-			}
-			return normalRowStyle
-		})
-
-	b.WriteString("\n  " + strings.ReplaceAll(t.Render(), "\n", "\n  ") + "\n")
-
-	// Detail panel for selected template
-	if m.templateCursor < len(m.templateList) {
-		t := m.templateList[m.templateCursor]
-		b.WriteString("\n")
-		b.WriteString(boldStyle.Render(fmt.Sprintf("  Template: %s", t.Name)) + "\n")
-		if t.Description != "" {
-			out, err := glamour.Render(t.Description, "dark")
-			if err == nil {
-				b.WriteString(strings.ReplaceAll(out, "\n", "\n  "))
-			} else {
-				b.WriteString(dimStyle.Render(fmt.Sprintf("  %s", t.Description)) + "\n")
-			}
-		}
-		b.WriteString(fmt.Sprintf("  Image: %s  |  Memory: %dMB  |  CPUs: %d  |  TTL: %ds\n",
-			t.Image, t.MemoryMB, t.CPUCores, t.TTLSeconds))
-	}
-
-	return b.String()
-}
 
 // ── Providers View ───────────────────────────────────────
 
@@ -1163,9 +973,9 @@ func (m Model) fetchTemplates() tea.Cmd {
 	}
 }
 
-func (m Model) spawnSandbox(image, ttl string) tea.Cmd {
+func (m Model) spawnSandbox(image, ttl, provider string) tea.Cmd {
 	return func() tea.Msg {
-		sb, err := m.client.spawn(image, ttl)
+		sb, err := m.client.spawn(image, ttl, provider)
 		if err != nil {
 			return errMsg(err)
 		}
@@ -1244,11 +1054,15 @@ func (m Model) deleteTemplate(name string) tea.Cmd {
 func (m Model) activeInputIndex() int {
 	switch m.mode {
 	case modeSpawn:
-		return m.inputFocus // 0=image, 1=ttl
+		switch m.inputFocus { // 0=image, 1=template, 2=ttl, 3=provider
+		case 0:
+			return 0
+		case 2:
+			return 1
+		}
+		return -1
 	case modeExec:
 		return 2
-	case modeInput:
-		return 3 + m.inputFocus // 3=path, 4=content
 	case modeCreateTemplate:
 		return 5 + m.inputFocus // 5-10
 	}

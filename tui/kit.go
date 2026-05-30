@@ -69,15 +69,14 @@ func spread(left, right string, w int) string {
 	return left + strings.Repeat(" ", gap) + right
 }
 
-// label renders an UPPERCASE section label (the mockup's tracked dim/orange
-// labels). Terminals can't do sub-cell letter-spacing, so hierarchy comes from
-// UPPERCASE + color rather than inserting spaces between letters.
+// label renders a section label in the tracked dim/orange label color. Callers
+// pass UPPERCASE literals for section headers; dynamic titles (IDs, paths,
+// names) keep their own case so e.g. "◂ sb-7f3a91" isn't shouted.
 func label(text string, accent bool) string {
-	up := strings.ToUpper(text)
 	if accent {
-		return stLabelHi.Render(up)
+		return stLabelHi.Render(text)
 	}
-	return stLabel.Render(up)
+	return stLabel.Render(text)
 }
 
 // ── meter / spark / progress ──────────────────────────────────────────────
