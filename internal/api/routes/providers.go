@@ -131,6 +131,11 @@ func (p *ProviderRoutes) Detail(w http.ResponseWriter, r *http.Request) {
 
 	// Expose safe config info based on provider type
 	switch v := prov.(type) {
+	case *providers.DockerProvider:
+		c := v.ProviderConfig()
+		cfg["runtime"] = c.Runtime
+		cfg["network"] = c.NetworkMode
+		cfg["type"] = "docker"
 	case *providers.FirecrackerProvider:
 		c := v.ProviderConfig()
 		cfg["firecracker_path"] = c.FirecrackerPath

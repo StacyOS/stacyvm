@@ -27,6 +27,7 @@ func seedModel() Model {
 	}
 	m.host = hostSnapshot{cpuPct: 34, memPct: 61, diskPct: 22, ok: true}
 	m.health = &healthData{Version: "0.9.2", Uptime: "4h2m"}
+	m.booting = false // skip the boot splash in screen snapshots
 	return m
 }
 

@@ -270,6 +270,30 @@ func (c *apiClient) deleteTemplate(name string) error {
 	return nil
 }
 
+type providerDetailData struct {
+	Name         string            `json:"name"`
+	Healthy      bool              `json:"healthy"`
+	Default      bool              `json:"default"`
+	SandboxCount int               `json:"sandbox_count"`
+	Config       map[string]string `json:"config"`
+}
+
+// providerDetail fetches a provider's config + sandbox count.
+func (c *apiClient) providerDetail(name string) (providerDetailData, error) {
+	data, code, err := c.do("GET", "/api/v1/providers/"+name, nil)
+	if err != nil {
+		return providerDetailData{}, err
+	}
+	if code != 200 {
+		return providerDetailData{}, fmt.Errorf("provider detail failed (HTTP %d)", code)
+	}
+	var d providerDetailData
+	if err := json.Unmarshal(data, &d); err != nil {
+		return providerDetailData{}, err
+	}
+	return d, nil
+}
+
 type fileInfoData struct {
 	Path    string `json:"path"`
 	Size    int64  `json:"size"`

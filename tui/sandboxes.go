@@ -14,6 +14,8 @@ import (
 
 func (m Model) viewSandboxes(height, width int) string {
 	switch m.mode {
+	case modeWorkspace:
+		return m.renderWorkspace(height, width)
 	case modeSpawn:
 		return m.renderSpawnModal(height, width)
 	case modeSpawning:

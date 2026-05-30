@@ -1,10 +1,10 @@
 package tui
 
 import (
-	"fmt"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 func (m *Model) handleConfigKey(key string) (tea.Model, tea.Cmd) {
@@ -51,40 +51,48 @@ func (m *Model) patchConfigCmd(payload map[string]interface{}) tea.Cmd {
 
 type configPatchedMsg string
 
-func (m *Model) viewConfig(height, width int) string {
-	var b strings.Builder
-	b.WriteString(boldStyle.Render(" Configuration Management\n\n"))
+func (m Model) viewConfig(height, width int) string {
+	leftW := (width - 1) / 2
+	rightW := width - 1 - leftW
+	return lipgloss.JoinHorizontal(lipgloss.Top, m.configProviders(leftW), " ", m.configServer(rightW))
+}
 
-	opts := []string{
-		"providers.default=docker",
-		"providers.default=firecracker",
-		"providers.default=proot",
-		"providers.docker.runtime=runc",
-		"providers.docker.runtime=runsc",
-		"providers.docker.runtime=kata",
-	}
-
-	descriptions := []string{
-		"Set default provider to Docker (Recommended)",
-		"Set default provider to Firecracker (Requires Linux KVM)",
-		"Set default provider to PRoot (Userspace emulation)",
-		"Set Docker runtime to standard (runc)",
-		"Set Docker runtime to gVisor (runsc)",
-		"Set Docker runtime to Kata Containers (kata)",
-	}
-
-	for i, opt := range opts {
-		cursor := "  "
-		style := normalRowStyle
-		if m.configCursor == i {
-			cursor = "> "
-			style = selectedRowStyle
+// segmented renders a labelled segmented control; the option at cursorIdx
+// (relative to base) is highlighted as the candidate to apply.
+func (m Model) configSegmented(title string, opts []string, base int) string {
+	var segs []string
+	for i, o := range opts {
+		idx := base + i
+		if m.configCursor == idx {
+			segs = append(segs, lipgloss.NewStyle().Foreground(colOrange).
+				Border(lipgloss.NormalBorder(), false, true, false, true).
+				BorderForeground(colOrange).Render(o))
+		} else {
+			segs = append(segs, stFaint.Render(" "+o+" "))
 		}
-		b.WriteString(fmt.Sprintf("%s%s - %s\n", cursor, style.Render(opt), dimStyle.Render(descriptions[i])))
 	}
+	return stDim.Render(title) + "\n" + strings.Join(segs, "  ")
+}
 
-	b.WriteString("\n")
-	b.WriteString(dimStyle.Render("Press Space or Enter to apply the selected setting.\n"))
+func (m Model) configProviders(width int) string {
+	body := strings.Join([]string{
+		m.configSegmented("default provider", []string{"docker", "firecracker", "proot"}, 0),
+		"",
+		m.configSegmented("docker runtime", []string{"runc", "runsc", "kata"}, 3),
+		"",
+		keyHints([]hint{{"j/k", "move"}, {"space", "apply"}}),
+	}, "\n")
+	return panel(glyphPaneSpawn+" PROVIDERS", "", body, width, true)
+}
 
-	return b.String()
+func (m Model) configServer(width int) string {
+	kv := func(k, v string) string { return stDim.Render(padRight(k, 16)) + stInk.Render(v) }
+	body := strings.Join([]string{
+		kv("address", m.client.baseURL),
+		kv("log format", "pretty"),
+		kv("preview domain", "*.stacy.dev"),
+		"",
+		stFaint.Render(glyphEnter + " edit any key · changes patch live"),
+	}, "\n")
+	return panel("SERVER", "", body, width, false)
 }

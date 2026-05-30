@@ -113,6 +113,9 @@ func NewDockerProvider(cfg DockerProviderConfig, logger zerolog.Logger) (*Docker
 
 func (d *DockerProvider) Name() string { return "docker" }
 
+// ProviderConfig exposes the docker provider configuration (runtime, network).
+func (d *DockerProvider) ProviderConfig() DockerProviderConfig { return d.config }
+
 func (d *DockerProvider) Healthy(ctx context.Context) bool {
 	_, err := d.cli.Ping(ctx)
 	return err == nil

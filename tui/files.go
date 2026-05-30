@@ -54,20 +54,29 @@ func (m Model) listFilesCmd(id, dir string) tea.Cmd {
 	}
 }
 
-// applyFilesListed populates the tree from a directory listing.
+// activeFiles returns the file-state in play: the Workspace's tree when the
+// Workspace is open, otherwise the standalone Files browser.
+func (m *Model) activeFiles() *fileState {
+	if m.mode == modeWorkspace {
+		return &m.workspace.files
+	}
+	return &m.files
+}
+
+// applyFilesListed populates the active tree from a directory listing.
 func (m *Model) applyFilesListed(msg filesListedMsg) {
-	m.files.dir = msg.dir
+	f := m.activeFiles()
+	f.dir = msg.dir
 	nodes := make([]fileNode, 0, len(msg.files)+1)
 	if msg.dir != "/" && msg.dir != "" {
 		nodes = append(nodes, fileNode{name: "..", fpath: path.Dir(msg.dir), isDir: true})
 	}
-	for _, f := range msg.files {
-		name := path.Base(f.Path)
-		nodes = append(nodes, fileNode{name: name, fpath: f.Path, isDir: f.IsDir})
+	for _, fi := range msg.files {
+		nodes = append(nodes, fileNode{name: path.Base(fi.Path), fpath: fi.Path, isDir: fi.IsDir})
 	}
-	m.files.nodes = nodes
-	if m.files.cursor >= len(nodes) {
-		m.files.cursor = max(0, len(nodes)-1)
+	f.nodes = nodes
+	if f.cursor >= len(nodes) {
+		f.cursor = max(0, len(nodes)-1)
 	}
 }
 

@@ -10,7 +10,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/harmonica"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/lipgloss/table"
 )
 
 // Styles
@@ -81,6 +80,7 @@ const (
 	modeSpawnTemplate
 	modeCreateTemplate
 	modeConfigEdit
+	modeWorkspace
 )
 
 // Messages
@@ -111,7 +111,13 @@ type Model struct {
 	cursor    int
 
 	// Providers
-	providerList []providerData
+	providerList    []providerData
+	providerDetails map[string]providerDetailData
+	provLatency     map[string]*ring
+	providerCursor  int
+
+	// Logs filter (event KIND, "" = all)
+	logFilter string
 
 	// Templates
 	templateList   []templateData
@@ -164,6 +170,18 @@ type Model struct {
 
 	// Files browser
 	files fileState
+
+	// Sandbox Workspace (tree + vim editor + terminal)
+	workspace workspaceState
+
+	// Command palette (Ctrl+K)
+	paletteOpen   bool
+	paletteQuery  string
+	paletteCursor int
+
+	// Boot splash
+	booting  bool
+	bootProg float64
 
 	// Animation
 	slideSpring   harmonica.Spring
@@ -270,6 +288,11 @@ func NewModel(serverURL, apiKey string) Model {
 
 		spawnProviderIdx: 0,
 		spawnTemplateIdx: -1,
+
+		providerDetails: map[string]providerDetailData{},
+		provLatency:     map[string]*ring{},
+
+		booting: true, // boot splash plays on launch
 	}
 }
 
@@ -285,6 +308,7 @@ func (m Model) Init() tea.Cmd {
 		blinkTick(),
 		m.streamEvents(),
 		m.waitEvent(),
+		bootTick(),
 	)
 }
 
@@ -337,6 +361,15 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.applyFilesListed(msg)
 		return m, nil
 
+	case bootTickMsg:
+		if m.booting {
+			m.advanceBoot()
+			if m.booting {
+				return m, bootTick()
+			}
+		}
+		return m, nil
+
 	case frameMsg:
 		animating := false
 
@@ -376,6 +409,20 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case providersMsg:
 		m.providerList = []providerData(msg)
+		var dcmds []tea.Cmd
+		for _, p := range m.providerList {
+			if m.provLatency[p.Name] == nil {
+				m.provLatency[p.Name] = newRing(8)
+			}
+			m.provLatency[p.Name].push(float64(p.LatencyMS))
+			dcmds = append(dcmds, m.fetchProviderDetail(p.Name))
+		}
+		if len(dcmds) > 0 {
+			return m, tea.Batch(dcmds...)
+		}
+
+	case providerDetailMsg:
+		m.providerDetails[msg.Name] = providerDetailData(msg)
 
 	case templatesMsg:
 		m.templateList = []templateData(msg)
@@ -409,7 +456,11 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case execMsg:
 		r := (*execResultData)(msg)
-		m.lastExec = r
+		if m.mode == modeWorkspace && m.workspace.termBusy {
+			m.appendTermResult(r)
+		} else {
+			m.lastExec = r
+		}
 		m.lastError = ""
 		m.addLog("EXEC", fmt.Sprintf("exit=%d dur=%s", r.ExitCode, r.Duration))
 
@@ -423,9 +474,10 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.addLog("WRITE", "file written")
 
 	case fileReadMsg:
-		if m.mode == modeInput {
-			m.files.content = string(msg)
-			m.files.write = false
+		if m.mode == modeInput || m.mode == modeWorkspace {
+			f := m.activeFiles()
+			f.content = string(msg)
+			f.write = false
 		} else {
 			m.lastOutput = string(msg)
 		}
@@ -471,6 +523,30 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	if key == "ctrl+c" {
 		return m, tea.Quit
+	}
+
+	// Boot splash: any key skips the intro.
+	if m.booting {
+		m.booting = false
+		return m, nil
+	}
+
+	// Command palette (global ⌘K / Ctrl+K).
+	if key == "ctrl+k" {
+		if m.paletteOpen {
+			m.paletteOpen = false
+		} else {
+			m.openPalette()
+		}
+		return m, nil
+	}
+	if m.paletteOpen {
+		return m.handlePaletteKey(msg)
+	}
+
+	// Sandbox Workspace owns all keys while open.
+	if m.mode == modeWorkspace {
+		return m.handleWorkspaceKey(msg)
 	}
 
 	if m.mode == modeNormal {
@@ -594,6 +670,10 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleSandboxKey(key)
 	case tabTemplates:
 		return m.handleTemplateKey(key)
+	case tabProviders:
+		return m.handleProvidersKey(key)
+	case tabLogs:
+		return m.handleLogsKey(key)
 	case tabConfig:
 		return m.handleConfigKey(key)
 	}
@@ -622,7 +702,7 @@ func (m *Model) handleDashboardKey(key string) (tea.Model, tea.Cmd) {
 	case "d":
 		m.confirmKill()
 	case "enter":
-		// open workspace — built in Batch 2; no-op for now.
+		return m, m.openWorkspace()
 	}
 	return m, nil
 }
@@ -648,7 +728,7 @@ func (m *Model) handleSandboxKey(key string) (tea.Model, tea.Cmd) {
 	case "l":
 		m.activeTab = tabLogs
 	case "enter":
-		// inspect drawer is always shown; ↵ opens Workspace (Batch 2).
+		return m, m.openWorkspace()
 	}
 	return m, nil
 }
@@ -795,6 +875,11 @@ func (m Model) View() string {
 		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center, stErr.Render(msg))
 	}
 
+	// Boot splash takes over the whole screen until the intro finishes.
+	if m.booting {
+		return m.renderBoot(m.width, m.height)
+	}
+
 	w := m.width
 	h := m.height
 
@@ -811,18 +896,20 @@ func (m Model) View() string {
 	}
 
 	var content string
-	switch m.activeTab {
-	case tabDashboard:
+	switch {
+	case m.paletteOpen:
+		content = m.renderPaletteOverlay(w, bodyH)
+	case m.activeTab == tabDashboard:
 		content = m.viewDashboard(bodyH, w)
-	case tabSandboxes:
+	case m.activeTab == tabSandboxes:
 		content = m.viewSandboxes(bodyH, w)
-	case tabTemplates:
+	case m.activeTab == tabTemplates:
 		content = m.viewTemplates(bodyH, w)
-	case tabProviders:
+	case m.activeTab == tabProviders:
 		content = m.viewProviders(bodyH, w)
-	case tabLogs:
+	case m.activeTab == tabLogs:
 		content = m.viewLogs(bodyH, w)
-	case tabConfig:
+	case m.activeTab == tabConfig:
 		content = m.viewConfig(bodyH, w)
 	}
 
@@ -835,71 +922,6 @@ func (m Model) View() string {
 // viewDashboard lives in dashboard.go (Mission Control restyle).
 
 
-// ── Providers View ───────────────────────────────────────
-
-func (m Model) viewProviders(height, width int) string {
-	var b strings.Builder
-
-	if len(m.providerList) == 0 {
-		b.WriteString(dimStyle.Render("No providers configured.\n"))
-		return b.String()
-	}
-
-	var rows [][]string
-	for _, p := range m.providerList {
-		defaultStr := ""
-		if p.IsDefault {
-			defaultStr = successStyle.Render("default")
-		}
-		healthStr := successStyle.Render("healthy")
-		if !p.Healthy {
-			healthStr = errorStyle.Render("unhealthy")
-		}
-
-		rows = append(rows, []string{
-			p.Name, defaultStr, healthStr,
-		})
-	}
-
-	t := table.New().
-		Border(lipgloss.NormalBorder()).
-		BorderStyle(lipgloss.NewStyle().Foreground(lipgloss.Color("#888888"))).
-		BorderRow(false).
-		BorderColumn(true).
-		Headers("NAME", "DEFAULT", "HEALTHY").
-		Rows(rows...).
-		StyleFunc(func(row, col int) lipgloss.Style {
-			if row == table.HeaderRow {
-				return headerStyle
-			}
-			return normalRowStyle
-		})
-
-	b.WriteString("\n  " + strings.ReplaceAll(t.Render(), "\n", "\n  ") + "\n")
-	return b.String()
-}
-
-// ── Logs View ────────────────────────────────────────────
-
-func (m Model) viewLogs(height, width int) string {
-	var b strings.Builder
-	b.WriteString(boldStyle.Render("\n  Activity Log\n\n"))
-
-	if len(m.logs) == 0 {
-		b.WriteString(dimStyle.Render("  No activity yet.\n"))
-		return b.String()
-	}
-
-	start := len(m.logs) - (height - 4)
-	if start < 0 {
-		start = 0
-	}
-	for _, line := range m.logs[start:] {
-		b.WriteString("  " + truncate(line, width-4) + "\n")
-	}
-
-	return b.String()
-}
 
 // ── Status Bar ───────────────────────────────────────────
 

@@ -12,6 +12,7 @@ import (
 func TestDashboardRenders(t *testing.T) {
 	m := NewModel("http://localhost:7423", "")
 	m.width, m.height = 198, 52
+	m.booting = false
 	m.activeTab = tabDashboard
 	exp := time.Now().Add(24 * time.Minute)
 	m.sandboxes = []sandboxData{
