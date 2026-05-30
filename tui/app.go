@@ -571,19 +571,6 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-		if key == "left" || key == "right" {
-			newTab := m.activeTab
-			if key == "left" && m.activeTab > 0 {
-				newTab--
-			} else if key == "right" && m.activeTab < tabConfig {
-				newTab++
-			}
-			if newTab != m.activeTab {
-				m.activeTab = newTab
-				return m, nil
-			}
-			return m, nil
-		}
 	}
 
 	// Confirm mode

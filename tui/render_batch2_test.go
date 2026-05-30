@@ -98,6 +98,25 @@ func TestWorkspaceTerminalToggle(t *testing.T) {
 	}
 }
 
+func TestArrowsDoNotSwitchTabs(t *testing.T) {
+	m := seedModel()
+	m.activeTab = tabSandboxes
+	m.mode = modeNormal
+	m.handleKey(tea.KeyMsg{Type: tea.KeyLeft})
+	if m.activeTab != tabSandboxes {
+		t.Errorf("left arrow switched tab to %d; arrows must act locally", m.activeTab)
+	}
+	m.handleKey(tea.KeyMsg{Type: tea.KeyRight})
+	if m.activeTab != tabSandboxes {
+		t.Errorf("right arrow switched tab to %d; arrows must act locally", m.activeTab)
+	}
+	// Number keys still switch screens.
+	m.handleKey(runes("3"))
+	if m.activeTab != tabTemplates {
+		t.Errorf("number key 3 did not switch to templates; got %d", m.activeTab)
+	}
+}
+
 func TestBatch2Renders(t *testing.T) {
 	// Providers cards
 	m := seedModel()
