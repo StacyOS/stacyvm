@@ -30,6 +30,20 @@ func TestNoAnsiLeak(t *testing.T) {
 	}
 }
 
+func TestPanelHFillsHeight(t *testing.T) {
+	// A one-line body in a 10-row panel must still produce a 10-row box.
+	out := panelH("TITLE", "", "one line", 40, 10, false)
+	if got := lipgloss.Height(out); got != 10 {
+		t.Errorf("panelH height = %d, want 10\n%s", got, out)
+	}
+	// Over-long bodies are truncated to fit, not overflow.
+	body := strings.Repeat("x\n", 50)
+	out = panelH("TITLE", "", body, 40, 8, false)
+	if got := lipgloss.Height(out); got != 8 {
+		t.Errorf("panelH height (truncate) = %d, want 8", got)
+	}
+}
+
 func TestBatch2Renders(t *testing.T) {
 	// Providers cards
 	m := seedModel()

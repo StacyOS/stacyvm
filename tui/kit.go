@@ -233,6 +233,36 @@ func panel(title, rightHint, body string, width int, accent bool) string {
 		Render(content)
 }
 
+// padLines pads s with blank lines (or truncates) so it has exactly n lines.
+func padLines(s string, n int) string {
+	if n < 1 {
+		n = 1
+	}
+	lines := strings.Split(s, "\n")
+	if len(lines) > n {
+		lines = lines[:n]
+	}
+	for len(lines) < n {
+		lines = append(lines, "")
+	}
+	return strings.Join(lines, "\n")
+}
+
+// panelH is panel() whose outer bordered box is exactly `height` rows tall.
+// It pads/truncates the body so callers can fill their allotted pane height
+// (fixes the "underutilized space" gaps). height includes the 2 border rows.
+func panelH(title, rightHint, body string, width, height int, accent bool) string {
+	titleLines := 0
+	if title != "" {
+		titleLines = 1
+	}
+	bodyLines := height - 2 - titleLines // rows left for the body inside the box
+	if bodyLines < 1 {
+		bodyLines = 1
+	}
+	return panel(title, rightHint, padLines(body, bodyLines), width, accent)
+}
+
 // ── keycaps / keyhints ────────────────────────────────────────────────────
 
 func keycap(k string) string { return stKey.Render(k) }
