@@ -6,23 +6,26 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 	"github.com/muesli/termenv"
 )
 
-// TestNoAnsiLeak guards against the styled-in-styled bug where an embedded
-// escape's ESC byte is stripped, leaking a bare "[38;2;..m" into visible text.
-// Every "[38;2;" must be part of a real escape sequence "\x1b[38;2;".
+// TestNoAnsiLeak guards against the styled-in-styled nesting bug: when a
+// pre-styled fragment is wrapped inside another Background/Underline style,
+// this lipgloss version re-styles the inner escape's bytes as individual cells,
+// leaking the literal characters of the escape (e.g. "[38;2;..m2[0m") into the
+// VISIBLE text. We strip the real escapes and assert no such fragment remains.
 func TestNoAnsiLeak(t *testing.T) {
 	lipgloss.SetColorProfile(termenv.TrueColor) // force color so the leak reproduces
-	t.Cleanup(func() { lipgloss.SetColorProfile(termenv.Ascii) }) // restore for other tests
+	t.Cleanup(func() { lipgloss.SetColorProfile(termenv.Ascii) })
 	m := seedModel()
 	for _, tb := range []tab{tabDashboard, tabSandboxes, tabTemplates, tabProviders, tabLogs, tabConfig} {
 		m.activeTab = tb
-		out := m.View()
-		total := strings.Count(out, "[38;2;")
-		real := strings.Count(out, "\x1b[38;2;")
-		if total != real {
-			t.Errorf("tab %d: %d bare '[38;2;' leaked (total=%d real=%d)", tb, total-real, total, real)
+		visible := ansi.Strip(m.View())
+		for _, frag := range []string{"[38;2", "[48;2"} {
+			if strings.Contains(visible, frag) {
+				t.Errorf("tab %d: leaked escape fragment %q into visible text:\n%s", tb, frag, visible)
+			}
 		}
 	}
 }
