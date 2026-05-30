@@ -117,6 +117,21 @@ func TestArrowsDoNotSwitchTabs(t *testing.T) {
 	}
 }
 
+func TestWorkspaceHintsAreContextual(t *testing.T) {
+	m := seedModel()
+	m.cursor = 0
+	m.openWorkspace()
+
+	m.setWSFocus(wsFocusTree)
+	if out := m.View(); !strings.Contains(out, "refresh") {
+		t.Errorf("tree-focus footer missing tree hints")
+	}
+	m.setWSFocus(wsFocusEditor)
+	if out := m.View(); !strings.Contains(out, "insert") || !strings.Contains(out, "save") {
+		t.Errorf("editor-focus footer missing editor hints")
+	}
+}
+
 func TestBatch2Renders(t *testing.T) {
 	// Providers cards
 	m := seedModel()

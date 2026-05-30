@@ -111,6 +111,19 @@ func (m Model) renderStatusFooter(width int) string {
 
 	var hints []hint
 	switch {
+	case m.mode == modeWorkspace:
+		switch m.workspace.focus {
+		case wsFocusTree:
+			hints = []hint{{"j/k", "move"}, {glyphEnter, "open"}, {"-", "up"}, {"R", "refresh"}, {glyphTab, "pane"}}
+		case wsFocusEditor:
+			if me, ok := m.workspace.editor.(modalEditor); ok && me.Mode() == editorInsert {
+				hints = []hint{{"esc", "normal"}, {"type", "edit"}}
+			} else {
+				hints = []hint{{"i", "insert"}, {"x/dd", "del"}, {"yy/p", "copy"}, {"u", "undo"}, {"^s", "save"}, {glyphTab, "pane"}}
+			}
+		case wsFocusTerm:
+			hints = []hint{{glyphEnter, "run"}, {"^t", "hide term"}, {"esc", "back"}, {glyphTab, "pane"}}
+		}
 	case m.mode == modeConfirm:
 		hints = []hint{{"y", "yes"}, {"n", "no"}}
 	case m.mode == modeSpawning:
