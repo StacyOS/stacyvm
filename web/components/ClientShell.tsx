@@ -13,7 +13,6 @@ import {
   Settings as SettingsIcon,
   Menu,
   X,
-  Egg,
   Building2,
 } from 'lucide-react';
 import { ToastProvider } from '../hooks/useToast';
@@ -59,7 +58,7 @@ export default function ClientShell({ children }: { children: ReactNode }) {
     return (
       <div className="flex h-screen items-center justify-center bg-navy-950 text-gray-500 p-6 text-center">
         <div>
-          <Box className="w-12 h-12 mx-auto mb-4 opacity-40" />
+          <img src="/stacy-mark-orange.png" alt="StacyVM Logo" className="w-12 h-12 mx-auto mb-4 opacity-40 object-contain" />
           <h2 className="text-lg font-medium text-gray-300">Live Preview Unavailable</h2>
           <p className="mt-2 text-sm text-gray-500">
             The sandbox preview domain could not be resolved or the Wails asset server intercepted the request.
@@ -103,18 +102,8 @@ export default function ClientShell({ children }: { children: ReactNode }) {
           `}
         >
           {/* Logo */}
-          <div className="flex items-center gap-3 px-6 py-5 border-b border-navy-700">
-            <div className="flex items-center justify-center w-9 h-9 rounded-lg bg-gradient-to-br from-primary-500/25 to-amber-500/15">
-              <Egg className="w-5 h-5 text-primary-400" />
-            </div>
-            <div>
-              <h1 className="text-lg font-display font-bold text-gray-100 tracking-tight">
-                StacyVM
-              </h1>
-              <p className="text-[10px] text-gray-500 uppercase tracking-widest">
-                MicroVM Platform
-              </p>
-            </div>
+          <div className="flex items-center px-6 py-5 border-b border-navy-700">
+            <img src="/stacy-logo-dark.png" alt="StacyVM Logo" className="h-9 w-auto object-contain" />
             <button
               className="ml-auto lg:hidden text-gray-400 hover:text-gray-200"
               onClick={() => setSidebarOpen(false)}

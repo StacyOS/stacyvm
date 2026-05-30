@@ -11,7 +11,6 @@ import {
   Zap,
   RefreshCw,
   Plus,
-  Egg,
 } from 'lucide-react';
 import Link from 'next/link';
 import {
@@ -203,7 +202,7 @@ export default function Dashboard() {
         <div className="relative px-6 py-5 flex items-center gap-5">
           <div className="absolute inset-0 bg-gradient-to-r from-primary-500/10 via-amber-500/5 to-transparent" />
           <div className="relative flex items-center justify-center w-14 h-14 rounded-2xl bg-gradient-to-br from-primary-500/20 to-amber-500/10 border border-primary-500/20">
-            <Egg className="w-7 h-7 text-primary-400" />
+            <img src="/stacy-mark-orange.png" alt="StacyVM Mark" className="w-8 h-8 object-contain" />
           </div>
           <div className="relative flex-1">
             <h2 className="text-2xl font-display font-bold text-gray-100">

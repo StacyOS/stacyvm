@@ -1,29 +1,32 @@
 @import "tailwindcss";
 
 @theme {
-  --color-primary-50: #fff7ed;
-  --color-primary-100: #ffedd5;
-  --color-primary-200: #fed7aa;
-  --color-primary-300: #fdba74;
-  --color-primary-400: #fb923c;
-  --color-primary-500: #FF6600;
-  --color-primary-600: #ea580c;
-  --color-primary-700: #c2410c;
-  --color-primary-800: #9a3412;
-  --color-primary-900: #7c2d12;
-  --color-primary-950: #431407;
+  --color-primary-50: #fffcf5;
+  --color-primary-100: #fff8eb;
+  --color-primary-200: #ffeed6;
+  --color-primary-300: #ffe1b8;
+  --color-primary-400: #ffcf8a;
+  --color-primary-500: #FFA60C;
+  --color-primary-600: #e6950b;
+  --color-primary-700: #bf7c09;
+  --color-primary-800: #996307;
+  --color-primary-900: #7d5106;
+  --color-primary-950: #4a3004;
 
-  --color-navy-50: #e8e8f0;
-  --color-navy-100: #c5c5d6;
-  --color-navy-200: #9e9eb8;
-  --color-navy-300: #77779a;
-  --color-navy-400: #555580;
-  --color-navy-500: #363660;
-  --color-navy-600: #2a2a4a;
-  --color-navy-700: #222240;
-  --color-navy-800: #1a1a2e;
-  --color-navy-900: #12121f;
-  --color-navy-950: #0a0a14;
+  --color-navy-50: #e6e6e6;
+  --color-navy-100: #cccccc;
+  --color-navy-200: #b3b3b3;
+  --color-navy-300: #999999;
+  --color-navy-400: #808080;
+  --color-navy-500: #333333;
+  --color-navy-600: #1a1a1a;
+  --color-navy-700: #141414;
+  --color-navy-800: #0C0C0C;
+  --color-navy-900: #050505;
+  --color-navy-950: #000000;
+
+  --color-gray-100: #F9F7F3;
+  --color-gray-200: #FDF6D6;
 
   --font-sans: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
   --font-display: "Space Grotesk", system-ui, sans-serif;
@@ -32,10 +35,10 @@
 
 @layer base {
   :root {
-    --color-primary: #FF6600;
-    --color-bg: #1a1a2e;
-    --color-surface: #222240;
-    --color-border: #363660;
+    --color-primary: #FFA60C;
+    --color-bg: #0C0C0C;
+    --color-surface: #141414;
+    --color-border: #1a1a1a;
   }
 
   html {
@@ -219,24 +222,4 @@
 /* Dark mode handling using the .dark class */
 html.dark {
   color-scheme: dark;
-}
-
-html:not(.dark) body {
-  @apply bg-gray-50 text-gray-900;
-}
-
-html:not(.dark) .card {
-  @apply bg-white border-gray-200 shadow-gray-200/50;
-}
-
-html:not(.dark) .input {
-  @apply bg-white border-gray-300 text-gray-900 placeholder-gray-400;
-}
-
-html:not(.dark) ::-webkit-scrollbar-track {
-  @apply bg-gray-100;
-}
-
-html:not(.dark) ::-webkit-scrollbar-thumb {
-  @apply bg-gray-400;
 }
