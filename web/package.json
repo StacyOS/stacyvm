@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "next build",
-    "build:wails": "cross-env NEXT_PUBLIC_API_URL=http://127.0.0.1:7423/api/v1 next build",
+    "build": "next build && node -e \"const fs=require('fs');fs.mkdirSync('out',{recursive:true});fs.writeFileSync('out/.gitkeep','')\"",
+    "build:wails": "cross-env NEXT_PUBLIC_API_URL=http://127.0.0.1:7423/api/v1 next build && node -e \"const fs=require('fs');fs.mkdirSync('out',{recursive:true});fs.writeFileSync('out/.gitkeep','')\"",
     "start": "next start",
     "lint": "eslint"
   },
