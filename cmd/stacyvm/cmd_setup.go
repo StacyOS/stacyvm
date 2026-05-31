@@ -37,7 +37,7 @@ func runSetup() error {
 	_, dockerErr := exec.LookPath("docker")
 	_, runscErr := exec.LookPath("runsc")
 	_, kataErr := exec.LookPath("kata-runtime")
-	
+
 	kvmAvailable := false
 	if _, err := os.Stat("/dev/kvm"); err == nil {
 		kvmAvailable = true
@@ -107,7 +107,7 @@ func runSetup() error {
 					Value(&runtime),
 			),
 		).WithTheme(t)
-		
+
 		err = runtimeForm.Run()
 		if err != nil {
 			return err
@@ -122,7 +122,7 @@ func runSetup() error {
 				Value(&domain),
 		),
 	).WithTheme(t)
-	
+
 	err = domainForm.Run()
 	if err != nil {
 		return err
@@ -174,39 +174,78 @@ func installAutocomplete() {
 	if err != nil {
 		return
 	}
+	localBin := filepath.Join(home, ".local", "bin")
 
 	// Zsh
 	zshrc := filepath.Join(home, ".zshrc")
-	if _, err := os.Stat(zshrc); err == nil {
-		b, _ := os.ReadFile(zshrc)
-// Use strings.Contains below
-		if !strings.Contains(string(b), "stacyvm completion zsh") {
-			f, _ := os.OpenFile(zshrc, os.O_APPEND|os.O_WRONLY, 0644)
-			f.WriteString("\n# StacyVM Autocomplete\nsource <(stacyvm completion zsh)\n")
-			f.Close()
-		}
-	}
+	installShellCompletion(
+		zshrc,
+		"stacyvm completion zsh",
+		shellPathExport(localBin),
+		"\n# StacyVM Autocomplete\n"+shellPathExport(localBin)+"if command -v stacyvm >/dev/null 2>&1; then\n  source <(stacyvm completion zsh)\nfi\n",
+	)
 
 	// Bash
 	bashrc := filepath.Join(home, ".bashrc")
-	if _, err := os.Stat(bashrc); err == nil {
-		b, _ := os.ReadFile(bashrc)
-		if !strings.Contains(string(b), "stacyvm completion bash") {
-			f, _ := os.OpenFile(bashrc, os.O_APPEND|os.O_WRONLY, 0644)
-			f.WriteString("\n# StacyVM Autocomplete\nsource <(stacyvm completion bash)\n")
-			f.Close()
-		}
-	}
+	installShellCompletion(
+		bashrc,
+		"stacyvm completion bash",
+		shellPathExport(localBin),
+		"\n# StacyVM Autocomplete\n"+shellPathExport(localBin)+"if command -v stacyvm >/dev/null 2>&1; then\n  source <(stacyvm completion bash)\nfi\n",
+	)
 
 	// Fish
 	fishConfig := filepath.Join(home, ".config", "fish", "config.fish")
-	if _, err := os.Stat(fishConfig); err == nil {
-		b, _ := os.ReadFile(fishConfig)
-		if !strings.Contains(string(b), "stacyvm completion fish") {
-			f, _ := os.OpenFile(fishConfig, os.O_APPEND|os.O_WRONLY, 0644)
-			f.WriteString("\n# StacyVM Autocomplete\nstacyvm completion fish | source\n")
-			f.Close()
-		}
-	}
+	installShellCompletion(
+		fishConfig,
+		"stacyvm completion fish",
+		fishPathExport(localBin),
+		"\n# StacyVM Autocomplete\n"+fishPathExport(localBin)+"if type -q stacyvm\n  stacyvm completion fish | source\nend\n",
+	)
 }
 
+func installShellCompletion(configPath, completionMarker, pathSnippet, completionBlock string) {
+	b, err := os.ReadFile(configPath)
+	if err != nil {
+		return
+	}
+	content := string(b)
+	if strings.Contains(content, completionMarker) {
+		if pathSnippet != "" && !shellConfigHasLocalBin(content) {
+			content = insertBeforeCompletion(content, completionMarker, pathSnippet)
+			_ = os.WriteFile(configPath, []byte(content), 0644)
+		}
+		return
+	}
+
+	f, err := os.OpenFile(configPath, os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	_, _ = f.WriteString(completionBlock)
+}
+
+func shellPathExport(localBin string) string {
+	return fmt.Sprintf("export PATH=%q:$PATH\n", localBin)
+}
+
+func fishPathExport(localBin string) string {
+	return fmt.Sprintf("fish_add_path %q\n", localBin)
+}
+
+func shellConfigHasLocalBin(content string) bool {
+	return strings.Contains(content, ".local/bin")
+}
+
+func insertBeforeCompletion(content, completionMarker, snippet string) string {
+	idx := strings.Index(content, completionMarker)
+	if idx == -1 {
+		return content + snippet
+	}
+	lineStart := strings.LastIndex(content[:idx], "\n")
+	if lineStart == -1 {
+		return snippet + content
+	}
+	return content[:lineStart+1] + snippet + content[lineStart+1:]
+}
