@@ -57,6 +57,7 @@ function parseArgs(argv) {
     uninstall: false,
     didCloneRepo: false,
     binaryInstalled: null,
+    managedClone: false,
   };
 
   for (let i = 0; i < argv.length; i += 1) {
@@ -210,11 +211,43 @@ function resolveTargetDir(options) {
   if (options.dir) return resolve(options.dir);
   if (isStacyRepo(process.cwd())) return process.cwd();
   if (isStacyRepo(bundledRepoRoot)) return bundledRepoRoot;
+  // The default ./stacyvm checkout is created and owned by this script, so a
+  // leftover from a previous (failed) run is safe — and necessary — to refresh.
+  options.managedClone = true;
   return resolve(process.cwd(), DEFAULT_DIR);
+}
+
+// Refresh an existing script-managed clone to the tip of the target branch.
+// Without this, a stale leftover clone would be rebuilt forever and never pick
+// up pushed fixes (the cause of "I pushed to main but npx still builds old code").
+function updateRepo(targetDir, options) {
+  if (!commandExists("git")) {
+    fail(`git is required to refresh the StacyVM checkout. ${hostHelp()}`);
+  }
+  const spinner = new Spinner(`Refreshing existing checkout in ${targetDir}`);
+  spinner.start();
+  try {
+    run("git", ["fetch", "--depth", "1", options.repo, options.branch], { cwd: targetDir, capture: true });
+    run("git", ["reset", "--hard", "FETCH_HEAD"], { cwd: targetDir, capture: true });
+    spinner.stop(`Refreshed ${targetDir} to latest ${options.branch}`);
+  } catch (e) {
+    spinner.fail(`Failed to refresh ${targetDir}. Delete it and re-run: rm -rf ${targetDir}`);
+    throw e;
+  }
 }
 
 async function ensureRepo(targetDir, options) {
   if (isStacyRepo(targetDir)) {
+    // A leftover script-managed clone (e.g. from an earlier failed install) must
+    // be refreshed to the target branch; otherwise we rebuild stale code and the
+    // user never gets pushed fixes. A user-provided / in-place checkout is left
+    // untouched so we never clobber someone's working tree.
+    if (options.managedClone) {
+      updateRepo(targetDir, options);
+      options.didCloneRepo = true;
+    } else {
+      logWarn(`Using existing checkout at ${targetDir} as-is (not refreshing it).`);
+    }
     return;
   }
 
