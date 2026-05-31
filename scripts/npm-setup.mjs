@@ -332,19 +332,41 @@ function downloadGoDeps(repoDir) {
   }
 }
 
+function resolveVersion(repoDir) {
+  // Same as Makefile: VERSION ?= $(shell git describe --tags --always || echo dev)
+  // The shallow clone (--depth 1 --branch main) won't have tags, so fetch them.
+  try {
+    run("git", ["fetch", "--tags", "--depth=1"], {
+      cwd: repoDir, capture: true, allowFailure: true,
+    });
+  } catch { /* best effort */ }
+
+  try {
+    const result = run("git", ["describe", "--tags", "--always"], {
+      cwd: repoDir, capture: true, allowFailure: true,
+    });
+    if (result.status === 0 && result.stdout.trim()) {
+      return result.stdout.trim();
+    }
+  } catch { /* fall through */ }
+
+  return "dev";
+}
+
 function buildStacyVM(repoDir) {
-  const spinner = new Spinner("Building StacyVM");
+  const version = resolveVersion(repoDir);
+  const spinner = new Spinner(`Building StacyVM (${version})`);
   spinner.start();
   try {
     const output = process.platform === "win32" ? "stacyvm.exe" : "stacyvm";
     run("go", [
       "build",
-      "-ldflags=-s -w -X main.version=dev",
+      `-ldflags=-s -w -X main.version=${version}`,
       "-o",
       output,
       "./cmd/stacyvm",
     ], { cwd: repoDir, capture: true });
-    spinner.stop("StacyVM built successfully");
+    spinner.stop(`StacyVM ${version} built successfully`);
   } catch (e) {
     spinner.fail("Failed to build StacyVM");
     throw e;
@@ -439,7 +461,7 @@ function removeClonedRepo(targetDir, options) {
 function uninstallStacy() {
   logStep("Uninstalling StacyVM");
   const binaryName = process.platform === "win32" ? "stacyvm.exe" : "stacyvm";
-  
+
   if (process.platform === "win32") {
     const userProfile = process.env.USERPROFILE;
     if (userProfile) {
@@ -512,7 +534,7 @@ async function main() {
     if (serveProcess) {
       try {
         serveProcess.kill();
-      } catch (e) {}
+      } catch (e) { }
     }
 
     // Only delete the clone if a self-contained binary lives outside it.
