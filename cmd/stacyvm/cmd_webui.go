@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"io/fs"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 
 	"github.com/StacyOs/stacyvm/web"
 	"github.com/pkg/browser"
@@ -24,25 +26,37 @@ func newWebUICmd() *cobra.Command {
 				return fmt.Errorf("failed to load web assets: %w", err)
 			}
 
-			// Create a file server for the assets
-			fileServer := http.FileServer(http.FS(subFS))
+			// The dashboard makes same-origin API calls to /api/v1 (see
+			// web/api/client.ts: `const BASE = process.env.NEXT_PUBLIC_API_URL || '/api/v1'`).
+			// The embedded build has no baked-in API URL, so it uses that relative
+			// path. Reverse-proxy /api and /swagger to the running StacyVM server so
+			// those calls resolve without CORS or a hard-coded API host.
+			apiTarget, err := url.Parse(serverURL)
+			if err != nil {
+				return fmt.Errorf("invalid --server URL %q: %w", serverURL, err)
+			}
+			proxy := httputil.NewSingleHostReverseProxy(apiTarget)
 
-			http.Handle("/", fileServer)
+			mux := http.NewServeMux()
+			mux.Handle("/api/", proxy)
+			mux.Handle("/swagger/", proxy)
+			mux.Handle("/", http.FileServer(http.FS(subFS)))
 
 			addr := fmt.Sprintf("localhost:%d", webPort)
-			url := fmt.Sprintf("http://%s", addr)
+			pageURL := fmt.Sprintf("http://%s", addr)
 
-			fmt.Printf("Starting web dashboard at %s\n", url)
+			fmt.Printf("Starting web dashboard at %s\n", pageURL)
+			fmt.Printf("Proxying API requests to %s\n", serverURL)
 			fmt.Println("Press Ctrl+C to exit")
 
 			// Open the browser automatically
-			if err := browser.OpenURL(url); err != nil {
+			if err := browser.OpenURL(pageURL); err != nil {
 				fmt.Printf("Failed to open browser automatically: %v\n", err)
-				fmt.Printf("Please open %s in your web browser.\n", url)
+				fmt.Printf("Please open %s in your web browser.\n", pageURL)
 			}
 
 			// Start the server
-			if err := http.ListenAndServe(addr, nil); err != nil {
+			if err := http.ListenAndServe(addr, mux); err != nil {
 				return fmt.Errorf("web server failed: %w", err)
 			}
 
