@@ -231,19 +231,23 @@ func removeAutocompleteBlock(content string, terminators ...string) (string, boo
 
 // isAutocompleteBlockLine reports whether a trimmed line looks like part of the
 // StacyVM autocomplete block (PATH/path tweaks plus the guarded completion
-// sourcing), across bash, zsh, fish and PowerShell.
+// sourcing), across bash, zsh, fish and PowerShell. It is only consulted on the
+// legacy path where no terminator is found, so the tokens are kept StacyVM-
+// specific: matching generic shell builtins like "source" or bare "export PATH"
+// could eat unrelated user config that happens to follow a terminator-less block.
+//
+// Every completion/guard line in every shell's block contains "stacyvm"
+// (`command -v stacyvm`, `type -q stacyvm`, `Get-Command stacyvm`, and the
+// `stacyvm completion ...` line). The only block lines without it are the PATH
+// tweaks, which all reference the install dir ".local/bin"
+// (`export PATH=".../.local/bin":$PATH` and `fish_add_path ".../.local/bin"`).
 func isAutocompleteBlockLine(t string) bool {
 	if t == "" {
 		return false
 	}
 	for _, tok := range []string{
 		"stacyvm",
-		"export PATH",
-		"fish_add_path",
-		"Get-Command",
-		"type -q",
-		"source",
-		"Invoke-Expression",
+		".local/bin",
 	} {
 		if strings.Contains(t, tok) {
 			return true
@@ -262,5 +266,16 @@ func sameFile(a, b string) bool {
 	if err != nil {
 		bAbs = filepath.Clean(b)
 	}
-	return filepath.Clean(aAbs) == filepath.Clean(bAbs)
+	aClean := filepath.Clean(aAbs)
+	bClean := filepath.Clean(bAbs)
+	// Windows filesystems are case-insensitive, and the running binary may be
+	// reported with different casing (commonly the drive letter) than a
+	// directory walk produces. Compare case-insensitively there so we still
+	// recognize — and therefore skip rather than try to delete — the locked
+	// running .exe during removeAllExcept. (filepath.Rel in isWithin already
+	// folds case on Windows, so only this direct comparison needs it.)
+	if isWindows() {
+		return strings.EqualFold(aClean, bClean)
+	}
+	return aClean == bClean
 }
