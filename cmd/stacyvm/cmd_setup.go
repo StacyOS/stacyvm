@@ -278,8 +278,14 @@ func writePowerShellCompletion(profile string) {
 	if err != nil {
 		return
 	}
-	defer f.Close()
-	_, _ = f.WriteString(block)
+	if _, err := f.WriteString(block); err != nil {
+		// Best-effort close to avoid leaking the descriptor on write failure.
+		_ = f.Close()
+		return
+	}
+	if err := f.Close(); err != nil {
+		return
+	}
 }
 
 func installShellCompletion(configPath, completionMarker, pathSnippet, completionBlock string) {

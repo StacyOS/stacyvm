@@ -161,14 +161,23 @@ const autocompleteMarker = "# StacyVM Autocomplete"
 // or unreadable files are silently ignored. terminators are the closing tokens
 // for the host shell ("fi", "end", "}").
 func removeAutocompleteFromFile(path string, terminators ...string) {
+	info, err := os.Stat(path)
+	if err != nil {
+		return
+	}
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return
 	}
+	// removeAutocompleteBlock splits/joins on "\n", which leaves any trailing
+	// "\r" attached to each surviving line, so CRLF profiles stay CRLF.
 	updated, changed := removeAutocompleteBlock(string(b), terminators...)
-	if changed {
-		_ = os.WriteFile(path, []byte(updated), 0644)
+	if !changed {
+		return
 	}
+	// Preserve the existing file mode so we don't widen permissions (e.g. an
+	// 0600 profile becoming 0644).
+	_ = os.WriteFile(path, []byte(updated), info.Mode().Perm())
 }
 
 // removeAutocompleteBlock removes the contiguous "# StacyVM Autocomplete" block

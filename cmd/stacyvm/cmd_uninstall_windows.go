@@ -95,8 +95,20 @@ rmdir /s /q "%%cfg%%" >nul 2>&1
 del "%%~f0" >nul 2>&1
 `, exe, configDir)
 
-	batPath := filepath.Join(os.TempDir(), "stacyvm_uninstall.bat")
-	if err := os.WriteFile(batPath, []byte(script), 0o644); err != nil {
+	// Use a unique filename so concurrent uninstalls can't collide and a
+	// predictable, pre-existing temp file can't be run in place of ours.
+	f, err := os.CreateTemp("", "stacyvm_uninstall_*.bat")
+	if err != nil {
+		return fmt.Errorf("creating cleanup script: %w", err)
+	}
+	batPath := f.Name()
+	if _, err := f.WriteString(script); err != nil {
+		_ = f.Close()
+		_ = os.Remove(batPath)
+		return fmt.Errorf("writing cleanup script: %w", err)
+	}
+	if err := f.Close(); err != nil {
+		_ = os.Remove(batPath)
 		return fmt.Errorf("writing cleanup script: %w", err)
 	}
 
