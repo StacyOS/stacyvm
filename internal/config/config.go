@@ -246,7 +246,12 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("providers.custom.timeout", "60s")
 
 	v.SetDefault("providers.docker.enabled", true)
-	v.SetDefault("providers.docker.socket", "unix:///var/run/docker.sock")
+	// Empty by default so the Docker client picks the correct platform host:
+	// unix:///var/run/docker.sock on Linux/macOS, npipe:////./pipe/docker_engine
+	// on Windows — and honors DOCKER_HOST. Hardcoding the unix path broke Windows
+	// (the client rejects the unix protocol → "protocol not available"). Set this
+	// explicitly only to point at a non-default daemon (e.g. a remote tcp:// host).
+	v.SetDefault("providers.docker.socket", "")
 	v.SetDefault("providers.docker.runtime", "runc")
 	v.SetDefault("providers.docker.default_image", "alpine:latest")
 	v.SetDefault("providers.docker.network_mode", "bridge")

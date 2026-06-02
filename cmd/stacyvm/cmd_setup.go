@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/charmbracelet/huh"
@@ -163,7 +164,13 @@ func runSetup() error {
 
 	if enableAutocomplete {
 		fmt.Println("\n" + warningStyle.Render("Auto-completion installed! Please restart your terminal or run:"))
-		fmt.Println("  source ~/.zshrc  (or ~/.bashrc)")
+		// NOTE: a local `runtime` string variable shadows the runtime package in
+		// this function, so go through the isWindows() helper here.
+		if isWindows() {
+			fmt.Println("  . $PROFILE")
+		} else {
+			fmt.Println("  source ~/.zshrc  (or ~/.bashrc)")
+		}
 	}
 
 	return nil
@@ -174,6 +181,14 @@ func installAutocomplete() {
 	if err != nil {
 		return
 	}
+
+	// Windows has no .bashrc/.zshrc; shell completion is installed into the
+	// PowerShell profile(s) instead.
+	if isWindows() {
+		installPowerShellCompletion()
+		return
+	}
+
 	localBin := filepath.Join(home, ".local", "bin")
 
 	// Zsh
@@ -202,6 +217,69 @@ func installAutocomplete() {
 		fishPathExport(localBin),
 		"\n# StacyVM Autocomplete\n"+fishPathExport(localBin)+"if type -q stacyvm\n  stacyvm completion fish | source\nend\n",
 	)
+}
+
+// isWindows reports whether we're running on Windows. It exists so callers in
+// functions that shadow the `runtime` package (e.g. runSetup's docker runtime
+// variable) can still check the OS.
+func isWindows() bool {
+	return runtime.GOOS == "windows"
+}
+
+// installPowerShellCompletion enables `stacyvm` tab-completion in PowerShell by
+// appending a sourcing block to the user's profile. It covers both Windows
+// PowerShell (powershell.exe) and PowerShell 7+ (pwsh) when present, since the
+// two use different profile paths.
+func installPowerShellCompletion() {
+	for _, shell := range []string{"powershell", "pwsh"} {
+		profile := powershellProfilePath(shell)
+		if profile == "" {
+			continue
+		}
+		writePowerShellCompletion(profile)
+	}
+}
+
+// powershellProfilePath returns the CurrentUserAllHosts profile path for the
+// given PowerShell executable, or "" if that shell isn't installed. We ask the
+// shell itself rather than guessing, so OneDrive-redirected Documents folders
+// and PS5-vs-PS7 differences are handled correctly.
+func powershellProfilePath(shell string) string {
+	if _, err := exec.LookPath(shell); err != nil {
+		return ""
+	}
+	out, err := exec.Command(shell, "-NoProfile", "-NonInteractive", "-Command", "$PROFILE.CurrentUserAllHosts").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
+// writePowerShellCompletion appends the autocomplete block to a PowerShell
+// profile (creating the profile and its directory if needed), skipping the
+// write if our block is already present. The block is guarded by Get-Command so
+// it stays harmless if `stacyvm` is later uninstalled.
+func writePowerShellCompletion(profile string) {
+	if err := os.MkdirAll(filepath.Dir(profile), 0755); err != nil {
+		return
+	}
+	b, err := os.ReadFile(profile)
+	if err != nil && !os.IsNotExist(err) {
+		return
+	}
+	if strings.Contains(string(b), "stacyvm completion powershell") {
+		return
+	}
+	block := "\n# StacyVM Autocomplete\n" +
+		"if (Get-Command stacyvm -ErrorAction SilentlyContinue) {\n" +
+		"    stacyvm completion powershell | Out-String | Invoke-Expression\n" +
+		"}\n"
+	f, err := os.OpenFile(profile, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	_, _ = f.WriteString(block)
 }
 
 func installShellCompletion(configPath, completionMarker, pathSnippet, completionBlock string) {

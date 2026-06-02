@@ -93,11 +93,21 @@ type DockerProvider struct {
 
 // NewDockerProvider creates a new Docker provider connected to the Docker daemon.
 func NewDockerProvider(cfg DockerProviderConfig, logger zerolog.Logger) (*DockerProvider, error) {
+	// Negotiate the API version with the daemon instead of pinning one. A fixed
+	// version breaks both ways: too-new daemons reject an old pin ("client version
+	// 1.41 is too old, minimum supported is 1.44") while too-old daemons reject a
+	// new pin. Negotiation picks the highest mutually supported version.
 	opts := []client.Opt{
-		client.WithVersion("1.41"),
+		client.WithAPIVersionNegotiation(),
 	}
 	if cfg.Socket != "" {
 		opts = append(opts, client.WithHost(cfg.Socket))
+	} else {
+		// No explicit socket configured: honor DOCKER_HOST and fall back to the
+		// platform-default daemon host (unix socket on Linux/macOS, named pipe on
+		// Windows). Forcing the unix path here previously broke Windows, where the
+		// client rejects the unix protocol with "protocol not available".
+		opts = append(opts, client.FromEnv)
 	}
 	cli, err := client.NewClientWithOpts(opts...)
 	if err != nil {
