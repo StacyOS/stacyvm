@@ -102,33 +102,105 @@ function parseArgs(argv) {
   return options;
 }
 
-//animation
-//loading spinner
-//
+const ORANGE = "\x1b[38;2;255;166;12m";
+const DIM = "\x1b[2m";
+const RESET = "\x1b[0m";
+
+// Animations are only safe on an interactive TTY. Under CI, piped output, a
+// "dumb" terminal, or when explicitly disabled we fall back to plain one-line
+// logging so logs stay readable and we never spam carriage returns.
+const ANIMATE =
+  Boolean(process.stdout.isTTY) &&
+  !process.env.CI &&
+  process.env.TERM !== "dumb" &&
+  !process.env.STACYVM_NO_ANIM;
+
+// The spinner hides the cursor while running; make sure it's always restored,
+// even if we exit early (Ctrl-C, fatal error).
+if (ANIMATE) {
+  process.on("exit", () => process.stdout.write("\x1b[?25h"));
+}
+
+// An honest "installing" animation: a braille spinner, a sweeping progress bar,
+// and a live elapsed-time counter. `go build` / `npm install` don't expose real
+// progress, so rather than fake a percentage we show motion + elapsed seconds —
+// a long compile never looks frozen, and the bar's sweep tracks wall-clock time.
 class Spinner {
   constructor(text) {
     this.text = text;
     this.frames = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
     this.i = 0;
     this.timer = null;
+    this.startedAt = 0;
   }
+
+  _bar() {
+    const width = 12;
+    const block = 4;
+    const pos = this.i % (width + block);
+    let bar = "";
+    for (let c = 0; c < width; c += 1) {
+      bar += c >= pos - block && c < pos ? "▰" : "▱";
+    }
+    return bar;
+  }
+
+  _elapsed() {
+    const s = Math.max(0, Math.round((Date.now() - this.startedAt) / 1000));
+    if (s < 60) return `${s}s`;
+    return `${Math.floor(s / 60)}m${String(s % 60).padStart(2, "0")}s`;
+  }
+
   start() {
-    process.stdout.write("\x1b[?25l");
+    this.startedAt = Date.now();
+    if (!ANIMATE) {
+      process.stdout.write(`${DIM}…${RESET} ${this.text}\n`);
+      return this;
+    }
+    process.stdout.write("\x1b[?25l"); // hide cursor
     this.timer = setInterval(() => {
-      process.stdout.write(`\r\x1b[38;2;255;166;12m${this.frames[this.i]}\x1b[0m ${this.text}`);
-      this.i = (this.i + 1) % this.frames.length;
+      const frame = this.frames[this.i % this.frames.length];
+      process.stdout.write(
+        `\r\x1b[K${ORANGE}${frame}${RESET} ${this.text}  ` +
+          `${ORANGE}${this._bar()}${RESET} ${DIM}${this._elapsed()}${RESET}`,
+      );
+      this.i += 1;
     }, 80);
+    return this;
   }
+
   stop(successText) {
-    if (this.timer) clearInterval(this.timer);
-    process.stdout.write(`\r\x1b[K\x1b[32m✔\x1b[0m ${successText || this.text}\n`);
-    process.stdout.write("\x1b[?25h");
+    const took = this.startedAt ? ` ${DIM}(${this._elapsed()})${RESET}` : "";
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = null;
+    }
+    if (ANIMATE) process.stdout.write("\r\x1b[K");
+    process.stdout.write(`\x1b[32m✔${RESET} ${successText || this.text}${took}\n`);
+    if (ANIMATE) process.stdout.write("\x1b[?25h"); // show cursor
   }
+
   fail(errorText) {
-    if (this.timer) clearInterval(this.timer);
-    process.stdout.write(`\r\x1b[K\x1b[31m✖\x1b[0m ${errorText || this.text}\n`);
-    process.stdout.write("\x1b[?25h");
+    if (this.timer) {
+      clearInterval(this.timer);
+      this.timer = null;
+    }
+    if (ANIMATE) process.stdout.write("\r\x1b[K");
+    process.stdout.write(`\x1b[31m✖${RESET} ${errorText || this.text}\n`);
+    if (ANIMATE) process.stdout.write("\x1b[?25h");
   }
+}
+
+// Tracks overall installation progress so each long step can show "[2/4]".
+function makeProgress(total) {
+  let n = 0;
+  return {
+    total,
+    label() {
+      n += 1;
+      return total > 0 ? `${DIM}[${n}/${total}]${RESET} ` : "";
+    },
+  };
 }
 
 function logStep(message) {
@@ -143,17 +215,55 @@ function logWarn(message) {
   console.log(`\x1b[33m!\x1b[0m ${message}`);
 }
 
+function logMissing(name) {
+  console.log(`\x1b[31m✖${RESET} ${name} not found`);
+}
+
+// A dim, indented aside printed before a slow step so the wait is expected.
+function logHint(message) {
+  console.log(`  ${DIM}↳ ${message}${RESET}`);
+}
+
 function fail(message) {
   console.error(`\x1b[31mx\x1b[0m ${message}`);
   process.exit(1);
 }
 
+// On Windows these ship as .cmd/.bat shims, not real executables. Spawning a
+// .cmd directly fails (ENOENT/EINVAL — and since Node 18.20/20.12 it is blocked
+// outright for CVE-2024-27980), so they MUST run through cmd.exe. Native
+// binaries (go, git, docker) are deliberately NOT in this set: they run without
+// a shell, so an argument like `-ldflags=-s -w -X main.version=...` reaches the
+// program as one argv entry instead of being re-split on its internal spaces.
+const WINDOWS_SHELL_COMMANDS = new Set(["npm", "npx", "yarn", "pnpm"]);
+
+// cmd.exe re-splits the command line on whitespace, so any argument containing a
+// space must be quoted to survive as a single token. Every npm arg we pass is a
+// simple token; this is defense-in-depth for paths/values that contain spaces.
+function quoteForCmd(arg) {
+  return /\s/.test(arg) ? `"${arg}"` : arg;
+}
+
 function run(command, args, options = {}) {
-  const result = spawnSync(command, args, {
+  let spawnCmd = command;
+  let spawnArgs = args;
+  let useShell = false;
+
+  if (process.platform === "win32" && WINDOWS_SHELL_COMMANDS.has(command)) {
+    // Route the .cmd shim through cmd.exe. We pre-join the command line and pass
+    // an empty args array so WE own the quoting — and so Node never emits its
+    // DEP0190 "args + shell" warning (which only fires when both are supplied).
+    useShell = true;
+    spawnCmd = [command, ...args.map(quoteForCmd)].join(" ");
+    spawnArgs = [];
+  }
+
+  const result = spawnSync(spawnCmd, spawnArgs, {
     cwd: options.cwd,
     env: { ...process.env, ...(options.env ?? {}) },
     stdio: options.capture ? "pipe" : "inherit",
     encoding: "utf8",
+    shell: useShell,
   });
 
   if (result.error) {
@@ -197,14 +307,87 @@ function isEmptyDir(dir) {
   return statSync(dir).isDirectory() && readdirSync(dir).length === 0;
 }
 
-function hostHelp() {
-  if (process.platform === "darwin") {
-    return "macOS: install Docker Desktop, then run `brew install go git make`.";
+// ---------------------------------------------------------------------------
+// Per-OS dependency guidance. When a prerequisite is missing we tell the user
+// exactly how to fix it on THEIR platform and link the official download, so
+// they never have to leave the terminal to figure out what to do next.
+// ---------------------------------------------------------------------------
+
+const OS_NAME =
+  process.platform === "win32" ? "Windows" :
+  process.platform === "darwin" ? "macOS" : "Linux";
+
+const OS_KEY =
+  process.platform === "win32" ? "win" :
+  process.platform === "darwin" ? "mac" : "linux";
+
+const DOWNLOADS = {
+  go: {
+    label: "Go",
+    url: "https://go.dev/dl/",
+    win: "Download the Go installer (.msi) from the link below, run it, then open a NEW terminal.",
+    mac: "Run `brew install go`, or download the .pkg from the link below, then reopen your terminal.",
+    linux: "Use your package manager (e.g. `sudo apt install golang-go`) or download the tarball from the link below.",
+  },
+  docker: {
+    label: "Docker",
+    url: "https://www.docker.com/products/docker-desktop/",
+    win: "Install Docker Desktop from the link below, then launch it once so the engine starts (a WSL 2 backend is enabled automatically).",
+    mac: "Install Docker Desktop from the link below (or `brew install --cask docker`), then launch it.",
+    linux: "Install Docker Engine (https://docs.docker.com/engine/install/), then `sudo systemctl enable --now docker`.",
+  },
+  node: {
+    label: "Node.js + npm",
+    url: "https://nodejs.org/en/download",
+    win: "Install the Node.js LTS (.msi) from the link below — npm is bundled — then open a NEW terminal.",
+    mac: "Run `brew install node`, or download the LTS installer from the link below.",
+    linux: "Install Node.js 18+ via nvm (https://github.com/nvm-sh/nvm) or your package manager.",
+  },
+  git: {
+    label: "Git",
+    url: "https://git-scm.com/downloads",
+    win: "Install Git for Windows from the link below, then open a NEW terminal.",
+    mac: "Run `xcode-select --install`, or `brew install git`.",
+    linux: "Install via your package manager, e.g. `sudo apt install git`.",
+  },
+};
+
+function guideFor(tool) {
+  const g = DOWNLOADS[tool];
+  return g ? g[OS_KEY] : "";
+}
+
+// Docker is installed but its daemon socket isn't answering — a different fix
+// from "not installed", so it gets its own message.
+function dockerDaemonFix() {
+  if (process.platform === "linux") {
+    return "Start it: `sudo systemctl start docker`. If you get a permission error, add yourself to the group: `sudo usermod -aG docker $USER`, then log out and back in.";
   }
-  if (process.platform === "win32") {
-    return "Windows: use WSL 2 with Ubuntu and Docker Desktop WSL integration, then run this command inside Ubuntu.";
-  }
-  return "Linux/Ubuntu: install Docker and Go, start Docker, and ensure your user can run `docker ps`.";
+  return 'Open Docker Desktop and wait until it reports "Engine running", then re-run this command.';
+}
+
+// Build a structured issue describing a missing tool (used by reportPrereqs).
+function depIssue(tool, why) {
+  const g = DOWNLOADS[tool];
+  return { title: `${g.label} is not installed`, why, fix: guideFor(tool), url: g.url };
+}
+
+// Print EVERY unmet prerequisite at once — so the user can fix them all in one
+// pass instead of re-running after each individual failure — then exit non-zero.
+function reportPrereqs(issues) {
+  const n = issues.length;
+  console.error(
+    `\n\x1b[31m✖ Cannot continue — ${n} prerequisite${n > 1 ? "s" : ""} ` +
+      `need${n > 1 ? "" : "s"} attention on ${OS_NAME}:${RESET}\n`,
+  );
+  issues.forEach((iss, idx) => {
+    console.error(`  \x1b[1m${idx + 1}) ${iss.title}${RESET}${iss.why ? ` — ${iss.why}` : ""}`);
+    if (iss.fix) console.error(`     ${iss.fix}`);
+    if (iss.url) console.error(`     ${DIM}Download:${RESET} ${iss.url}`);
+    console.error("");
+  });
+  console.error(`  Once fixed, re-run:  \x1b[1mnpx stacyvm-setup@latest${RESET}\n`);
+  process.exit(1);
 }
 
 function resolveTargetDir(options) {
@@ -222,7 +405,7 @@ function resolveTargetDir(options) {
 // up pushed fixes (the cause of "I pushed to main but npx still builds old code").
 function updateRepo(targetDir, options) {
   if (!commandExists("git")) {
-    fail(`git is required to refresh the StacyVM checkout. ${hostHelp()}`);
+    reportPrereqs([depIssue("git", "needed to refresh the StacyVM checkout")]);
   }
   const spinner = new Spinner(`Refreshing existing checkout in ${targetDir}`);
   spinner.start();
@@ -231,7 +414,10 @@ function updateRepo(targetDir, options) {
     run("git", ["reset", "--hard", "FETCH_HEAD"], { cwd: targetDir, capture: true });
     spinner.stop(`Refreshed ${targetDir} to latest ${options.branch}`);
   } catch (e) {
-    spinner.fail(`Failed to refresh ${targetDir}. Delete it and re-run: rm -rf ${targetDir}`);
+    const rmHint = process.platform === "win32"
+      ? `Remove-Item -Recurse -Force "${targetDir}"`
+      : `rm -rf ${targetDir}`;
+    spinner.fail(`Failed to refresh ${targetDir}. Delete it and re-run: ${rmHint}`);
     throw e;
   }
 }
@@ -256,7 +442,7 @@ async function ensureRepo(targetDir, options) {
   }
 
   if (!commandExists("git")) {
-    fail(`git is required to clone StacyVM. ${hostHelp()}`);
+    reportPrereqs([depIssue("git", "needed to download (clone) StacyVM")]);
   }
 
   const spinner = new Spinner(`Cloning StacyVM into ${targetDir}`);
@@ -267,40 +453,63 @@ async function ensureRepo(targetDir, options) {
   options.didCloneRepo = true;
 }
 
-function checkHost(options) {
-  logStep("Checking host");
+// Verify every prerequisite up front and collect ALL problems before exiting,
+// so a user missing two tools sees both (with fixes) in one run rather than
+// discovering them one slow re-run at a time. Runs on Linux, macOS and Windows.
+function checkHost(options, willBuildWeb) {
+  logStep(`Checking host dependencies (${OS_NAME})`);
+  const issues = [];
 
-  if (process.platform === "win32") {
-    fail("Run StacyVM setup inside WSL 2 Ubuntu instead of native Windows PowerShell.");
-  }
-
-  if (!commandExists("go")) {
-    fail(`Go is required for source setup. ${hostHelp()}`);
-  }
-  const goVersion = run("go", ["version"], { capture: true }).stdout.trim();
-  logOk(goVersion);
-
-  if (!commandExists("docker")) {
-    fail(`Docker is required for the default local provider. ${hostHelp()}`);
-  }
-  const dockerVersion = run("docker", ["--version"], { capture: true }).stdout.trim();
-  logOk(dockerVersion);
-
-  if (options.dockerCheck) {
-    const dockerInfo = run("docker", ["info"], { capture: true, allowFailure: true });
-    if (dockerInfo.status !== 0) {
-      fail(`Docker CLI is installed, but the daemon is not reachable. ${hostHelp()}`);
-    }
-    logOk("Docker daemon is reachable");
+  // Go — required to compile the binary from source.
+  if (commandExists("go")) {
+    logOk(run("go", ["version"], { capture: true }).stdout.trim());
   } else {
-    logWarn("Skipping Docker daemon check");
+    logMissing("Go");
+    issues.push(depIssue("go", "required to build StacyVM from source"));
+  }
+
+  // npm — only needed when we will actually build the embedded web UI.
+  if (willBuildWeb) {
+    if (commandExists("npm")) {
+      logOk(`npm v${run("npm", ["--version"], { capture: true }).stdout.trim()}`);
+    } else {
+      logMissing("Node.js + npm");
+      issues.push(depIssue("node", "required to build the embedded web UI (or pass --skip-node-deps if web/out is already built)"));
+    }
+  }
+
+  // Docker — required for the default local provider.
+  if (commandExists("docker")) {
+    logOk(run("docker", ["--version"], { capture: true }).stdout.trim());
+    if (options.dockerCheck) {
+      const dockerInfo = run("docker", ["info"], { capture: true, allowFailure: true });
+      if (dockerInfo.status === 0) {
+        logOk("Docker daemon is reachable");
+      } else {
+        logMissing("Docker daemon (installed, but not running)");
+        issues.push({
+          title: "Docker is installed but its daemon is not reachable",
+          why: "required for the default local provider",
+          fix: dockerDaemonFix(),
+        });
+      }
+    } else {
+      logWarn("Skipping Docker daemon check (--skip-docker-check)");
+    }
+  } else {
+    logMissing("Docker");
+    issues.push(depIssue("docker", "required for the default local provider"));
+  }
+
+  if (issues.length > 0) {
+    reportPrereqs(issues);
   }
 }
 
 // Build the embedded web UI. The Go binary will not compile without web/out
 // (it is referenced by `//go:embed all:out`), so this step is REQUIRED — this
 // is the step whose absence forced an earlier `make build` to be run first.
-function buildWebUI(repoDir, options) {
+function buildWebUI(repoDir, options, progress) {
   const webDir = join(repoDir, WEB_DIR);
   const outDir = join(webDir, "out");
 
@@ -322,10 +531,11 @@ function buildWebUI(repoDir, options) {
   }
 
   if (!commandExists("npm")) {
-    fail(`npm (bundled with Node.js) is required to build the embedded web UI. ${hostHelp()}`);
+    reportPrereqs([depIssue("node", "required to build the embedded web UI")]);
   }
 
-  const installSpinner = new Spinner("Installing web UI dependencies");
+  logHint("First run downloads npm packages — this can take a minute.");
+  const installSpinner = new Spinner(`${progress.label()}Installing web UI dependencies`);
   installSpinner.start();
   try {
     run("npm", ["install", "--no-audit", "--no-fund", "--silent"], { cwd: webDir, capture: true });
@@ -335,7 +545,7 @@ function buildWebUI(repoDir, options) {
     throw e;
   }
 
-  const buildSpinner = new Spinner("Building web UI (next build → web/out)");
+  const buildSpinner = new Spinner(`${progress.label()}Building web UI ${DIM}(next build → web/out)${RESET}`);
   buildSpinner.start();
   try {
     run("npm", ["run", "build"], { cwd: webDir, capture: true });
@@ -353,14 +563,14 @@ function buildWebUI(repoDir, options) {
   }
 }
 
-function downloadGoDeps(repoDir) {
-  const spinner = new Spinner("Downloading Go dependencies");
+function downloadGoDeps(repoDir, progress) {
+  const spinner = new Spinner(`${progress.label()}Downloading Go modules`);
   spinner.start();
   try {
     run("go", ["mod", "download"], { cwd: repoDir, capture: true });
-    spinner.stop("Go dependencies downloaded");
+    spinner.stop("Go modules downloaded");
   } catch (e) {
-    spinner.fail("Failed to download Go dependencies");
+    spinner.fail("Failed to download Go modules");
     throw e;
   }
 }
@@ -386,12 +596,16 @@ function resolveVersion(repoDir) {
   return "dev";
 }
 
-function buildStacyVM(repoDir) {
+function buildStacyVM(repoDir, progress) {
   const version = resolveVersion(repoDir);
-  const spinner = new Spinner(`Building StacyVM (${version})`);
+  logHint("Compiling Go — the first build is the slowest (can take a minute or two).");
+  const spinner = new Spinner(`${progress.label()}Compiling StacyVM ${DIM}(${version})${RESET}`);
   spinner.start();
   try {
     const output = process.platform === "win32" ? "stacyvm.exe" : "stacyvm";
+    // NOTE: this -ldflags value contains spaces. It MUST stay a single argv
+    // entry, which is why `go` is never routed through a shell in run() (a
+    // shell would re-split it into bogus -w / -X top-level flags). See run().
     run("go", [
       "build",
       `-ldflags=-s -w -X main.version=${version}`,
@@ -429,11 +643,29 @@ function installGlobal(repoDir) {
       copyFileSync(binaryPath, dest);
       logOk(`Installed to ${installDir}`);
 
-      // Attempt to add to PATH permanently using PowerShell
-      logStep("Adding to Windows PATH");
-      const psCommand = `[Environment]::SetEnvironmentVariable('Path', [Environment]::GetEnvironmentVariable('Path', 'User') + ';${installDir}', 'User')`;
-      run("powershell", ["-NoProfile", "-Command", psCommand], { allowFailure: true });
-      logOk("Added to PATH (may require terminal restart)");
+      // Add installDir to the User PATH, but only once — re-running setup must
+      // not keep appending duplicate entries. Single quotes are escaped (''),
+      // so paths with apostrophes in the username don't break the PS literal.
+      logStep("Adding StacyVM to your PATH");
+      const escaped = installDir.replace(/'/g, "''");
+      const psCommand =
+        `$parts = @([Environment]::GetEnvironmentVariable('Path','User') -split ';' | Where-Object { $_ -ne '' }); ` +
+        `if ($parts -notcontains '${escaped}') { ` +
+        `[Environment]::SetEnvironmentVariable('Path', (($parts + '${escaped}') -join ';'), 'User') }`;
+      const psResult = run("powershell", ["-NoProfile", "-NonInteractive", "-Command", psCommand], {
+        capture: true,
+        allowFailure: true,
+      });
+      if (psResult.status === 0) {
+        logOk("Added to PATH — open a NEW terminal to use the `stacyvm` command");
+      } else {
+        logWarn(`Could not modify PATH automatically. Add this folder to your PATH manually:\n    ${installDir}`);
+      }
+      // Make the binary resolvable in THIS process too (so a follow-on `serve`
+      // works without waiting for a new terminal).
+      if (!isDirOnPath(installDir)) {
+        process.env.PATH = `${process.env.PATH || ""};${installDir}`;
+      }
       return dest;
     } catch (e) {
       logWarn(`Failed to install globally on Windows: ${e.message}`);
@@ -498,7 +730,8 @@ function uninstallStacy() {
   if (process.platform === "win32") {
     const userProfile = process.env.USERPROFILE;
     if (userProfile) {
-      const globalBin = join(userProfile, ".stacyvm", "bin", binaryName);
+      const installDir = join(userProfile, ".stacyvm", "bin");
+      const globalBin = join(installDir, binaryName);
       if (existsSync(globalBin)) {
         try {
           rmSync(globalBin);
@@ -507,6 +740,17 @@ function uninstallStacy() {
           logWarn(`Failed to remove global binary: ${e.message}`);
         }
       }
+      // Remove our entry from the User PATH too, so uninstall is symmetric with
+      // install and we don't leave a dangling path behind.
+      const escaped = installDir.replace(/'/g, "''");
+      const psCommand =
+        `$parts = @([Environment]::GetEnvironmentVariable('Path','User') -split ';' | ` +
+        `Where-Object { $_ -ne '' -and $_ -ne '${escaped}' }); ` +
+        `[Environment]::SetEnvironmentVariable('Path', ($parts -join ';'), 'User')`;
+      run("powershell", ["-NoProfile", "-NonInteractive", "-Command", psCommand], {
+        capture: true,
+        allowFailure: true,
+      });
     }
   } else {
     const localBin = join(process.env.HOME || "", ".local", "bin", binaryName);
@@ -591,16 +835,28 @@ async function main() {
 
   try {
     await ensureRepo(targetDir, options);
-    checkHost(options);
+
+    // Decide up front whether the web UI will be built; this drives both the
+    // npm prerequisite check and the progress step count so they stay in sync.
+    const willBuildWeb =
+      options.nodeDeps && existsSync(join(targetDir, WEB_DIR, "package.json"));
+
+    checkHost(options, willBuildWeb);
 
     if (options.checkOnly) {
       logOk("Check-only mode complete");
       return;
     }
 
-    buildWebUI(targetDir, options);
-    downloadGoDeps(targetDir);
-    buildStacyVM(targetDir);
+    // Everything below is the slow part (download + compile). Frame it as one
+    // tracked phase so the per-step animation reads as overall progress.
+    logStep("Building StacyVM — downloading dependencies and compiling");
+    const totalSteps = (willBuildWeb ? 2 : 0) + 2; // web (install+build) + go (deps+build)
+    const progress = makeProgress(totalSteps);
+
+    buildWebUI(targetDir, options, progress);
+    downloadGoDeps(targetDir, progress);
+    buildStacyVM(targetDir, progress);
 
     // Install onto the PATH. The binary embeds the web UI and is fully
     // self-contained, so once installed the clone is no longer needed.
@@ -625,10 +881,17 @@ async function main() {
       logStep("Setup complete");
       if (options.binaryInstalled) {
         logOk(`StacyVM is installed at ${options.binaryInstalled}`);
-        console.log("Run next: stacyvm setup");
+        if (process.platform === "win32") {
+          console.log("Open a NEW terminal, then run:  stacyvm setup");
+        } else {
+          console.log("Run next:  stacyvm setup");
+        }
       } else {
         logOk(`StacyVM binary built at ${cli}`);
-        console.log(`Run next: cd ${targetDir} && ./stacyvm setup`);
+        const next = process.platform === "win32"
+          ? `cd "${targetDir}"; .\\${binaryName} setup`
+          : `cd ${targetDir} && ./stacyvm setup`;
+        console.log(`Run next:  ${next}`);
       }
     }
   } finally {
