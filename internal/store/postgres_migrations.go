@@ -284,4 +284,20 @@ ALTER TABLE sandboxes ADD COLUMN IF NOT EXISTS tenant_id TEXT NOT NULL DEFAULT '
 CREATE INDEX IF NOT EXISTS idx_sandboxes_tenant ON sandboxes(tenant_id);
 `,
 	},
+	{
+		version: 12,
+		sql: `
+CREATE TABLE IF NOT EXISTS ssh_keys (
+    id          TEXT PRIMARY KEY,
+    owner_id    TEXT NOT NULL DEFAULT '',
+    tenant_id   TEXT NOT NULL DEFAULT '',
+    fingerprint TEXT NOT NULL UNIQUE,
+    public_key  TEXT NOT NULL,
+    label       TEXT NOT NULL DEFAULT '',
+    created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_ssh_keys_owner ON ssh_keys(owner_id);
+`,
+	},
 }

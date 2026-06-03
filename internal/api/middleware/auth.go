@@ -30,6 +30,7 @@ const (
 	ScopeAdmin           = "admin:*"
 	ScopeRead            = "read:*"
 	ScopeOperator        = "operator:*"
+	ScopeSSH             = "ssh:*"
 	ScopeTenantAdmin     = "tenant:admin"
 	ScopeWorkerHeartbeat = "worker:heartbeat"
 	ScopeWorkerSpawn     = "worker:spawn"
@@ -297,13 +298,13 @@ func authenticateRequest(r *http.Request, candidates ...authCandidate) (AuthIden
 func scopesForRole(role AuthRole) []string {
 	switch role {
 	case AuthRoleAdmin:
-		return []string{ScopeRead, ScopeAPI, ScopeOperator, ScopeAdmin}
+		return []string{ScopeRead, ScopeAPI, ScopeOperator, ScopeAdmin, ScopeSSH}
 	case AuthRoleTenantAdmin:
-		return []string{ScopeRead, ScopeAPI, ScopeOperator, ScopeTenantAdmin}
+		return []string{ScopeRead, ScopeAPI, ScopeOperator, ScopeTenantAdmin, ScopeSSH}
 	case AuthRoleOperator:
-		return []string{ScopeRead, ScopeAPI, ScopeOperator}
+		return []string{ScopeRead, ScopeAPI, ScopeOperator, ScopeSSH}
 	case AuthRoleAPI:
-		return []string{ScopeRead, ScopeAPI}
+		return []string{ScopeRead, ScopeAPI, ScopeSSH}
 	case AuthRoleViewer:
 		return []string{ScopeRead}
 	case AuthRoleWorker:

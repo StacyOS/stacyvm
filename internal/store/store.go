@@ -106,6 +106,18 @@ type RegistryConnectionRecord struct {
 	UpdatedAt time.Time
 }
 
+// SSHKeyRecord is a user-registered SSH public key bound to an identity,
+// used by the SSH gateway to authenticate publickey connections.
+type SSHKeyRecord struct {
+	ID          string
+	OwnerID     string
+	TenantID    string
+	Fingerprint string // SHA256 fingerprint, unique
+	PublicKey   string // authorized_keys line
+	Label       string
+	CreatedAt   time.Time
+}
+
 type OwnerQuotaRecord struct {
 	OwnerID               string
 	MaxSandboxes          int
@@ -312,6 +324,12 @@ type Store interface {
 	GetTenantMember(ctx context.Context, tenantID, userID string) (*TenantMemberRecord, error)
 	ListTenantMembers(ctx context.Context, tenantID string) ([]*TenantMemberRecord, error)
 	DeleteTenantMember(ctx context.Context, tenantID, userID string) error
+
+	// SSH public keys
+	CreateSSHKey(ctx context.Context, key *SSHKeyRecord) error
+	GetSSHKeyByFingerprint(ctx context.Context, fingerprint string) (*SSHKeyRecord, error)
+	ListSSHKeysByOwner(ctx context.Context, ownerID string) ([]*SSHKeyRecord, error)
+	DeleteSSHKey(ctx context.Context, id string) error
 
 	// Policies
 	CreatePolicy(ctx context.Context, p *PolicyRecord) error

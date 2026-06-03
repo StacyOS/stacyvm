@@ -2809,6 +2809,26 @@ func (m *Manager) Stats(ctx context.Context, sandboxID string) (*providers.Sandb
 	return reporter.Stats(ctx, m.resolveVMID(sb))
 }
 
+// OpenPTYSession attaches an interactive PTY to a process inside the sandbox.
+// It mirrors ExecStream's local/remote routing: today only locally-owned
+// sandboxes are supported (remote-worker PTY streaming arrives with the
+// /rpc/pty transport in a later phase). Providers that cannot allocate a PTY
+// yield providers.ErrPTYUnsupported.
+func (m *Manager) OpenPTYSession(ctx context.Context, sandboxID string, opts providers.PTYOptions) (providers.PTYSession, error) {
+	sb, prov, err := m.getSandboxAndProvider(sandboxID)
+	if err != nil {
+		return nil, err
+	}
+	if m.isRemoteOwnedSandbox(sb) {
+		return nil, fmt.Errorf("interactive pty for remote-worker sandboxes is not yet supported")
+	}
+	ptyProv, ok := prov.(providers.PTYProvider)
+	if !ok {
+		return nil, providers.ErrPTYUnsupported
+	}
+	return ptyProv.OpenPTY(ctx, m.resolveVMID(sb), opts)
+}
+
 func (m *Manager) getProvider(id string) (providers.Provider, error) {
 	m.mu.RLock()
 	sb, ok := m.sandboxes[id]

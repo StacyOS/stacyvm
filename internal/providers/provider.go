@@ -118,6 +118,37 @@ type Provider interface {
 	Healthy(ctx context.Context) bool
 }
 
+// PTYOptions configures an interactive pseudo-terminal session.
+type PTYOptions struct {
+	Cmd     []string          // command + args; empty means the sandbox's default shell
+	Env     map[string]string // extra environment variables
+	WorkDir string            // working directory inside the sandbox
+	Term    string            // TERM value, e.g. "xterm-256color"
+	Cols    uint16            // initial terminal width in columns
+	Rows    uint16            // initial terminal height in rows
+}
+
+// PTYSession is a live interactive terminal attached to a process inside a
+// sandbox. Reads return terminal output; writes deliver keystrokes/stdin to the
+// process. The byte stream is binary-safe end to end.
+type PTYSession interface {
+	io.ReadWriteCloser
+	// Resize updates the terminal window size.
+	Resize(cols, rows uint16) error
+	// Signal delivers a signal (e.g. "SIGINT") to the foreground process.
+	Signal(sig string) error
+	// Wait blocks until the attached process exits and returns its exit code.
+	Wait() (exitCode int, err error)
+}
+
+// PTYProvider is an optional capability for providers that can attach an
+// interactive PTY to a process inside a sandbox; the SSH gateway depends on it.
+// Providers that cannot allocate a PTY simply do not implement it, and callers
+// surface ErrPTYUnsupported.
+type PTYProvider interface {
+	OpenPTY(ctx context.Context, sandboxID string, opts PTYOptions) (PTYSession, error)
+}
+
 // SnapshotSummary describes a pre-built VM snapshot available for fast restore.
 type SnapshotSummary struct {
 	Image     string    `json:"image"`

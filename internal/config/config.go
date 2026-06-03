@@ -22,6 +22,14 @@ type Config struct {
 	Database  DatabaseConfig  `mapstructure:"database"`
 	Logging   LoggingConfig   `mapstructure:"logging"`
 	Pool      PoolConfig      `mapstructure:"pool"`
+	SSH       SSHConfig       `mapstructure:"ssh"`
+}
+
+// SSHConfig configures the interactive SSH/PTY gateway.
+type SSHConfig struct {
+	Enabled     bool   `mapstructure:"enabled"`
+	ListenAddr  string `mapstructure:"listen_addr"`
+	HostKeyPath string `mapstructure:"host_key_path"`
 }
 
 type PoolConfig struct {
@@ -227,6 +235,10 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("worker.rpc_tls.client_key_file", "")
 	v.SetDefault("worker.rpc_tls.server_name", "")
 	v.SetDefault("worker.rpc_tls.insecure_skip_verify", false)
+
+	v.SetDefault("ssh.enabled", false)
+	v.SetDefault("ssh.listen_addr", ":2222")
+	v.SetDefault("ssh.host_key_path", "/var/lib/stacyvm/ssh_host_ed25519_key")
 
 	v.SetDefault("providers.default", "docker")
 	v.SetDefault("providers.mock.enabled", false)

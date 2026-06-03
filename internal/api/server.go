@@ -120,8 +120,14 @@ func NewServer(cfg ServerConfig, registry *providers.Registry, manager *orchestr
 		tenantRoutes := routes.NewTenantRoutes(st)
 		tokenIssuerRoutes := routes.NewWorkerTokenIssuerRoutes(cfg.WorkerSigningKey)
 		authConfigured := cfg.APIKey != "" || cfg.AdminAPIKey != "" || cfg.OIDC.Issuer != "" || cfg.OIDC.JWKSUrl != "" || cfg.OIDC.PublicKeyPEM != ""
+		sshKeyRoutes := routes.NewSSHKeyRoutes(st)
 		r.Route("/api/v1", func(r chi.Router) {
 			r.Mount("/sandboxes", sandboxRoutes.RoutesWithScopeEnforcement(authConfigured))
+			if authConfigured {
+				r.With(middleware.RequireScope(middleware.ScopeSSH)).Mount("/users/me/ssh-keys", sshKeyRoutes.Routes())
+			} else {
+				r.Mount("/users/me/ssh-keys", sshKeyRoutes.Routes())
+			}
 			r.Mount("/providers", providerRoutes.Routes())
 			r.Mount("/templates", templateRoutes.Routes())
 			r.Mount("/snapshots", snapshotRoutes.Routes())

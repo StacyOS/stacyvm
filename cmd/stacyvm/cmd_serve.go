@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"net"
 	"os"
 	"os/signal"
 	"strings"
@@ -14,6 +16,7 @@ import (
 	"github.com/StacyOs/stacyvm/internal/environments"
 	"github.com/StacyOs/stacyvm/internal/orchestrator"
 	"github.com/StacyOs/stacyvm/internal/providers"
+	stacyssh "github.com/StacyOs/stacyvm/internal/ssh"
 	"github.com/StacyOs/stacyvm/internal/store"
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
@@ -287,6 +290,29 @@ func runServe() error {
 		},
 	}, registry, mgr, events, templates, pool, st, envBuilds, logger)
 
+	// SSH/PTY gateway (optional). It is a pure protocol terminator: it
+	// authenticates registered keys and relays an interactive PTY to a sandbox
+	// via the orchestrator — it never runs commands on the host.
+	var sshListener net.Listener
+	if cfg.SSH.Enabled {
+		hostKey, err := stacyssh.LoadOrCreateHostKey(cfg.SSH.HostKeyPath)
+		if err != nil {
+			return fmt.Errorf("ssh gateway host key: %w", err)
+		}
+		backend := stacyssh.NewStoreBackend(st, st, mgr, logger)
+		gateway := stacyssh.NewServer(backend, hostKey, logger, stacyssh.ServerConfig{})
+		sshListener, err = net.Listen("tcp", cfg.SSH.ListenAddr)
+		if err != nil {
+			return fmt.Errorf("ssh gateway listen on %s: %w", cfg.SSH.ListenAddr, err)
+		}
+		go func() {
+			logger.Info().Str("addr", cfg.SSH.ListenAddr).Msg("ssh gateway listening")
+			if err := gateway.Serve(sshListener); err != nil {
+				logger.Info().Err(err).Msg("ssh gateway stopped")
+			}
+		}()
+	}
+
 	// Graceful shutdown
 	errCh := make(chan error, 1)
 	go func() {
@@ -299,6 +325,9 @@ func runServe() error {
 	select {
 	case <-quit:
 		logger.Info().Msg("shutting down...")
+		if sshListener != nil {
+			sshListener.Close()
+		}
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		return srv.Shutdown(ctx)

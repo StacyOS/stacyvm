@@ -12,6 +12,7 @@ var (
 	ErrProviderUnavailable = errors.New("provider unavailable")
 	ErrExecTimeout         = errors.New("exec timeout")
 	ErrResourceLimit       = errors.New("resource limit exceeded")
+	ErrPTYUnsupported      = errors.New("interactive pty not supported by provider")
 )
 
 func SandboxNotFoundError(id string) error {

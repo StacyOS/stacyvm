@@ -12,6 +12,7 @@ require (
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
 	github.com/charmbracelet/log v1.0.0
 	github.com/charmbracelet/x/ansi v0.11.6
+	github.com/creack/pty v1.1.24
 	github.com/docker/docker v27.5.1+incompatible
 	github.com/go-chi/chi/v5 v5.2.1
 	github.com/google/uuid v1.6.0
@@ -26,6 +27,7 @@ require (
 	github.com/spf13/viper v1.21.0
 	github.com/swaggo/http-swagger/v2 v2.0.2
 	github.com/swaggo/swag v1.16.4
+	golang.org/x/crypto v0.51.0
 	modernc.org/sqlite v1.45.0
 	nhooyr.io/websocket v1.8.17
 )
@@ -135,7 +137,6 @@ require (
 	go.opentelemetry.io/otel/sdk/metric v1.44.0 // indirect
 	go.opentelemetry.io/otel/trace v1.44.0 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
-	golang.org/x/crypto v0.51.0 // indirect
 	golang.org/x/exp v0.0.0-20251023183803-a4bb9ffd2546 // indirect
 	golang.org/x/net v0.55.0 // indirect
 	golang.org/x/oauth2 v0.0.0-20181106182150-f42d05182288 // indirect
