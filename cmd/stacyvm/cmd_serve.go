@@ -265,11 +265,11 @@ func runServe() error {
 		sshMetrics = stacyssh.NewMetrics()
 		sshUserCA, err = stacyssh.LoadOrCreateHostKey(cfg.SSH.UserCAPath)
 		if err != nil {
-			return fmt.Errorf("ssh user CA: %w", err)
+			return fmt.Errorf("ssh user CA: could not create key at %s: %w (set ssh.user_ca_path to a writable location)", cfg.SSH.UserCAPath, err)
 		}
 		hostKey, herr := stacyssh.LoadOrCreateHostKey(cfg.SSH.HostKeyPath)
 		if herr != nil {
-			return fmt.Errorf("ssh gateway host key: %w", herr)
+			return fmt.Errorf("ssh gateway host key: could not create key at %s: %w (set ssh.host_key_path to a writable location)", cfg.SSH.HostKeyPath, herr)
 		}
 		backend := stacyssh.NewStoreBackend(st, st, mgr, logger).
 			WithTTLRenewal(func(ctx context.Context, sandboxID string) error {
