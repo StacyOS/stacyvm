@@ -116,6 +116,32 @@ When SSH was enabled, after writing the config print guidance:
   that matters (which keys get written, to which paths) moves into the two pure
   helpers above.
 
+## Acceptance criteria
+
+The headline criterion: **with `ssh.enabled: true`, `stacyvm serve` runs.**
+Concretely, all of the following must hold for a normal (non-root) user with no
+pre-existing `/var/lib/stacyvm`:
+
+1. Running `stacyvm setup` and answering "yes" to the SSH prompt writes a valid
+   `ssh:` block (enabled + key paths + listen_addr) into `~/.stacyvm/config.yaml`.
+2. `stacyvm serve` then starts successfully — it does **not** abort with a
+   permission error — generates the host key and user CA under `~/.stacyvm/`, and
+   binds the gateway on `:2222`.
+3. A hand-edited `ssh.enabled: true` (no wizard, defaults for everything else)
+   produces the same result: serve starts and listens, no crash.
+4. `stacyvm ssh <sandbox-id>` against that server opens an interactive shell.
+5. A deployment that explicitly sets `ssh.host_key_path` to `/var/lib/stacyvm/...`
+   while running as root still works (no regression for the system-service case).
+
+### Verification
+
+- Automated: the config + helper unit tests below, plus the existing SSH gateway
+  e2e (temp writable key path → gateway builds, serves, real client gets output).
+- Smoke (manual/scripted), proving criterion 2/3 directly: as a non-root user,
+  `ssh.enabled: true` with key paths under a temp `HOME`, start `stacyvm serve`,
+  and assert the process stays up and `:2222` is listening (e.g. the gateway
+  listener accepts a TCP connection) rather than exiting with an error.
+
 ## Testing (TDD)
 
 - `config_test.go`: with `HOME` set to a temp dir and no config file, assert
