@@ -176,6 +176,19 @@ func runSetup() error {
 	return nil
 }
 
+// applySSHConfig writes the ssh.* keys for an enabled gateway into v, using
+// stateDir for the host-key and user-CA file paths. It is a no-op when enabled
+// is false, so the wizard never persists an ssh block the user declined.
+func applySSHConfig(v *viper.Viper, stateDir string, enabled bool) {
+	if !enabled {
+		return
+	}
+	v.Set("ssh.enabled", true)
+	v.Set("ssh.listen_addr", ":2222")
+	v.Set("ssh.host_key_path", filepath.Join(stateDir, "ssh_host_ed25519_key"))
+	v.Set("ssh.user_ca_path", filepath.Join(stateDir, "ssh_user_ca_key"))
+}
+
 func installAutocomplete() {
 	home, err := os.UserHomeDir()
 	if err != nil {

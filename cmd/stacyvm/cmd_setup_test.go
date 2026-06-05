@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/spf13/viper"
 )
 
 func TestInstallShellCompletionAddsPathBeforeZshCompletion(t *testing.T) {
@@ -66,5 +68,33 @@ func TestInstallShellCompletionSkipsWhenConfigMissing(t *testing.T) {
 
 	if _, err := os.Stat(configPath); !os.IsNotExist(err) {
 		t.Fatalf("missing shell config should not be created, err=%v", err)
+	}
+}
+
+func TestApplySSHConfigEnabledWritesBlock(t *testing.T) {
+	v := viper.New()
+	dir := filepath.Join("home", "user", ".stacyvm")
+
+	applySSHConfig(v, dir, true)
+
+	if !v.GetBool("ssh.enabled") {
+		t.Fatal("ssh.enabled should be true when enabled")
+	}
+	if got, want := v.GetString("ssh.listen_addr"), ":2222"; got != want {
+		t.Fatalf("listen_addr = %q, want %q", got, want)
+	}
+	if got, want := v.GetString("ssh.host_key_path"), filepath.Join(dir, "ssh_host_ed25519_key"); got != want {
+		t.Fatalf("host_key_path = %q, want %q", got, want)
+	}
+	if got, want := v.GetString("ssh.user_ca_path"), filepath.Join(dir, "ssh_user_ca_key"); got != want {
+		t.Fatalf("user_ca_path = %q, want %q", got, want)
+	}
+}
+
+func TestApplySSHConfigDisabledWritesNothing(t *testing.T) {
+	v := viper.New()
+	applySSHConfig(v, "/anything", false)
+	if v.IsSet("ssh.enabled") {
+		t.Fatal("applySSHConfig(enabled=false) must not set any ssh keys")
 	}
 }
