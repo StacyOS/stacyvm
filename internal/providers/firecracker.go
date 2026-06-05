@@ -704,6 +704,41 @@ func (p *FirecrackerProvider) ExecStream(ctx context.Context, sandboxID string, 
 	return ch, nil
 }
 
+// OpenPTY implements PTYProvider for Firecracker. It opens a dedicated vsock
+// connection to the guest agent, requests an interactive PTY, then relays the
+// session over the binary PTY frame protocol. The real PTY lives in the guest.
+func (p *FirecrackerProvider) OpenPTY(ctx context.Context, sandboxID string, opts PTYOptions) (PTYSession, error) {
+	vm, err := p.getVM(sandboxID)
+	if err != nil {
+		return nil, err
+	}
+
+	conn, err := waitForAgent(vm.vsockUDSPath, vm.cid, 5*time.Second)
+	if err != nil {
+		return nil, fmt.Errorf("pty dial agent: %w", err)
+	}
+
+	params, _ := agentproto.MarshalParams(&agentproto.PTYOpenParams{
+		Cmd:     opts.Cmd,
+		Env:     opts.Env,
+		WorkDir: opts.WorkDir,
+		Term:    opts.Term,
+		Cols:    opts.Cols,
+		Rows:    opts.Rows,
+	})
+	if err := agentproto.SendRequest(conn, &agentproto.Request{
+		ID:     generateRequestID(),
+		Method: agentproto.MethodPTYOpen,
+		Params: params,
+	}); err != nil {
+		conn.Close()
+		return nil, fmt.Errorf("pty open: %w", err)
+	}
+
+	// The connection now carries the binary PTY frame protocol.
+	return agentproto.NewPTYStream(conn), nil
+}
+
 func (p *FirecrackerProvider) WriteFile(ctx context.Context, sandboxID string, path string, content io.Reader, mode string) error {
 	vm, err := p.getVM(sandboxID)
 	if err != nil {

@@ -20,6 +20,29 @@ func asPTYProvider(t *testing.T, p Provider) PTYProvider {
 	return pp
 }
 
+func TestPTYExecOptionsMapping(t *testing.T) {
+	// Empty command defaults to an interactive shell in argv mode.
+	got := ptyExecOptions(PTYOptions{Term: "xterm-256color", Cols: 80, Rows: 24})
+	if got.Mode != ExecModeArgv {
+		t.Fatalf("mode = %q, want argv", got.Mode)
+	}
+	if got.Command != "/bin/sh" || len(got.Args) != 0 {
+		t.Fatalf("command/args = %q/%v, want /bin/sh with no args", got.Command, got.Args)
+	}
+	if got.Env["TERM"] != "xterm-256color" {
+		t.Fatalf("TERM = %q, want xterm-256color", got.Env["TERM"])
+	}
+
+	// Explicit command is passed through as argv.
+	got = ptyExecOptions(PTYOptions{Cmd: []string{"/usr/bin/bash", "-l"}, WorkDir: "/work"})
+	if got.Command != "/usr/bin/bash" || len(got.Args) != 1 || got.Args[0] != "-l" {
+		t.Fatalf("command/args = %q/%v, want /usr/bin/bash [-l]", got.Command, got.Args)
+	}
+	if got.WorkDir != "/work" {
+		t.Fatalf("workdir = %q, want /work", got.WorkDir)
+	}
+}
+
 func TestMockProviderOpenPTYRunsCommandAndReportsExit(t *testing.T) {
 	p := NewMockProvider()
 	pp := asPTYProvider(t, p)

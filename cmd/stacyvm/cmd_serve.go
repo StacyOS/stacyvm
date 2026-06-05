@@ -3,9 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
+	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -20,6 +23,7 @@ import (
 	"github.com/StacyOs/stacyvm/internal/store"
 	"github.com/rs/zerolog"
 	"github.com/spf13/cobra"
+	gossh "golang.org/x/crypto/ssh"
 )
 
 func newServeCmd() *cobra.Command {
@@ -252,6 +256,44 @@ func runServe() error {
 		logger.Warn().Msg("WARNING: no API key configured — all endpoints are unauthenticated. Set auth.api_key in config or STACYVM_AUTH_API_KEY env var")
 	}
 
+	// SSH gateway is built up-front so the API server can export its metrics,
+	// mint certificates, and expose the SSH-over-WebSocket tunnel.
+	var sshMetrics *stacyssh.Metrics
+	var sshUserCA gossh.Signer
+	var sshGateway *stacyssh.Server
+	if cfg.SSH.Enabled {
+		sshMetrics = stacyssh.NewMetrics()
+		sshUserCA, err = stacyssh.LoadOrCreateHostKey(cfg.SSH.UserCAPath)
+		if err != nil {
+			return fmt.Errorf("ssh user CA: %w", err)
+		}
+		hostKey, herr := stacyssh.LoadOrCreateHostKey(cfg.SSH.HostKeyPath)
+		if herr != nil {
+			return fmt.Errorf("ssh gateway host key: %w", herr)
+		}
+		backend := stacyssh.NewStoreBackend(st, st, mgr, logger).
+			WithTTLRenewal(func(ctx context.Context, sandboxID string) error {
+				_, eerr := mgr.ExtendTTL(ctx, sandboxID, 5*time.Minute)
+				return eerr
+			}, time.Minute)
+		if cfg.SSH.SessionRecording {
+			recordingDir := cfg.SSH.RecordingDir
+			backend = backend.WithSessionRecording(func(sandboxID string, _ stacyssh.Identity) (io.WriteCloser, error) {
+				if err := os.MkdirAll(recordingDir, 0o700); err != nil {
+					return nil, err
+				}
+				name := fmt.Sprintf("%s-%d.cast", sandboxID, time.Now().UnixNano())
+				return os.Create(filepath.Join(recordingDir, name))
+			})
+		}
+		if cfg.SSH.AllowPortForward {
+			backend = backend.WithPortForwarding(mgr)
+		}
+		backend = backend.WithSFTP(managerFS{mgr: mgr})
+		gatewayCfg := stacyssh.ServerConfig{Metrics: sshMetrics, UserCA: sshUserCA.PublicKey()}
+		sshGateway = stacyssh.NewServer(backend, hostKey, logger, gatewayCfg)
+	}
+
 	// Server
 	rateLimitBucketTTL, _ := time.ParseDuration(cfg.RateLimit.BucketTTL)
 	rateLimitCleanupInterval, _ := time.ParseDuration(cfg.RateLimit.CleanupInterval)
@@ -288,26 +330,32 @@ func runServe() error {
 			OperatorGroups: cfg.Auth.OIDCOperatorGroups,
 			ViewerGroups:   cfg.Auth.OIDCViewerGroups,
 		},
+		PrometheusExtra: func(w io.Writer) {
+			if sshMetrics != nil {
+				sshMetrics.WritePrometheus(w)
+			}
+		},
+		SSHCertSigner: sshUserCA,
+		SSHTunnelHandler: func() http.HandlerFunc {
+			if sshGateway != nil {
+				return sshGateway.ServeWebSocket
+			}
+			return nil
+		}(),
 	}, registry, mgr, events, templates, pool, st, envBuilds, logger)
 
 	// SSH/PTY gateway (optional). It is a pure protocol terminator: it
 	// authenticates registered keys and relays an interactive PTY to a sandbox
 	// via the orchestrator — it never runs commands on the host.
 	var sshListener net.Listener
-	if cfg.SSH.Enabled {
-		hostKey, err := stacyssh.LoadOrCreateHostKey(cfg.SSH.HostKeyPath)
-		if err != nil {
-			return fmt.Errorf("ssh gateway host key: %w", err)
-		}
-		backend := stacyssh.NewStoreBackend(st, st, mgr, logger)
-		gateway := stacyssh.NewServer(backend, hostKey, logger, stacyssh.ServerConfig{})
+	if sshGateway != nil {
 		sshListener, err = net.Listen("tcp", cfg.SSH.ListenAddr)
 		if err != nil {
 			return fmt.Errorf("ssh gateway listen on %s: %w", cfg.SSH.ListenAddr, err)
 		}
 		go func() {
 			logger.Info().Str("addr", cfg.SSH.ListenAddr).Msg("ssh gateway listening")
-			if err := gateway.Serve(sshListener); err != nil {
+			if err := sshGateway.Serve(sshListener); err != nil {
 				logger.Info().Err(err).Msg("ssh gateway stopped")
 			}
 		}()

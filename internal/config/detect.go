@@ -10,10 +10,10 @@ type Environment int
 
 const (
 	EnvUnknown     Environment = iota
-	EnvAndroid                         // Android device (has /system/build.prop)
-	EnvDocker                          // Docker daemon available
-	EnvFirecracker                     // Firecracker binary available
-	EnvPRoot                           // PRoot binary available
+	EnvAndroid                 // Android device (has /system/build.prop)
+	EnvDocker                  // Docker daemon available
+	EnvFirecracker             // Firecracker binary available
+	EnvPRoot                   // PRoot binary available
 )
 
 // String returns the environment name.

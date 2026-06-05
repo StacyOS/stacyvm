@@ -44,11 +44,11 @@ type fakeBackend struct {
 	allowedFP string
 	identity  Identity
 
-	mu       sync.Mutex
-	gotSB    string
-	gotOpts  providers.PTYOptions
-	pty      *fakePTY
-	openErr  error
+	mu      sync.Mutex
+	gotSB   string
+	gotOpts providers.PTYOptions
+	pty     *fakePTY
+	openErr error
 }
 
 func (b *fakeBackend) LookupKey(_ context.Context, fp string) (Identity, error) {

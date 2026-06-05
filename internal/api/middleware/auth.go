@@ -19,10 +19,10 @@ type AuthRole string
 
 const (
 	AuthRoleAnonymous   AuthRole = "anonymous"
-	AuthRoleViewer      AuthRole = "viewer"   // read-only sandbox/template list
-	AuthRoleAPI         AuthRole = "api"      // standard API access (spawn/exec/files)
-	AuthRoleOperator    AuthRole = "operator" // API + template/environment management
-	AuthRoleAdmin       AuthRole = "admin"    // operator + quotas/workers/provider config
+	AuthRoleViewer      AuthRole = "viewer"       // read-only sandbox/template list
+	AuthRoleAPI         AuthRole = "api"          // standard API access (spawn/exec/files)
+	AuthRoleOperator    AuthRole = "operator"     // API + template/environment management
+	AuthRoleAdmin       AuthRole = "admin"        // operator + quotas/workers/provider config
 	AuthRoleTenantAdmin AuthRole = "tenant_admin" // admin within a specific tenant
 	AuthRoleWorker      AuthRole = "worker"
 

@@ -33,6 +33,7 @@ func main() {
 		newWorkerCmd(),
 		newSpawnCmd(),
 		newExecCmd(),
+		newSSHCmd(),
 		newKillCmd(),
 		newListCmd(),
 		newVersionCmd(),

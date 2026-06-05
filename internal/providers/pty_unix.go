@@ -107,6 +107,43 @@ func signalByName(name string) (os.Signal, bool) {
 	}
 }
 
+// ptyExecOptions maps interactive PTYOptions onto ExecOptions in argv mode
+// (an interactive shell must exec the program directly, not via `sh -c`).
+func ptyExecOptions(opts PTYOptions) ExecOptions {
+	cmdline := opts.Cmd
+	if len(cmdline) == 0 {
+		cmdline = []string{"/bin/sh"}
+	}
+	env := make(map[string]string, len(opts.Env)+1)
+	for k, v := range opts.Env {
+		env[k] = v
+	}
+	if opts.Term != "" {
+		env["TERM"] = opts.Term
+	}
+	return ExecOptions{
+		Mode:    ExecModeArgv,
+		Command: cmdline[0],
+		Args:    cmdline[1:],
+		WorkDir: opts.WorkDir,
+		Env:     env,
+	}
+}
+
+// OpenPTY implements PTYProvider for PRootProvider: it builds the same
+// proot-jailed command as Exec but attaches it to a host pty.
+func (p *PRootProvider) OpenPTY(ctx context.Context, sandboxID string, opts PTYOptions) (PTYSession, error) {
+	sb, err := p.getSandbox(sandboxID)
+	if err != nil {
+		return nil, err
+	}
+	cmd, err := p.BuildCommand(ctx, sb, ptyExecOptions(opts))
+	if err != nil {
+		return nil, err
+	}
+	return startHostPTY(cmd, opts.Cols, opts.Rows)
+}
+
 // OpenPTY implements PTYProvider for MockProvider by running the requested
 // command on the host under a real pty, scoped to the sandbox's temp root.
 func (m *MockProvider) OpenPTY(ctx context.Context, sandboxID string, opts PTYOptions) (PTYSession, error) {

@@ -5,11 +5,13 @@
 package ssh
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"errors"
 	"io"
 	"net"
+	"strconv"
 	"sync"
 
 	"github.com/StacyOs/stacyvm/internal/providers"
@@ -35,8 +37,23 @@ type Backend interface {
 	OpenPTY(ctx context.Context, identity Identity, sandboxID string, opts providers.PTYOptions) (providers.PTYSession, error)
 }
 
-// ServerConfig holds tunable gateway limits (room to grow).
-type ServerConfig struct{}
+// Dialer is an optional Backend capability enabling SSH port forwarding
+// (direct-tcpip / `ssh -L`). It dials addr ("host:port") from inside the
+// sandbox's network after authorizing identity. Backends that do not implement
+// it cause forwarding requests to be rejected cleanly.
+type Dialer interface {
+	DialSandbox(ctx context.Context, identity Identity, sandboxID, addr string) (net.Conn, error)
+}
+
+// ServerConfig holds tunable gateway options.
+type ServerConfig struct {
+	// Metrics, when set, records gateway counters for Prometheus.
+	Metrics *Metrics
+	// UserCA, when set, is the public key of the deployment's SSH user CA;
+	// clients presenting a certificate signed by it are authenticated from the
+	// certificate (the `stacy ssh` ephemeral-cert flow), bypassing the key store.
+	UserCA gossh.PublicKey
+}
 
 // Server is the SSH gateway.
 type Server struct {
@@ -44,11 +61,13 @@ type Server struct {
 	signer  gossh.Signer
 	logger  zerolog.Logger
 	cfg     ServerConfig
+	metrics *Metrics
+	userCA  gossh.PublicKey
 }
 
 // NewServer builds a gateway that authenticates with hostKey and serves via backend.
 func NewServer(backend Backend, hostKey gossh.Signer, logger zerolog.Logger, cfg ServerConfig) *Server {
-	return &Server{backend: backend, signer: hostKey, logger: logger, cfg: cfg}
+	return &Server{backend: backend, signer: hostKey, logger: logger, cfg: cfg, metrics: cfg.Metrics, userCA: cfg.UserCA}
 }
 
 // Serve accepts connections until ln is closed.
@@ -69,9 +88,21 @@ func (s *Server) HandleConn(ctx context.Context, nc net.Conn) {
 
 	var identity Identity
 	cfg := &gossh.ServerConfig{
-		PublicKeyCallback: func(_ gossh.ConnMetadata, key gossh.PublicKey) (*gossh.Permissions, error) {
+		PublicKeyCallback: func(meta gossh.ConnMetadata, key gossh.PublicKey) (*gossh.Permissions, error) {
+			// CA-signed certificate path (ephemeral `stacy ssh` flow).
+			if cert, ok := key.(*gossh.Certificate); ok {
+				id, err := s.identityFromValidCert(meta.User(), cert)
+				if err != nil {
+					s.metrics.authFailure()
+					return nil, err
+				}
+				identity = id
+				return &gossh.Permissions{Extensions: map[string]string{"subject": id.Subject}}, nil
+			}
+			// Registered public key path.
 			id, err := s.backend.LookupKey(ctx, gossh.FingerprintSHA256(key))
 			if err != nil {
+				s.metrics.authFailure()
 				return nil, errUnknownKey
 			}
 			identity = id
@@ -97,12 +128,94 @@ func (s *Server) HandleConn(ctx context.Context, nc net.Conn) {
 		Msg("ssh connection authenticated")
 
 	for newChan := range chans {
-		if newChan.ChannelType() != "session" {
-			newChan.Reject(gossh.UnknownChannelType, "only session channels are supported")
-			continue
+		switch newChan.ChannelType() {
+		case "session":
+			go s.handleSession(ctx, newChan, identity, sandboxID)
+		case "direct-tcpip":
+			go s.handleDirectTCPIP(ctx, newChan, identity, sandboxID)
+		default:
+			newChan.Reject(gossh.UnknownChannelType, "unsupported channel type")
 		}
-		go s.handleSession(ctx, newChan, identity, sandboxID)
 	}
+}
+
+// handleDirectTCPIP services an `ssh -L` port-forward channel by dialing the
+// requested address from inside the sandbox (via the Backend's optional Dialer)
+// and relaying bytes. Forwarding is rejected when the backend cannot dial.
+func (s *Server) handleDirectTCPIP(ctx context.Context, newChan gossh.NewChannel, identity Identity, sandboxID string) {
+	dialer, ok := s.backend.(Dialer)
+	if !ok {
+		newChan.Reject(gossh.Prohibited, "port forwarding not supported")
+		return
+	}
+	host, port, ok := parseDirectTCPIP(newChan.ExtraData())
+	if !ok {
+		newChan.Reject(gossh.ConnectionFailed, "malformed direct-tcpip request")
+		return
+	}
+	addr := net.JoinHostPort(host, strconv.Itoa(int(port)))
+	conn, err := dialer.DialSandbox(ctx, identity, sandboxID, addr)
+	if err != nil {
+		s.logger.Debug().Err(err).Str("sandbox", sandboxID).Str("addr", addr).Msg("ssh forward dial failed")
+		newChan.Reject(gossh.ConnectionFailed, err.Error())
+		return
+	}
+	ch, reqs, err := newChan.Accept()
+	if err != nil {
+		_ = conn.Close()
+		return
+	}
+	go gossh.DiscardRequests(reqs)
+	s.relayTCP(ch, conn)
+}
+
+// relayTCP copies bytes bidirectionally between an SSH channel and a dialed
+// connection until either side closes.
+func (s *Server) relayTCP(ch gossh.Channel, conn net.Conn) {
+	defer ch.Close()
+	defer conn.Close()
+	done := make(chan struct{}, 2)
+	go func() {
+		n, _ := io.Copy(conn, ch)
+		s.metrics.addBytesIn(n)
+		done <- struct{}{}
+	}()
+	go func() {
+		n, _ := io.Copy(ch, conn)
+		s.metrics.addBytesOut(n)
+		done <- struct{}{}
+	}()
+	<-done
+}
+
+func parseDirectTCPIP(payload []byte) (host string, port uint32, ok bool) {
+	var msg struct {
+		DestHost string
+		DestPort uint32
+		OrigHost string
+		OrigPort uint32
+	}
+	if err := gossh.Unmarshal(payload, &msg); err != nil {
+		return "", 0, false
+	}
+	return msg.DestHost, msg.DestPort, true
+}
+
+// identityFromValidCert verifies a user certificate against the configured user
+// CA for the given login (sandbox) and returns the identity it carries.
+func (s *Server) identityFromValidCert(user string, cert *gossh.Certificate) (Identity, error) {
+	if s.userCA == nil {
+		return Identity{}, errUnknownKey
+	}
+	checker := &gossh.CertChecker{
+		IsUserAuthority: func(auth gossh.PublicKey) bool {
+			return bytes.Equal(auth.Marshal(), s.userCA.Marshal())
+		},
+	}
+	if err := checker.CheckCert(user, cert); err != nil {
+		return Identity{}, err
+	}
+	return identityFromCert(cert), nil
 }
 
 // handleSession negotiates a single session channel: it gathers the PTY request
@@ -178,6 +291,12 @@ func (s *Server) handleSession(ctx context.Context, newChan gossh.NewChannel, id
 				mu.Unlock()
 			}
 			req.Reply(startSession(), nil)
+		case "subsystem":
+			if parseSubsystem(req.Payload) == "sftp" {
+				req.Reply(s.startSFTP(ctx, ch, identity, sandboxID), nil)
+			} else {
+				req.Reply(false, nil)
+			}
 		default:
 			if req.WantReply {
 				req.Reply(false, nil)
@@ -189,15 +308,19 @@ func (s *Server) handleSession(ctx context.Context, newChan gossh.NewChannel, id
 // bridge relays bytes between the SSH channel and the PTY session until the
 // process exits or the connection drops, then reports the exit status.
 func (s *Server) bridge(ch gossh.Channel, session providers.PTYSession) {
+	s.metrics.sessionStarted()
+	defer s.metrics.sessionEnded()
 	defer ch.Close()
 	defer session.Close()
 
 	done := make(chan struct{})
 	go func() {
-		_, _ = io.Copy(session, ch) // client stdin -> pty
+		n, _ := io.Copy(session, ch) // client stdin -> pty
+		s.metrics.addBytesIn(n)
 	}()
 	go func() {
-		_, _ = io.Copy(ch, session) // pty output -> client
+		n, _ := io.Copy(ch, session) // pty output -> client
+		s.metrics.addBytesOut(n)
 		close(done)
 	}()
 	<-done
@@ -228,6 +351,35 @@ func parseWindowChange(payload []byte) (cols, rows uint16, ok bool) {
 		return 0, 0, false
 	}
 	return uint16(msg.Columns), uint16(msg.Rows), true
+}
+
+// startSFTP serves the SFTP subsystem on ch, backed by the sandbox filesystem
+// when the Backend supports it. Returns false (rejecting the subsystem) when
+// SFTP is unavailable or unauthorized.
+func (s *Server) startSFTP(ctx context.Context, ch gossh.Channel, identity Identity, sandboxID string) bool {
+	fp, ok := s.backend.(FileProvider)
+	if !ok {
+		return false
+	}
+	fs, err := fp.SandboxFiles(ctx, identity, sandboxID)
+	if err != nil {
+		io.WriteString(ch.Stderr(), "stacyvm: "+err.Error()+"\r\n")
+		return false
+	}
+	go func() {
+		s.metrics.sessionStarted()
+		defer s.metrics.sessionEnded()
+		_ = serveSFTP(ctx, ch, fs)
+	}()
+	return true
+}
+
+func parseSubsystem(payload []byte) string {
+	var msg struct{ Name string }
+	if err := gossh.Unmarshal(payload, &msg); err != nil {
+		return ""
+	}
+	return msg.Name
 }
 
 func parseExecCommand(payload []byte) (string, bool) {

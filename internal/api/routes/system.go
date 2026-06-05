@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -12,7 +13,6 @@ import (
 	"time"
 
 	"github.com/spf13/viper"
-
 
 	"github.com/StacyOs/stacyvm/internal/api/middleware"
 	"github.com/StacyOs/stacyvm/internal/httputil"
@@ -24,13 +24,20 @@ import (
 )
 
 type SystemRoutes struct {
-	registry  *providers.Registry
-	manager   *orchestrator.Manager
-	events    *orchestrator.EventBus
-	store     store.Store
-	startTime time.Time
-	version   string
-	limiter   *middleware.RateLimiter
+	registry        *providers.Registry
+	manager         *orchestrator.Manager
+	events          *orchestrator.EventBus
+	store           store.Store
+	startTime       time.Time
+	version         string
+	limiter         *middleware.RateLimiter
+	extraPrometheus func(io.Writer)
+}
+
+// SetExtraPrometheus registers an optional callback that appends extra metrics
+// (e.g. the SSH gateway's) to the Prometheus output.
+func (s *SystemRoutes) SetExtraPrometheus(fn func(io.Writer)) {
+	s.extraPrometheus = fn
 }
 
 func NewSystemRoutes(registry *providers.Registry, manager *orchestrator.Manager, events *orchestrator.EventBus, st store.Store, version string, limiter ...*middleware.RateLimiter) *SystemRoutes {
@@ -256,6 +263,9 @@ func (s *SystemRoutes) PrometheusMetrics(w http.ResponseWriter, r *http.Request)
 
 	var buf bytes.Buffer
 	writePrometheusMetrics(&buf, metrics)
+	if s.extraPrometheus != nil {
+		s.extraPrometheus(&buf)
+	}
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(buf.Bytes())
@@ -538,4 +548,3 @@ func (s *SystemRoutes) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 		"message": "Configuration saved successfully. Please restart StacyVM for changes to take effect.",
 	})
 }
-

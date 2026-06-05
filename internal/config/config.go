@@ -27,9 +27,13 @@ type Config struct {
 
 // SSHConfig configures the interactive SSH/PTY gateway.
 type SSHConfig struct {
-	Enabled     bool   `mapstructure:"enabled"`
-	ListenAddr  string `mapstructure:"listen_addr"`
-	HostKeyPath string `mapstructure:"host_key_path"`
+	Enabled          bool   `mapstructure:"enabled"`
+	ListenAddr       string `mapstructure:"listen_addr"`
+	HostKeyPath      string `mapstructure:"host_key_path"`
+	UserCAPath       string `mapstructure:"user_ca_path"`
+	SessionRecording bool   `mapstructure:"session_recording"`
+	RecordingDir     string `mapstructure:"recording_dir"`
+	AllowPortForward bool   `mapstructure:"allow_port_forward"`
 }
 
 type PoolConfig struct {
@@ -239,6 +243,10 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("ssh.enabled", false)
 	v.SetDefault("ssh.listen_addr", ":2222")
 	v.SetDefault("ssh.host_key_path", "/var/lib/stacyvm/ssh_host_ed25519_key")
+	v.SetDefault("ssh.user_ca_path", "/var/lib/stacyvm/ssh_user_ca_key")
+	v.SetDefault("ssh.session_recording", false)
+	v.SetDefault("ssh.recording_dir", "/var/lib/stacyvm/ssh-recordings")
+	v.SetDefault("ssh.allow_port_forward", true)
 
 	v.SetDefault("providers.default", "docker")
 	v.SetDefault("providers.mock.enabled", false)

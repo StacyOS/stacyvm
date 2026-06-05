@@ -300,3 +300,14 @@ auth:
 		t.Fatal("expected ambiguous worker token config to fail")
 	}
 }
+
+func TestSSHDefaults(t *testing.T) {
+	t.Chdir(t.TempDir())
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if !cfg.SSH.AllowPortForward {
+		t.Fatal("ssh.allow_port_forward should default to true")
+	}
+}

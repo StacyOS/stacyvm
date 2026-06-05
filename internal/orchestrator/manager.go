@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -2827,6 +2828,25 @@ func (m *Manager) OpenPTYSession(ctx context.Context, sandboxID string, opts pro
 		return nil, providers.ErrPTYUnsupported
 	}
 	return ptyProv.OpenPTY(ctx, m.resolveVMID(sb), opts)
+}
+
+// DialSandbox opens a TCP connection to addr ("host:port") reachable from
+// inside the sandbox's network, powering SSH port forwarding. Like
+// OpenPTYSession it routes only locally-owned sandboxes today; providers that
+// cannot dial yield providers.ErrDialUnsupported.
+func (m *Manager) DialSandbox(ctx context.Context, sandboxID, addr string) (net.Conn, error) {
+	sb, prov, err := m.getSandboxAndProvider(sandboxID)
+	if err != nil {
+		return nil, err
+	}
+	if m.isRemoteOwnedSandbox(sb) {
+		return nil, fmt.Errorf("port forwarding for remote-worker sandboxes is not yet supported")
+	}
+	dialProv, ok := prov.(providers.DialProvider)
+	if !ok {
+		return nil, providers.ErrDialUnsupported
+	}
+	return dialProv.DialSandbox(ctx, m.resolveVMID(sb), "tcp", addr)
 }
 
 func (m *Manager) getProvider(id string) (providers.Provider, error) {

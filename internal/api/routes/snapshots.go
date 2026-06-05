@@ -3,9 +3,9 @@ package routes
 import (
 	"net/http"
 
-	"github.com/go-chi/chi/v5"
 	"github.com/StacyOs/stacyvm/internal/httputil"
 	"github.com/StacyOs/stacyvm/internal/providers"
+	"github.com/go-chi/chi/v5"
 )
 
 type SnapshotRoutes struct {

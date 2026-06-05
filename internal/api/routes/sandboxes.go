@@ -231,6 +231,7 @@ func (s *SandboxRoutes) Get(w http.ResponseWriter, r *http.Request) {
 //	@Failure		500			{object}	httputil.APIError
 //	@Security		ApiKeyAuth
 //	@Router			/sandboxes/{sandboxID} [delete]
+//
 // checkTenantAccess fetches the sandbox and returns false (writing 404) if the
 // caller's tenant does not match the sandbox's tenant. Callers with no tenant
 // (API key without X-Tenant-ID) bypass the check.

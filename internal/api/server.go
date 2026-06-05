@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -18,6 +19,7 @@ import (
 	chimw "github.com/go-chi/chi/v5/middleware"
 	"github.com/rs/zerolog"
 	httpSwagger "github.com/swaggo/http-swagger/v2"
+	gossh "golang.org/x/crypto/ssh"
 
 	_ "github.com/StacyOs/stacyvm/docs"
 )
@@ -38,6 +40,15 @@ type ServerConfig struct {
 	RateLimit             middleware.RateLimitConfig
 	WorkerHeartbeat       time.Duration
 	OIDC                  middleware.OIDCConfig
+	// PrometheusExtra, when set, appends extra metrics (e.g. the SSH gateway's)
+	// to the /metrics/prometheus output.
+	PrometheusExtra func(io.Writer)
+	// SSHCertSigner, when set, enables POST /api/v1/ssh/certs to mint SSH user
+	// certificates signed by the deployment's user CA.
+	SSHCertSigner gossh.Signer
+	// SSHTunnelHandler, when set, serves GET /api/v1/ssh/connect as an
+	// SSH-over-WebSocket tunnel (the SSH gateway's ServeWebSocket).
+	SSHTunnelHandler http.HandlerFunc
 }
 
 type Server struct {
@@ -114,6 +125,7 @@ func NewServer(cfg ServerConfig, registry *providers.Registry, manager *orchestr
 		templateRoutes := routes.NewTemplateRoutes(templates, manager)
 		snapshotRoutes := routes.NewSnapshotRoutes(registry)
 		systemRoutes := routes.NewSystemRoutes(registry, manager, events, st, cfg.Version, rateLimiter)
+		systemRoutes.SetExtraPrometheus(cfg.PrometheusExtra)
 		environmentRoutes := routes.NewEnvironmentRoutes(st, envBuild)
 		quotaRoutes := routes.NewQuotaRoutes(manager)
 		adminAuditRoutes := routes.NewAdminAuditRoutes(st)
@@ -127,6 +139,21 @@ func NewServer(cfg ServerConfig, registry *providers.Registry, manager *orchestr
 				r.With(middleware.RequireScope(middleware.ScopeSSH)).Mount("/users/me/ssh-keys", sshKeyRoutes.Routes())
 			} else {
 				r.Mount("/users/me/ssh-keys", sshKeyRoutes.Routes())
+			}
+			if cfg.SSHCertSigner != nil {
+				sshCertRoutes := routes.NewSSHCertRoutes(cfg.SSHCertSigner, st)
+				if authConfigured {
+					r.With(middleware.RequireScope(middleware.ScopeSSH)).Mount("/ssh/certs", sshCertRoutes.Routes())
+				} else {
+					r.Mount("/ssh/certs", sshCertRoutes.Routes())
+				}
+			}
+			if cfg.SSHTunnelHandler != nil {
+				if authConfigured {
+					r.With(middleware.RequireScope(middleware.ScopeSSH)).Get("/ssh/connect", cfg.SSHTunnelHandler)
+				} else {
+					r.Get("/ssh/connect", cfg.SSHTunnelHandler)
+				}
 			}
 			r.Mount("/providers", providerRoutes.Routes())
 			r.Mount("/templates", templateRoutes.Routes())

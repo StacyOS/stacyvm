@@ -25,8 +25,8 @@ func NewWorkerTokenIssuerRoutes(signingKey string) *WorkerTokenIssuerRoutes {
 
 type IssueWorkerTokenRequest struct {
 	WorkerID string   `json:"worker_id"`
-	TTL      string   `json:"ttl"`   // e.g. "5m", "15m"
-	Scopes   []string `json:"scopes"` // optional subset of worker scopes
+	TTL      string   `json:"ttl"`      // e.g. "5m", "15m"
+	Scopes   []string `json:"scopes"`   // optional subset of worker scopes
 	Audience string   `json:"audience"` // "worker:control-plane" or "worker:rpc"
 }
 

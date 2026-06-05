@@ -337,7 +337,7 @@ func TestOIDCRole_Priority(t *testing.T) {
 		groups []string
 		want   AuthRole
 	}{
-		{[]string{"admins", "operators"}, AuthRoleAdmin},    // admin wins when both match
+		{[]string{"admins", "operators"}, AuthRoleAdmin},     // admin wins when both match
 		{[]string{"operators", "viewers"}, AuthRoleOperator}, // operator beats viewer
 		{[]string{"viewers"}, AuthRoleViewer},
 		{[]string{"other"}, AuthRoleAPI}, // no match → default api

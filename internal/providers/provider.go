@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net"
 	"strings"
 	"time"
 )
@@ -147,6 +148,15 @@ type PTYSession interface {
 // surface ErrPTYUnsupported.
 type PTYProvider interface {
 	OpenPTY(ctx context.Context, sandboxID string, opts PTYOptions) (PTYSession, error)
+}
+
+// DialProvider is an optional capability for providers that can establish a TCP
+// connection to an address reachable from inside a sandbox's network. The SSH
+// gateway uses it for port forwarding (`ssh -L`). network is "tcp"; addr is
+// "host:port". Providers that cannot dial simply do not implement it, and
+// callers surface ErrDialUnsupported.
+type DialProvider interface {
+	DialSandbox(ctx context.Context, sandboxID, network, addr string) (net.Conn, error)
 }
 
 // SnapshotSummary describes a pre-built VM snapshot available for fast restore.

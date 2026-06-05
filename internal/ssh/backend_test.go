@@ -2,7 +2,10 @@ package ssh
 
 import (
 	"context"
+	"net"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/StacyOs/stacyvm/internal/providers"
 	"github.com/StacyOs/stacyvm/internal/store"
@@ -55,6 +58,51 @@ func TestStoreBackendLookupKeyUnknown(t *testing.T) {
 	}
 }
 
+func TestStoreBackendRespectsSandboxSSHPolicy(t *testing.T) {
+	opener := &recordingOpener{}
+	be := NewStoreBackend(
+		fakeKeyStore{},
+		fakeSandboxLookup{rec: &store.SandboxRecord{ID: "sb1", OwnerID: "alice", Metadata: `{"ssh":"off"}`}},
+		opener, zerolog.Nop(),
+	)
+	_, err := be.OpenPTY(context.Background(), Identity{OwnerID: "alice"}, "sb1", providers.PTYOptions{})
+	if err == nil {
+		t.Fatal("expected SSH to be denied by sandbox policy")
+	}
+	if opener.called {
+		t.Fatal("opener must not be called when SSH is disabled by policy")
+	}
+}
+
+func TestStoreBackendRenewsTTLWhileSessionOpen(t *testing.T) {
+	var calls int32
+	renew := func(context.Context, string) error {
+		atomic.AddInt32(&calls, 1)
+		return nil
+	}
+	be := NewStoreBackend(
+		fakeKeyStore{},
+		fakeSandboxLookup{rec: &store.SandboxRecord{ID: "sb1", OwnerID: "alice"}},
+		&recordingOpener{}, zerolog.Nop(),
+	).WithTTLRenewal(renew, 5*time.Millisecond)
+
+	sess, err := be.OpenPTY(context.Background(), Identity{OwnerID: "alice"}, "sb1", providers.PTYOptions{})
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	time.Sleep(40 * time.Millisecond)
+	if atomic.LoadInt32(&calls) < 1 {
+		t.Fatal("expected at least one TTL renewal while session open")
+	}
+
+	_ = sess.Close()
+	settled := atomic.LoadInt32(&calls)
+	time.Sleep(30 * time.Millisecond)
+	if grew := atomic.LoadInt32(&calls) - settled; grew > 1 {
+		t.Fatalf("renewals continued after close (grew by %d)", grew)
+	}
+}
+
 func TestStoreBackendOpenPTYAuthorization(t *testing.T) {
 	tests := []struct {
 		name      string
@@ -88,5 +136,138 @@ func TestStoreBackendOpenPTYAuthorization(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+type fakeSandboxDialer struct {
+	called  bool
+	gotAddr string
+}
+
+func (f *fakeSandboxDialer) DialSandbox(_ context.Context, _ string, addr string) (net.Conn, error) {
+	f.called = true
+	f.gotAddr = addr
+	c, _ := net.Pipe()
+	return c, nil
+}
+
+func TestStoreBackendDialSandboxAuthorized(t *testing.T) {
+	d := &fakeSandboxDialer{}
+	be := NewStoreBackend(
+		fakeKeyStore{},
+		fakeSandboxLookup{rec: &store.SandboxRecord{ID: "sb1", OwnerID: "alice"}},
+		&recordingOpener{}, zerolog.Nop(),
+	).WithPortForwarding(d)
+
+	conn, err := be.DialSandbox(context.Background(), Identity{OwnerID: "alice"}, "sb1", "10.0.0.5:5432")
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	_ = conn.Close()
+	if !d.called || d.gotAddr != "10.0.0.5:5432" {
+		t.Fatalf("dialer called=%v addr=%q, want true 10.0.0.5:5432", d.called, d.gotAddr)
+	}
+}
+
+func TestStoreBackendDialSandboxDeniedForStranger(t *testing.T) {
+	d := &fakeSandboxDialer{}
+	be := NewStoreBackend(
+		fakeKeyStore{},
+		fakeSandboxLookup{rec: &store.SandboxRecord{ID: "sb1", OwnerID: "bob", TenantID: "other"}},
+		&recordingOpener{}, zerolog.Nop(),
+	).WithPortForwarding(d)
+
+	if _, err := be.DialSandbox(context.Background(), Identity{OwnerID: "alice", TenantID: "acme"}, "sb1", "x:1"); err == nil {
+		t.Fatal("expected permission denied")
+	}
+	if d.called {
+		t.Fatal("dialer must not be called when denied")
+	}
+}
+
+func TestStoreBackendDialSandboxPolicyDisabled(t *testing.T) {
+	d := &fakeSandboxDialer{}
+	be := NewStoreBackend(
+		fakeKeyStore{},
+		fakeSandboxLookup{rec: &store.SandboxRecord{ID: "sb1", OwnerID: "alice", Metadata: `{"port_forward":"off"}`}},
+		&recordingOpener{}, zerolog.Nop(),
+	).WithPortForwarding(d)
+
+	if _, err := be.DialSandbox(context.Background(), Identity{OwnerID: "alice"}, "sb1", "x:1"); err == nil {
+		t.Fatal("expected port forwarding denied by policy")
+	}
+	if d.called {
+		t.Fatal("dialer must not be called when policy denies forwarding")
+	}
+}
+
+func TestStoreBackendDialSandboxNoDialerConfigured(t *testing.T) {
+	be := NewStoreBackend(
+		fakeKeyStore{},
+		fakeSandboxLookup{rec: &store.SandboxRecord{ID: "sb1", OwnerID: "alice"}},
+		&recordingOpener{}, zerolog.Nop(),
+	)
+	if _, err := be.DialSandbox(context.Background(), Identity{OwnerID: "alice"}, "sb1", "x:1"); err == nil {
+		t.Fatal("expected error when no dialer is configured")
+	}
+}
+
+type fakeFileOps struct{ reads int }
+
+func (f *fakeFileOps) ReadFile(context.Context, string, string) ([]byte, error) {
+	f.reads++
+	return []byte("x"), nil
+}
+func (f *fakeFileOps) WriteFile(context.Context, string, string, []byte, string) error { return nil }
+func (f *fakeFileOps) ListFiles(context.Context, string, string) ([]FileEntry, error) {
+	return nil, nil
+}
+func (f *fakeFileOps) StatFile(context.Context, string, string) (FileEntry, error) {
+	return FileEntry{}, nil
+}
+func (f *fakeFileOps) RemoveFile(context.Context, string, string, bool) error   { return nil }
+func (f *fakeFileOps) RenameFile(context.Context, string, string, string) error { return nil }
+func (f *fakeFileOps) MkdirFile(context.Context, string, string) error          { return nil }
+
+func TestStoreBackendSandboxFilesAuthorized(t *testing.T) {
+	ops := &fakeFileOps{}
+	be := NewStoreBackend(
+		fakeKeyStore{},
+		fakeSandboxLookup{rec: &store.SandboxRecord{ID: "sb1", OwnerID: "alice"}},
+		&recordingOpener{}, zerolog.Nop(),
+	).WithSFTP(ops)
+
+	fs, err := be.SandboxFiles(context.Background(), Identity{OwnerID: "alice"}, "sb1")
+	if err != nil {
+		t.Fatalf("SandboxFiles: %v", err)
+	}
+	if _, err := fs.ReadFile(context.Background(), "/work/x"); err != nil {
+		t.Fatalf("read through bound fs: %v", err)
+	}
+	if ops.reads != 1 {
+		t.Fatalf("expected delegated read, got %d", ops.reads)
+	}
+}
+
+func TestStoreBackendSandboxFilesDeniedForStranger(t *testing.T) {
+	be := NewStoreBackend(
+		fakeKeyStore{},
+		fakeSandboxLookup{rec: &store.SandboxRecord{ID: "sb1", OwnerID: "bob", TenantID: "other"}},
+		&recordingOpener{}, zerolog.Nop(),
+	).WithSFTP(&fakeFileOps{})
+
+	if _, err := be.SandboxFiles(context.Background(), Identity{OwnerID: "alice", TenantID: "acme"}, "sb1"); err == nil {
+		t.Fatal("expected permission denied")
+	}
+}
+
+func TestStoreBackendSandboxFilesNotConfigured(t *testing.T) {
+	be := NewStoreBackend(
+		fakeKeyStore{},
+		fakeSandboxLookup{rec: &store.SandboxRecord{ID: "sb1", OwnerID: "alice"}},
+		&recordingOpener{}, zerolog.Nop(),
+	)
+	if _, err := be.SandboxFiles(context.Background(), Identity{OwnerID: "alice"}, "sb1"); err == nil {
+		t.Fatal("expected error when sftp not configured")
 	}
 }

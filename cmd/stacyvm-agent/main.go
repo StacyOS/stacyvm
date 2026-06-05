@@ -137,6 +137,9 @@ func handleConn(conn net.Conn) {
 			handleExec(w, req)
 		case agentproto.MethodExecStream:
 			handleExecStream(w, req)
+		case agentproto.MethodPTYOpen:
+			handlePTYOpen(conn, r, w, req)
+			return // the connection is now owned by the PTY session
 		case agentproto.MethodWriteFile:
 			handleWriteFile(w, req)
 		case agentproto.MethodReadFile:
@@ -329,6 +332,33 @@ func handleExecStream(w io.Writer, req *agentproto.Request) {
 	agentproto.SendStreamResponse(w, &agentproto.StreamResponse{
 		ID: req.ID, Done: true, ExitCode: exitCode,
 	})
+}
+
+// connReadWriteCloser reads from the buffered reader (to keep any bytes already
+// buffered after the request), writes raw to the connection, and closes it.
+type connReadWriteCloser struct {
+	r io.Reader
+	w io.Writer
+	c io.Closer
+}
+
+func (x connReadWriteCloser) Read(p []byte) (int, error)  { return x.r.Read(p) }
+func (x connReadWriteCloser) Write(p []byte) (int, error) { return x.w.Write(p) }
+func (x connReadWriteCloser) Close() error               { return x.c.Close() }
+
+// handlePTYOpen takes over the connection to serve an interactive PTY session.
+func handlePTYOpen(conn net.Conn, r io.Reader, w *bufio.Writer, req *agentproto.Request) {
+	var params agentproto.PTYOpenParams
+	if err := agentproto.UnmarshalParams(req.Params, &params); err != nil {
+		sendError(w, req.ID, fmt.Sprintf("bad params: %v", err))
+		w.Flush()
+		return
+	}
+	w.Flush()
+	rwc := connReadWriteCloser{r: r, w: conn, c: conn}
+	if err := agentproto.ServePTY(rwc, params); err != nil {
+		log.Printf("pty session ended: %v", err)
+	}
 }
 
 func handleWriteFile(w io.Writer, req *agentproto.Request) {
