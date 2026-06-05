@@ -73,7 +73,7 @@ func TestInstallShellCompletionSkipsWhenConfigMissing(t *testing.T) {
 
 func TestApplySSHConfigEnabledWritesBlock(t *testing.T) {
 	v := viper.New()
-	dir := filepath.Join("home", "user", ".stacyvm")
+	dir := filepath.Join(t.TempDir(), ".stacyvm")
 
 	applySSHConfig(v, dir, true)
 
@@ -94,7 +94,13 @@ func TestApplySSHConfigEnabledWritesBlock(t *testing.T) {
 func TestApplySSHConfigDisabledWritesNothing(t *testing.T) {
 	v := viper.New()
 	applySSHConfig(v, "/anything", false)
-	if v.IsSet("ssh.enabled") {
+	// The whole body is behind the !enabled guard; check the canonical key
+	// plus the rest so a future refactor that moves a Set outside the guard
+	// is caught.
+	if v.IsSet("ssh.enabled") ||
+		v.IsSet("ssh.listen_addr") ||
+		v.IsSet("ssh.host_key_path") ||
+		v.IsSet("ssh.user_ca_path") {
 		t.Fatal("applySSHConfig(enabled=false) must not set any ssh keys")
 	}
 }
