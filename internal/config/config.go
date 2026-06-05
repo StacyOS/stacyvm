@@ -219,6 +219,17 @@ type LoggingConfig struct {
 	Format string `mapstructure:"format"`
 }
 
+// defaultStateDir is where StacyVM keeps per-user state such as SSH keys. It
+// mirrors the config-file location (~/.stacyvm) so a normal user can write to
+// it; when the home dir cannot be resolved it falls back to the system path
+// used by packaged/root deployments.
+func defaultStateDir() string {
+	if home, err := os.UserHomeDir(); err == nil {
+		return filepath.Join(home, ".stacyvm")
+	}
+	return "/var/lib/stacyvm"
+}
+
 func setDefaults(v *viper.Viper) {
 	v.SetDefault("server.host", "0.0.0.0")
 	v.SetDefault("server.port", 7423)
@@ -240,12 +251,13 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("worker.rpc_tls.server_name", "")
 	v.SetDefault("worker.rpc_tls.insecure_skip_verify", false)
 
+	sshStateDir := defaultStateDir()
 	v.SetDefault("ssh.enabled", false)
 	v.SetDefault("ssh.listen_addr", ":2222")
-	v.SetDefault("ssh.host_key_path", "/var/lib/stacyvm/ssh_host_ed25519_key")
-	v.SetDefault("ssh.user_ca_path", "/var/lib/stacyvm/ssh_user_ca_key")
+	v.SetDefault("ssh.host_key_path", filepath.Join(sshStateDir, "ssh_host_ed25519_key"))
+	v.SetDefault("ssh.user_ca_path", filepath.Join(sshStateDir, "ssh_user_ca_key"))
 	v.SetDefault("ssh.session_recording", false)
-	v.SetDefault("ssh.recording_dir", "/var/lib/stacyvm/ssh-recordings")
+	v.SetDefault("ssh.recording_dir", filepath.Join(sshStateDir, "ssh-recordings"))
 	v.SetDefault("ssh.allow_port_forward", true)
 
 	v.SetDefault("providers.default", "docker")

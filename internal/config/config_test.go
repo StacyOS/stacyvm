@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -309,5 +310,55 @@ func TestSSHDefaults(t *testing.T) {
 	}
 	if !cfg.SSH.AllowPortForward {
 		t.Fatal("ssh.allow_port_forward should default to true")
+	}
+}
+
+func TestSSHKeyPathsDefaultToUserConfigDir(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Chdir(t.TempDir()) // empty dir → no ./stacyvm.yaml, pure defaults
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if want := filepath.Join(home, ".stacyvm", "ssh_host_ed25519_key"); cfg.SSH.HostKeyPath != want {
+		t.Fatalf("host_key_path = %q, want %q", cfg.SSH.HostKeyPath, want)
+	}
+	if want := filepath.Join(home, ".stacyvm", "ssh_user_ca_key"); cfg.SSH.UserCAPath != want {
+		t.Fatalf("user_ca_path = %q, want %q", cfg.SSH.UserCAPath, want)
+	}
+	if want := filepath.Join(home, ".stacyvm", "ssh-recordings"); cfg.SSH.RecordingDir != want {
+		t.Fatalf("recording_dir = %q, want %q", cfg.SSH.RecordingDir, want)
+	}
+}
+
+func TestSSHKeyPathExplicitOverrideWins(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("STACYVM_SSH_HOST_KEY_PATH", "/custom/host_key")
+	t.Chdir(t.TempDir())
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.SSH.HostKeyPath != "/custom/host_key" {
+		t.Fatalf("host_key_path = %q, want /custom/host_key (env override must win)", cfg.SSH.HostKeyPath)
+	}
+}
+
+func TestSSHKeyPathsFallBackWithoutHome(t *testing.T) {
+	if runtime.GOOS != "linux" {
+		t.Skip("HOME=\"\" only reliably errors os.UserHomeDir on Linux")
+	}
+	t.Setenv("HOME", "") // os.UserHomeDir() errors → system fallback
+	t.Chdir(t.TempDir())
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.SSH.HostKeyPath != "/var/lib/stacyvm/ssh_host_ed25519_key" {
+		t.Fatalf("host_key_path = %q, want /var/lib/stacyvm fallback", cfg.SSH.HostKeyPath)
 	}
 }
