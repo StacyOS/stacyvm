@@ -129,6 +129,23 @@ func runSetup() error {
 		return err
 	}
 
+	// SSH access (opt-in). Enabling it writes a complete ssh block so the
+	// gateway starts on the next `serve`, with keys in the user-writable
+	// config dir. Defaults to Yes: it is the headline capability, and this is
+	// still an explicit prompt.
+	enableSSH := true
+	sshForm := huh.NewForm(
+		huh.NewGroup(
+			huh.NewConfirm().
+				Title("Enable SSH access to your sandboxes?").
+				Description("Lets you `ssh` and VS Code Remote into running sandboxes.").
+				Value(&enableSSH),
+		),
+	).WithTheme(t)
+	if err = sshForm.Run(); err != nil {
+		return err
+	}
+
 	// Save Config
 	home, _ := os.UserHomeDir()
 	configDir := filepath.Join(home, ".stacyvm")
@@ -140,6 +157,7 @@ func runSetup() error {
 	if provider == "docker" {
 		viper.Set("providers.docker.runtime", runtime)
 	}
+	applySSHConfig(viper.GetViper(), configDir, enableSSH)
 
 	viper.WriteConfigAs(filepath.Join(configDir, "config.yaml"))
 
@@ -161,6 +179,11 @@ func runSetup() error {
 
 	fmt.Println("\n" + successStyle.Render("✨ StacyVM Setup Complete!"))
 	fmt.Println("Config saved to ~/.stacyvm/config.yaml")
+	if enableSSH {
+		fmt.Println("\n" + successStyle.Render("SSH enabled.") + " Once the server is running, connect with:")
+		fmt.Println("  stacyvm ssh <sandbox-id>")
+		fmt.Println("  (Direct ssh / VS Code Remote: port 2222.)")
+	}
 
 	if enableAutocomplete {
 		fmt.Println("\n" + warningStyle.Render("Auto-completion installed! Please restart your terminal or run:"))
