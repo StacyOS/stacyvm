@@ -1,6 +1,9 @@
 package middleware
 
 import (
+	"bufio"
+	"errors"
+	"net"
 	"net/http"
 	"time"
 
@@ -37,6 +40,19 @@ func (rw *responseWriter) Flush() {
 // optional interfaces (Flusher, Hijacker, etc.) past this wrapper.
 func (rw *responseWriter) Unwrap() http.ResponseWriter {
 	return rw.ResponseWriter
+}
+
+// Hijack lets connection-upgrade handlers take over the underlying connection
+// through this wrapper. The SSH-over-WebSocket tunnel (GET /api/v1/ssh/connect)
+// needs this: nhooyr.io/websocket type-asserts http.Hijacker on the
+// ResponseWriter directly rather than going through Unwrap, so without this
+// method the upgrade fails with HTTP 501.
+func (rw *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	hj, ok := rw.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, errors.New("underlying ResponseWriter does not implement http.Hijacker")
+	}
+	return hj.Hijack()
 }
 
 func Logging(logger zerolog.Logger) func(http.Handler) http.Handler {
